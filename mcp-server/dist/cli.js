@@ -30401,10 +30401,15 @@ function loadConfig(env = process.env) {
     openaiApiKey: env.OPENAI_API_KEY,
     openrouterApiKey: env.OPENROUTER_API_KEY,
     elevenlabsApiKey: env.ELEVENLABS_API_KEY,
-    lmstudioBaseUrl: env.LMSTUDIO_BASE_URL ?? "http://localhost:1234/v1",
-    // Opt-in via LMSTUDIO_ENABLED=true; off by default since localhost may not be running.
-    lmstudioEnabled: ["true", "1", "yes", "on"].includes(
-      (env.LMSTUDIO_ENABLED ?? "").toLowerCase()
+    // Default http://localhost:8880/v1 (Kokoro-FastAPI's default port) since
+    // that's the recommended local backend. Users running Orpheus-FastAPI
+    // (:5005), Speaches (:8000), LM Studio (:1234), etc. can override with
+    // LOCAL_BASE_URL. Back-compat: LMSTUDIO_BASE_URL is still read.
+    localBaseUrl: env.LOCAL_BASE_URL ?? env.LMSTUDIO_BASE_URL ?? "http://localhost:8880/v1",
+    // Opt-in via LOCAL_ENABLED=true; off by default since localhost may not
+    // be running. Back-compat: LMSTUDIO_ENABLED is still read.
+    localEnabled: ["true", "1", "yes", "on"].includes(
+      (env.LOCAL_ENABLED ?? env.LMSTUDIO_ENABLED ?? "").toLowerCase()
     ),
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
@@ -55926,14 +55931,17 @@ OpenAI.Containers = Containers;
 OpenAI.Skills = Skills;
 OpenAI.Videos = Videos;
 
-// src/providers/lmstudio.ts
-var LMStudioProvider = class {
-  id = "lmstudio";
+// src/providers/local.ts
+init_errors();
+var LocalProvider = class {
+  id = "local";
   client;
+  baseUrl;
   constructor(opts) {
+    this.baseUrl = opts.baseUrl;
     this.client = new OpenAI({
-      // LM Studio doesn't validate keys; any non-empty string works.
-      apiKey: "lm-studio",
+      // Local servers don't validate keys; any non-empty string works.
+      apiKey: "local-server",
       baseURL: opts.baseUrl
     });
   }
@@ -55953,12 +55961,13 @@ var LMStudioProvider = class {
         n: 1
       });
       const item2 = response2.data?.[0];
-      if (!item2?.b64_json) {
-        throw new Error("LM Studio image edit returned no b64_json data");
+      const data2 = decodeImageItem(item2);
+      if (!data2) {
+        throw noImageEndpointError(this.baseUrl, "edit");
       }
       return {
         mimeType: "image/png",
-        data: Buffer.from(item2.b64_json, "base64"),
+        data: data2,
         modelUsed: req.model,
         providerUsed: this.id
       };
@@ -55971,14 +55980,13 @@ var LMStudioProvider = class {
       ...size ? { size } : {}
     });
     const item = response.data?.[0];
-    if (!item?.b64_json) {
-      throw new Error(
-        "LM Studio image generation returned no b64_json data \u2014 model may not support image output"
-      );
+    const data = decodeImageItem(item);
+    if (!data) {
+      throw noImageEndpointError(this.baseUrl, "generate");
     }
     return {
       mimeType: "image/png",
-      data: Buffer.from(item.b64_json, "base64"),
+      data,
       modelUsed: req.model,
       providerUsed: this.id
     };
@@ -55991,6 +55999,9 @@ var LMStudioProvider = class {
       response_format: "mp3"
     });
     const data = Buffer.from(await response.arrayBuffer());
+    if (data.length < MIN_AUDIO_BYTES) {
+      throw noSpeechEndpointError(this.baseUrl, data.length);
+    }
     return {
       mimeType: "audio/mpeg",
       data,
@@ -55999,17 +56010,39 @@ var LMStudioProvider = class {
     };
   }
 };
-async function listLmStudioModels(baseUrl) {
+var MIN_AUDIO_BYTES = 256;
+function decodeImageItem(item) {
+  if (!item?.b64_json) return null;
+  const buf = Buffer.from(item.b64_json, "base64");
+  return buf.length > 0 ? buf : null;
+}
+function noSpeechEndpointError(baseUrl, byteLen) {
+  return new StructuredError(
+    "CONFIG_ERROR",
+    `Local server at ${baseUrl} returned ${byteLen} bytes on /v1/audio/speech \u2014 the endpoint is not implemented there`,
+    `LM Studio does not expose /v1/audio/speech. Run Kokoro-FastAPI instead:
+  docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest
+then set LOCAL_BASE_URL=http://localhost:8880/v1. Alternatives: Speaches (kokoro + whisper), Orpheus-FastAPI, Chatterbox-TTS-API.`
+  );
+}
+function noImageEndpointError(baseUrl, verb) {
+  return new StructuredError(
+    "CONFIG_ERROR",
+    `Local server at ${baseUrl} returned no image bytes on /v1/images/${verb} \u2014 the endpoint is not implemented there`,
+    `LM Studio does not expose /v1/images/generations. To serve image models locally, run an OpenAI-compatible image server (e.g. SD.Next with its OpenAI shim) and point LOCAL_BASE_URL at it. For cheap cloud-image without a local server, use --provider google (free default).`
+  );
+}
+async function listLocalModels(baseUrl) {
   const url = baseUrl.endsWith("/") ? `${baseUrl}models` : `${baseUrl}/models`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5e3);
   try {
     const r2 = await fetch(url, { signal: ctrl.signal });
     if (!r2.ok) {
-      throw new Error(`LM Studio /models returned ${r2.status}: ${(await r2.text()).slice(0, 200)}`);
+      throw new Error(`Local /models returned ${r2.status}: ${(await r2.text()).slice(0, 200)}`);
     }
     const data = await r2.json();
-    if (data.error?.message) throw new Error(`LM Studio error: ${data.error.message}`);
+    if (data.error?.message) throw new Error(`Local error: ${data.error.message}`);
     const items = data.data ?? [];
     return items.filter((m2) => typeof m2.id === "string").map((m2) => ({
       id: m2.id,
@@ -56022,8 +56055,8 @@ async function listLmStudioModels(baseUrl) {
 }
 function guessCapability(id) {
   const lower2 = id.toLowerCase();
+  if (/(kokoro|orpheus|xtts|chatterbox|piper|bark|coqui|tts)/.test(lower2)) return "tts";
   if (/(stable-?diffusion|sdxl|flux|playground|imagen|dall.?e|gpt-image)/.test(lower2)) return "image";
-  if (/(tts|xtts|bark|coqui|piper|whisper-tts|orpheus)/.test(lower2)) return "tts";
   if (/embed/.test(lower2)) return "embedding";
   if (/whisper/.test(lower2)) return "text";
   return "text";
@@ -56294,9 +56327,10 @@ var MATRIX = [
     tts: { small: NA, mid: NA, pro: NA }
   },
   {
-    id: "lmstudio",
-    // LM Studio capabilities are dynamic — depend on what the user has loaded locally.
-    // All slots NA: usable only via explicit --model. check_lmstudio lists what's available.
+    id: "local",
+    // Local server capabilities depend on which backend is running
+    // (Kokoro-FastAPI for TTS, SD.Next for image, etc.). All slots NA:
+    // usable only via explicit --model. check_local lists what's available.
     image: { small: NA, mid: NA, pro: NA },
     tts: { small: NA, mid: NA, pro: NA }
   },
@@ -56444,8 +56478,8 @@ function createImageProvider(id, config) {
       return new OpenAIProvider({ apiKey: requireOpenAIKey(config) });
     case "openrouter":
       return new OpenRouterProvider({ apiKey: requireOpenRouterKey(config) });
-    case "lmstudio":
-      return new LMStudioProvider({ baseUrl: config.lmstudioBaseUrl });
+    case "local":
+      return new LocalProvider({ baseUrl: config.localBaseUrl });
     case "elevenlabs":
       throw new Error(`${id} image provider is declared in the registry but not yet implemented`);
   }
@@ -56458,8 +56492,8 @@ function createTtsProvider(id, config) {
       return new OpenAIProvider({ apiKey: requireOpenAIKey(config) });
     case "elevenlabs":
       return new ElevenLabsProvider({ apiKey: requireElevenLabsKey(config) });
-    case "lmstudio":
-      return new LMStudioProvider({ baseUrl: config.lmstudioBaseUrl });
+    case "local":
+      return new LocalProvider({ baseUrl: config.localBaseUrl });
     case "openrouter":
       throw new Error("openrouter does not support TTS");
   }
@@ -57694,59 +57728,54 @@ Status: in_progress (poll with batch_status --job-id ${jobId})`
   };
 }
 
-// src/tools/check-lmstudio.ts
+// src/tools/check-local.ts
 init_errors();
-async function checkLmStudio(config) {
-  const baseUrl = config.lmstudioBaseUrl;
-  let models = [];
-  let reachable = true;
-  let errorMessage = null;
+async function checkLocal(config) {
+  let models;
   try {
-    models = await listLmStudioModels(baseUrl);
+    models = await listLocalModels(config.localBaseUrl);
   } catch (err) {
-    reachable = false;
-    errorMessage = mapProviderError(err, "lmstudio").message;
-  }
-  const byCapability = {
-    text: models.filter((m2) => m2.likelyCapability === "text").length,
-    image: models.filter((m2) => m2.likelyCapability === "image").length,
-    tts: models.filter((m2) => m2.likelyCapability === "tts").length,
-    embedding: models.filter((m2) => m2.likelyCapability === "embedding").length,
-    unknown: models.filter((m2) => m2.likelyCapability === "unknown").length
-  };
-  const lines = [`LM Studio (${baseUrl}):`];
-  if (!reachable) {
-    lines.push(`  unreachable \u2014 ${errorMessage}`);
-    lines.push(`  Make sure LM Studio is running and the local server is started.`);
-  } else if (models.length === 0) {
-    lines.push(`  reachable, but no models loaded.`);
-    lines.push(`  Load a model in LM Studio (Models tab \u2192 choose \u2192 load).`);
-  } else {
-    lines.push(`  ${models.length} model(s) loaded:`);
-    for (const m2 of models) {
-      lines.push(`    [${m2.likelyCapability.padEnd(9)}] ${m2.id}`);
-    }
-    lines.push(``);
-    lines.push(
-      `Capability summary: text=${byCapability.text} image=${byCapability.image} tts=${byCapability.tts} embedding=${byCapability.embedding} unknown=${byCapability.unknown}`
+    const message = err instanceof Error ? err.message : String(err);
+    throw new StructuredError(
+      "PROVIDER_ERROR",
+      `Could not reach local server at ${config.localBaseUrl}: ${message}`,
+      `Start an OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, LM Studio, ...) or set LOCAL_BASE_URL to its base URL. Example:
+  docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest
+  export LOCAL_BASE_URL=http://localhost:8880/v1`
     );
-    if (byCapability.image === 0 && byCapability.tts === 0) {
-      lines.push(``, `Note: no image or TTS-looking models detected. Most LM Studio installs only host text LLMs.`);
-    } else {
-      lines.push(
-        ``,
-        `Use them via --provider lmstudio --model <id> on generate_image or generate_speech.`
-      );
-    }
   }
+  const hasTtsModel = models.some((m2) => m2.likelyCapability === "tts");
+  const hasImageModel = models.some((m2) => m2.likelyCapability === "image");
+  const probableBackend = guessBackend(config.localBaseUrl, models);
+  const lines = models.map(
+    (m2) => `  ${m2.id}  [${m2.likelyCapability}]`
+  );
+  const header = `Local server at ${config.localBaseUrl} \u2014 ${models.length} model(s) loaded`;
+  const backendLine = `Probable backend: ${probableBackend}`;
+  const capLines = [
+    hasTtsModel ? "\u2705 TTS model detected" : "\u26A0\uFE0F  No TTS model in /v1/models",
+    hasImageModel ? "\u2705 image model detected" : "\u26A0\uFE0F  No image model in /v1/models"
+  ];
+  const note = probableBackend === "lm-studio" ? `
+Note: LM Studio's OpenAI-compatible server does NOT expose /v1/audio/speech or /v1/images/generations \u2014 loading an Orpheus or Stable Diffusion model will not make TTS or image generation work through this provider. Use Kokoro-FastAPI or similar instead.` : "";
+  const text = [header, backendLine, ...capLines, ...lines].join("\n") + note;
   return {
     success: true,
-    baseUrl,
-    reachable,
+    baseUrl: config.localBaseUrl,
+    modelCount: models.length,
     models,
-    byCapability,
-    text: lines.join("\n")
+    hints: { hasTtsModel, hasImageModel, probableBackend },
+    text
   };
+}
+function guessBackend(baseUrl, models) {
+  const ids = models.map((m2) => m2.id.toLowerCase()).join(" ");
+  if (/kokoro/.test(ids) || /:8880/.test(baseUrl)) return "kokoro-fastapi";
+  if (/orpheus/.test(ids) && /:5005/.test(baseUrl)) return "orpheus-fastapi";
+  if (/chatterbox/.test(ids)) return "chatterbox";
+  if (/speaches|piper/.test(ids) || /:8000/.test(baseUrl)) return "speaches";
+  if (/:1234/.test(baseUrl)) return "lm-studio";
+  return "unknown";
 }
 
 // src/tools/create-assets.ts
@@ -57830,8 +57859,8 @@ function hasKeyFor(providerId, config) {
       return Boolean(config.openrouterApiKey);
     case "elevenlabs":
       return Boolean(config.elevenlabsApiKey);
-    case "lmstudio":
-      return config.lmstudioEnabled;
+    case "local":
+      return config.localEnabled;
   }
 }
 function getFailoverOrder(modality, preferred, config) {
@@ -57849,8 +57878,8 @@ function envVarNameFor(providerId) {
       return "OPENROUTER_API_KEY";
     case "elevenlabs":
       return "ELEVENLABS_API_KEY";
-    case "lmstudio":
-      return "LMSTUDIO_ENABLED (opt-in) / LMSTUDIO_BASE_URL";
+    case "local":
+      return "LOCAL_ENABLED (opt-in) / LOCAL_BASE_URL";
   }
 }
 function isRetryable(err) {
@@ -57874,7 +57903,7 @@ async function withFailover(opts) {
       void 0,
       {
         requestedProvider: opts.preferredProvider,
-        availableProviders: ["google", "openai", "openrouter", "elevenlabs", "lmstudio"].filter((p) => hasKeyFor(p, opts.config))
+        availableProviders: ["google", "openai", "openrouter", "elevenlabs", "local"].filter((p) => hasKeyFor(p, opts.config))
       }
     );
   }
@@ -59099,13 +59128,13 @@ async function pingElevenLabs(apiKey) {
     clearTimeout(t2);
   }
 }
-async function pingLmStudio(baseUrl) {
+async function pingLocal(baseUrl) {
   const url = baseUrl.endsWith("/") ? `${baseUrl}models` : `${baseUrl}/models`;
   const ctrl = new AbortController();
   const t2 = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS);
   try {
     const r2 = await fetch(url, { signal: ctrl.signal });
-    if (!r2.ok) throw new Error(`LM Studio ${r2.status}: ${(await r2.text()).slice(0, 200)}`);
+    if (!r2.ok) throw new Error(`local server ${r2.status}: ${(await r2.text()).slice(0, 200)}`);
   } finally {
     clearTimeout(t2);
   }
@@ -59123,15 +59152,15 @@ async function checkProvider(configured, apiKey, pinger) {
   }
 }
 async function healthCheck(config) {
-  const [google, openai, openrouter, elevenlabs, lmstudio] = await Promise.all([
+  const [google, openai, openrouter, elevenlabs, local] = await Promise.all([
     checkProvider(Boolean(config.geminiApiKey), config.geminiApiKey, pingGoogle),
     checkProvider(Boolean(config.openaiApiKey), config.openaiApiKey, pingOpenAI),
     checkProvider(Boolean(config.openrouterApiKey), config.openrouterApiKey, pingOpenRouter),
     checkProvider(Boolean(config.elevenlabsApiKey), config.elevenlabsApiKey, pingElevenLabs),
-    checkProvider(config.lmstudioEnabled, config.lmstudioBaseUrl, pingLmStudio)
+    checkProvider(config.localEnabled, config.localBaseUrl, pingLocal)
   ]);
   const pricing = getStaleness();
-  const all = { google, openai, openrouter, elevenlabs, lmstudio };
+  const all = { google, openai, openrouter, elevenlabs, local };
   const configured = Object.values(all).filter((p) => p.configured);
   const allOk = configured.length > 0 && configured.every((p) => p.ok === true) && !pricing.isStale;
   return {
@@ -59673,7 +59702,7 @@ Pick a keeper with pick_variant --keeper <path> --variants ${variantPaths.length
 
 // src/cli.ts
 init_errors();
-var VERSION3 = "0.4.0";
+var VERSION3 = "0.5.0";
 function printHelp(imageOutputDir, audioOutputDir) {
   process.stdout.write(`
 claude-image-tts-gen-cli v${VERSION3}
@@ -59735,12 +59764,14 @@ Environment:
   REWRITE_PROMPTS          true (default) | false  \u2014 opt out of MCP-sampling prompt rewrite
   AUTOPLAY                 false (default) | true  \u2014 afplay TTS output (macOS)
   STATE_DIR                ~/.claude-image-tts-gen (default)
-  LMSTUDIO_BASE_URL        http://localhost:1234/v1 (default)
-  LMSTUDIO_ENABLED         false (default) | true  \u2014 include lmstudio in failover chain
+  LOCAL_BASE_URL           http://localhost:8880/v1 (default; Kokoro-FastAPI's port)
+                           Override for Orpheus-FastAPI (:5005), Speaches (:8000), LM Studio (:1234), etc.
+  LOCAL_ENABLED            false (default) | true  \u2014 include local provider in failover chain
+                           Back-compat: LMSTUDIO_BASE_URL / LMSTUDIO_ENABLED are still read.
 `);
 }
 function isProvider(s2) {
-  return s2 === "google" || s2 === "openai" || s2 === "openrouter" || s2 === "elevenlabs" || s2 === "lmstudio";
+  return s2 === "google" || s2 === "openai" || s2 === "openrouter" || s2 === "elevenlabs" || s2 === "local";
 }
 function isTier(s2) {
   return s2 === "small" || s2 === "mid" || s2 === "pro";
@@ -59773,7 +59804,7 @@ async function main() {
         "set-budget-weekly": { type: "string" },
         "set-budget-monthly": { type: "string" },
         "health-check": { type: "boolean", default: false },
-        "check-lmstudio": { type: "boolean", default: false },
+        "check-local": { type: "boolean", default: false },
         "batch-submit": { type: "string", description: "Path to JSON file with prompts array" },
         "batch-status": { type: "string", description: "Job ID to poll" },
         "batch-list": { type: "boolean", default: false },
@@ -59893,10 +59924,10 @@ async function main() {
       process.stdout.write(result2.text + "\n");
       process.exit(result2.ok ? 0 : 1);
     }
-    if (values["check-lmstudio"]) {
-      const result2 = await checkLmStudio(config);
+    if (values["check-local"]) {
+      const result2 = await checkLocal(config);
       process.stdout.write(result2.text + "\n");
-      process.exit(result2.reachable ? 0 : 1);
+      process.exit(result2.success ? 0 : 1);
     }
     if (values["batch-list"]) {
       const result2 = await batchStatus({ list: true }, config);

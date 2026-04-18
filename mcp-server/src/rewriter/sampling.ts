@@ -10,8 +10,8 @@ const PROVIDER_GUIDANCE: Record<ProviderId, string> = {
   openrouter:
     "Routed via OpenRouter — the upstream model is usually Gemini-style. Concise, vivid, scene-first.",
   elevenlabs: "(no image rewrites for elevenlabs)",
-  lmstudio:
-    "Local model — keep it simple and direct. Local image models (Stable Diffusion variants) prefer subject + style + medium tags.",
+  local:
+    "Local server — keep it simple and direct. Local image models (Stable Diffusion variants) prefer subject + style + medium tags.",
 };
 
 const SamplingResultSchema = z.object({

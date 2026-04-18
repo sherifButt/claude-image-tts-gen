@@ -6,28 +6,39 @@ Inspired by [guinacio/claude-image-gen](https://github.com/guinacio/claude-image
 
 > ## Run it 100% local — for $0/call
 >
-> **First-class [LM Studio](https://lmstudio.ai/) support.** Point this plugin at any model
-> you've loaded in LM Studio's local OpenAI-compatible server and generate images
-> or speech without an API key, without a network round-trip, and without spending
-> a cent. The cost ledger logs $0; the budget cap is irrelevant; everything else
-> (sidecar, cache, regenerate, iterate, variants, post-processing) just works.
+> Point this plugin at any **OpenAI-compatible local server** and generate images
+> or speech without an API key, network round-trip, or dollar spent. Everything
+> else (sidecar, cache, regenerate, iterate, variants, post-processing) just works.
+>
+> **Recommended backends:**
+>
+> | Backend | Install | Modality | Notes |
+> |---|---|---|---|
+> | [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | `docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest` | TTS | **default.** Kokoro-82M, CPU-capable, 50+ voices. Currently #1 on TTS Arena. |
+> | [Speaches](https://github.com/speaches-ai/speaches) | docker-compose | TTS + STT | Kokoro + Piper + Whisper in one container. |
+> | [Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI) | clone + pip + LLM backend | TTS | Orpheus-3B with emotion tags (`<laugh>`, `<sigh>`, ...). Two processes. |
+> | [Chatterbox-TTS-API](https://github.com/travisvn/chatterbox-tts-api) | `uv sync && uv run main.py` | TTS | Voice cloning. GPU recommended. |
 >
 > ```sh
-> # See what's loaded locally
-> node mcp-server/dist/cli.js --check-lmstudio
+> # Kokoro-FastAPI is default; for any other server, override the base URL:
+> export LOCAL_BASE_URL=http://localhost:8880/v1
 >
-> # Generate against a local image model
-> node mcp-server/dist/cli.js -p "a teal cube on white" \
->   --provider lmstudio --model stable-diffusion-xl-base-1.0
+> # See what's loaded
+> node mcp-server/dist/cli.js --check-local
 >
-> # Or local TTS
+> # TTS against the local server
 > node mcp-server/dist/cli.js --speech -p "hello world" \
->   --provider lmstudio --model coqui-xtts-v2
+>   --provider local --model kokoro
 > ```
 >
-> Set `LMSTUDIO_BASE_URL` if your local server isn't on `http://localhost:1234/v1`.
-> Opt in via `LMSTUDIO_ENABLED=true` to include LM Studio in the failover chain
-> alongside the cloud providers.
+> Opt in via `LOCAL_ENABLED=true` to include the local provider in the failover chain.
+>
+> **Not supported as a TTS backend: [LM Studio](https://lmstudio.ai/).** LM Studio's
+> OpenAI-compatible server only exposes `/v1/chat/completions`, `/v1/completions`,
+> and `/v1/embeddings` — no `/v1/audio/speech` or `/v1/images/generations`. Running
+> Orpheus or a diffusion model inside LM Studio will not make TTS or image
+> generation work through this provider. Use Kokoro-FastAPI (or one of the others
+> above) instead. `check_local` will flag an LM-Studio-style server with a warning.
 
 ## Features
 
@@ -37,8 +48,8 @@ Inspired by [guinacio/claude-image-gen](https://github.com/guinacio/claude-image
   - **OpenAI** (image: gpt-image-1 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
-  - **🖥 LM Studio (local)** — bring your own model, $0/call, no API key, no rate limit
-- **Image-to-image edits** via reference image input (gpt-image-1, Gemini multimodal, LM Studio)
+  - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
+- **Image-to-image edits** via reference image input (gpt-image-1, Gemini multimodal, local server if it supports `/v1/images/edits`)
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
@@ -120,7 +131,7 @@ Or point any MCP-aware client at `dist/server.js` directly — the `mcpServers` 
 
 ## Configuration
 
-Set at least one provider key — **or** run LM Studio locally (no key required):
+Set at least one provider key — **or** run a local OpenAI-compatible server (no key required):
 
 ```sh
 export GEMINI_API_KEY=...        # default image + TTS provider
@@ -128,9 +139,10 @@ export OPENAI_API_KEY=...        # image (gpt-image-1) + TTS (tts-1, gpt-4o-mini
 export OPENROUTER_API_KEY=...    # image passthrough
 export ELEVENLABS_API_KEY=...    # TTS with timestamps
 
-# LM Studio (local, free, no key)
-export LMSTUDIO_BASE_URL=http://localhost:1234/v1   # default
-export LMSTUDIO_ENABLED=true                         # opt-in to failover chain
+# Local server (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / ...)
+export LOCAL_BASE_URL=http://localhost:8880/v1   # default (Kokoro-FastAPI's port)
+export LOCAL_ENABLED=true                         # opt-in to failover chain
+# Back-compat: LMSTUDIO_BASE_URL / LMSTUDIO_ENABLED are still read.
 ```
 
 Optional:
@@ -192,10 +204,11 @@ node mcp-server/dist/cli.js --session-spend
 node mcp-server/dist/cli.js --post-process my.png \
   --presets og,twitter,favicon --webp
 
-# Free local generation via LM Studio
-node mcp-server/dist/cli.js --check-lmstudio
-node mcp-server/dist/cli.js -p "a teal cube" \
-  --provider lmstudio --model <id-from-check-lmstudio>
+# Free local TTS via Kokoro-FastAPI
+docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest  # in another terminal
+node mcp-server/dist/cli.js --check-local
+node mcp-server/dist/cli.js --speech -p "hello world" \
+  --provider local --model kokoro
 ```
 
 ## Status

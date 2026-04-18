@@ -16,7 +16,7 @@ import {
   GEMINI_TTS_VOICES,
   GoogleProvider,
 } from "./google.js";
-import { LMStudioProvider } from "./lmstudio.js";
+import { LocalProvider } from "./local.js";
 import { OpenAIProvider } from "./openai.js";
 import { OpenRouterProvider } from "./openrouter.js";
 import {
@@ -145,9 +145,10 @@ const MATRIX: ProviderEntry[] = [
     tts: { small: NA, mid: NA, pro: NA },
   },
   {
-    id: "lmstudio",
-    // LM Studio capabilities are dynamic — depend on what the user has loaded locally.
-    // All slots NA: usable only via explicit --model. check_lmstudio lists what's available.
+    id: "local",
+    // Local server capabilities depend on which backend is running
+    // (Kokoro-FastAPI for TTS, SD.Next for image, etc.). All slots NA:
+    // usable only via explicit --model. check_local lists what's available.
     image: { small: NA, mid: NA, pro: NA },
     tts: { small: NA, mid: NA, pro: NA },
   },
@@ -334,8 +335,8 @@ export function createImageProvider(id: ProviderId, config: Config): ImageProvid
       return new OpenAIProvider({ apiKey: requireOpenAIKey(config) });
     case "openrouter":
       return new OpenRouterProvider({ apiKey: requireOpenRouterKey(config) });
-    case "lmstudio":
-      return new LMStudioProvider({ baseUrl: config.lmstudioBaseUrl });
+    case "local":
+      return new LocalProvider({ baseUrl: config.localBaseUrl });
     case "elevenlabs":
       throw new Error(`${id} image provider is declared in the registry but not yet implemented`);
   }
@@ -349,8 +350,8 @@ export function createTtsProvider(id: ProviderId, config: Config): TtsProvider {
       return new OpenAIProvider({ apiKey: requireOpenAIKey(config) });
     case "elevenlabs":
       return new ElevenLabsProvider({ apiKey: requireElevenLabsKey(config) });
-    case "lmstudio":
-      return new LMStudioProvider({ baseUrl: config.lmstudioBaseUrl });
+    case "local":
+      return new LocalProvider({ baseUrl: config.localBaseUrl });
     case "openrouter":
       throw new Error("openrouter does not support TTS");
   }

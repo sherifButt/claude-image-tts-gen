@@ -20,9 +20,9 @@ function hasKeyFor(providerId: ProviderId, config: Config): boolean {
       return Boolean(config.openrouterApiKey);
     case "elevenlabs":
       return Boolean(config.elevenlabsApiKey);
-    case "lmstudio":
-      // No API key required (local). Opt-in via LMSTUDIO_ENABLED to include in failover.
-      return config.lmstudioEnabled;
+    case "local":
+      // No API key required (local server). Opt-in via LOCAL_ENABLED to include in failover.
+      return config.localEnabled;
   }
 }
 
@@ -49,8 +49,8 @@ export function envVarNameFor(providerId: ProviderId): string {
       return "OPENROUTER_API_KEY";
     case "elevenlabs":
       return "ELEVENLABS_API_KEY";
-    case "lmstudio":
-      return "LMSTUDIO_ENABLED (opt-in) / LMSTUDIO_BASE_URL";
+    case "local":
+      return "LOCAL_ENABLED (opt-in) / LOCAL_BASE_URL";
   }
 }
 
@@ -108,7 +108,7 @@ export async function withFailover<TResult>(
       undefined,
       {
         requestedProvider: opts.preferredProvider,
-        availableProviders: (["google", "openai", "openrouter", "elevenlabs", "lmstudio"] as ProviderId[])
+        availableProviders: (["google", "openai", "openrouter", "elevenlabs", "local"] as ProviderId[])
           .filter((p) => hasKeyFor(p, opts.config)),
       },
     );

@@ -7,7 +7,7 @@ import {
 } from "./providers/registry.js";
 import { batchStatus } from "./tools/batch-status.js";
 import { batchSubmit } from "./tools/batch-submit.js";
-import { checkLmStudio } from "./tools/check-lmstudio.js";
+import { checkLocal } from "./tools/check-local.js";
 import { createAssets, type CreateAssetsMode } from "./tools/create-assets.js";
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { exportSpend } from "./tools/export-spend.js";
@@ -30,7 +30,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`
@@ -93,8 +93,10 @@ Environment:
   REWRITE_PROMPTS          true (default) | false  — opt out of MCP-sampling prompt rewrite
   AUTOPLAY                 false (default) | true  — afplay TTS output (macOS)
   STATE_DIR                ~/.claude-image-tts-gen (default)
-  LMSTUDIO_BASE_URL        http://localhost:1234/v1 (default)
-  LMSTUDIO_ENABLED         false (default) | true  — include lmstudio in failover chain
+  LOCAL_BASE_URL           http://localhost:8880/v1 (default; Kokoro-FastAPI's port)
+                           Override for Orpheus-FastAPI (:5005), Speaches (:8000), LM Studio (:1234), etc.
+  LOCAL_ENABLED            false (default) | true  — include local provider in failover chain
+                           Back-compat: LMSTUDIO_BASE_URL / LMSTUDIO_ENABLED are still read.
 `);
 }
 
@@ -104,7 +106,7 @@ function isProvider(s: string | undefined): s is ProviderId {
     s === "openai" ||
     s === "openrouter" ||
     s === "elevenlabs" ||
-    s === "lmstudio"
+    s === "local"
   );
 }
 function isTier(s: string | undefined): s is Tier {
@@ -139,7 +141,7 @@ async function main(): Promise<void> {
         "set-budget-weekly": { type: "string" },
         "set-budget-monthly": { type: "string" },
         "health-check": { type: "boolean", default: false },
-        "check-lmstudio": { type: "boolean", default: false },
+        "check-local": { type: "boolean", default: false },
         "batch-submit": { type: "string", description: "Path to JSON file with prompts array" },
         "batch-status": { type: "string", description: "Job ID to poll" },
         "batch-list": { type: "boolean", default: false },
@@ -275,10 +277,10 @@ async function main(): Promise<void> {
       process.exit(result.ok ? 0 : 1);
     }
 
-    if (values["check-lmstudio"]) {
-      const result = await checkLmStudio(config);
+    if (values["check-local"]) {
+      const result = await checkLocal(config);
       process.stdout.write(result.text + "\n");
-      process.exit(result.reachable ? 0 : 1);
+      process.exit(result.success ? 0 : 1);
     }
 
     if (values["batch-list"]) {

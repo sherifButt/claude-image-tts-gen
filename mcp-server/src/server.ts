@@ -18,7 +18,7 @@ import {
 import { z } from "zod";
 import { batchStatus, type BatchStatusArgs } from "./tools/batch-status.js";
 import { batchSubmit, type BatchSubmitArgs } from "./tools/batch-submit.js";
-import { checkLmStudio } from "./tools/check-lmstudio.js";
+import { checkLocal } from "./tools/check-local.js";
 import {
   checkBatchAvailability,
   createAssets,
@@ -119,8 +119,8 @@ const imageInputSchema = {
     prompt: { type: "string", description: "What to generate." },
     provider: {
       type: "string",
-      enum: ["google", "openai", "openrouter", "lmstudio"],
-      description: `Provider. Default: ${getDefaultProvider("image")}. lmstudio uses LMSTUDIO_BASE_URL (local).`,
+      enum: ["google", "openai", "openrouter", "local"],
+      description: `Provider. Default: ${getDefaultProvider("image")}. local uses LOCAL_BASE_URL (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / etc.).`,
     },
     tier: {
       type: "string",
@@ -160,8 +160,8 @@ const speechInputSchema = {
     text: { type: "string", description: "Text to speak." },
     provider: {
       type: "string",
-      enum: ["openai", "google", "elevenlabs", "lmstudio"],
-      description: `Provider. Default: ${getDefaultProvider("tts")}. lmstudio uses LMSTUDIO_BASE_URL (local).`,
+      enum: ["openai", "google", "elevenlabs", "local"],
+      description: `Provider. Default: ${getDefaultProvider("tts")}. local uses LOCAL_BASE_URL (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / etc.).`,
     },
     tier: {
       type: "string",
@@ -279,9 +279,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
-      name: "check_lmstudio",
+      name: "check_local",
       description:
-        "Hit the local LM Studio /v1/models endpoint and report which models are loaded, with naive image/TTS capability detection. Most LM Studio installs only host text LLMs.",
+        "Hit the local OpenAI-compatible server's /v1/models endpoint and report which models are loaded, which backend it looks like (Kokoro-FastAPI, Orpheus-FastAPI, Speaches, LM Studio, ...), and whether TTS/image models are available. Reads LOCAL_BASE_URL.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
@@ -693,8 +693,8 @@ async function handleHealthCheck() {
   };
 }
 
-async function handleCheckLmStudio() {
-  const result = await checkLmStudio(config);
+async function handleCheckLocal() {
+  const result = await checkLocal(config);
   return {
     structuredContent: result,
     content: [{ type: "text", text: result.text }],
@@ -789,8 +789,8 @@ function providerKeyConfigured(providerId: string): boolean {
       return Boolean(config.openrouterApiKey);
     case "elevenlabs":
       return Boolean(config.elevenlabsApiKey);
-    case "lmstudio":
-      return config.lmstudioEnabled;
+    case "local":
+      return config.localEnabled;
     default:
       return false;
   }
@@ -865,8 +865,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "health_check") {
       return await handleHealthCheck();
     }
-    if (name === "check_lmstudio") {
-      return await handleCheckLmStudio();
+    if (name === "check_local") {
+      return await handleCheckLocal();
     }
     if (name === "save_style_preset") return await handleSaveStylePreset(request.params.arguments);
     if (name === "save_voice_preset") return await handleSaveVoicePreset(request.params.arguments);

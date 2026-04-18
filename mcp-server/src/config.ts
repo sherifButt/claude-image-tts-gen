@@ -3,10 +3,10 @@ export interface Config {
   openaiApiKey: string | undefined;
   openrouterApiKey: string | undefined;
   elevenlabsApiKey: string | undefined;
-  /** Local LM Studio OpenAI-compatible base URL (default http://localhost:1234/v1). */
-  lmstudioBaseUrl: string;
-  /** Whether LM Studio is configured (always true since default localhost; controls failover inclusion). */
-  lmstudioEnabled: boolean;
+  /** Local OpenAI-compatible server base URL (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, LM Studio, ...). */
+  localBaseUrl: string;
+  /** Whether the local provider is opted in to the failover chain. */
+  localEnabled: boolean;
   geminiImageModel: string;
   imageOutputDir: string;
   audioOutputDir: string;
@@ -30,10 +30,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     openaiApiKey: env.OPENAI_API_KEY,
     openrouterApiKey: env.OPENROUTER_API_KEY,
     elevenlabsApiKey: env.ELEVENLABS_API_KEY,
-    lmstudioBaseUrl: env.LMSTUDIO_BASE_URL ?? "http://localhost:1234/v1",
-    // Opt-in via LMSTUDIO_ENABLED=true; off by default since localhost may not be running.
-    lmstudioEnabled: ["true", "1", "yes", "on"].includes(
-      (env.LMSTUDIO_ENABLED ?? "").toLowerCase(),
+    // Default http://localhost:8880/v1 (Kokoro-FastAPI's default port) since
+    // that's the recommended local backend. Users running Orpheus-FastAPI
+    // (:5005), Speaches (:8000), LM Studio (:1234), etc. can override with
+    // LOCAL_BASE_URL. Back-compat: LMSTUDIO_BASE_URL is still read.
+    localBaseUrl:
+      env.LOCAL_BASE_URL ?? env.LMSTUDIO_BASE_URL ?? "http://localhost:8880/v1",
+    // Opt-in via LOCAL_ENABLED=true; off by default since localhost may not
+    // be running. Back-compat: LMSTUDIO_ENABLED is still read.
+    localEnabled: ["true", "1", "yes", "on"].includes(
+      (env.LOCAL_ENABLED ?? env.LMSTUDIO_ENABLED ?? "").toLowerCase(),
     ),
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
