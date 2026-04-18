@@ -3,6 +3,10 @@ export interface Config {
   openaiApiKey: string | undefined;
   openrouterApiKey: string | undefined;
   elevenlabsApiKey: string | undefined;
+  /** Local LM Studio OpenAI-compatible base URL (default http://localhost:1234/v1). */
+  lmstudioBaseUrl: string;
+  /** Whether LM Studio is configured (always true since default localhost; controls failover inclusion). */
+  lmstudioEnabled: boolean;
   geminiImageModel: string;
   imageOutputDir: string;
   audioOutputDir: string;
@@ -24,6 +28,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     openaiApiKey: env.OPENAI_API_KEY,
     openrouterApiKey: env.OPENROUTER_API_KEY,
     elevenlabsApiKey: env.ELEVENLABS_API_KEY,
+    lmstudioBaseUrl: env.LMSTUDIO_BASE_URL ?? "http://localhost:1234/v1",
+    // Opt-in via LMSTUDIO_ENABLED=true; off by default since localhost may not be running.
+    lmstudioEnabled: ["true", "1", "yes", "on"].includes(
+      (env.LMSTUDIO_ENABLED ?? "").toLowerCase(),
+    ),
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",

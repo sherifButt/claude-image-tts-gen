@@ -18,6 +18,7 @@ import {
 import { z } from "zod";
 import { batchStatus, type BatchStatusArgs } from "./tools/batch-status.js";
 import { batchSubmit, type BatchSubmitArgs } from "./tools/batch-submit.js";
+import { checkLmStudio } from "./tools/check-lmstudio.js";
 import {
   checkBatchAvailability,
   createAssets,
@@ -118,8 +119,8 @@ const imageInputSchema = {
     prompt: { type: "string", description: "What to generate." },
     provider: {
       type: "string",
-      enum: ["google", "openai", "openrouter"],
-      description: `Provider. Default: ${getDefaultProvider("image")}.`,
+      enum: ["google", "openai", "openrouter", "lmstudio"],
+      description: `Provider. Default: ${getDefaultProvider("image")}. lmstudio uses LMSTUDIO_BASE_URL (local).`,
     },
     tier: {
       type: "string",
@@ -143,8 +144,8 @@ const speechInputSchema = {
     text: { type: "string", description: "Text to speak." },
     provider: {
       type: "string",
-      enum: ["openai", "google", "elevenlabs"],
-      description: `Provider. Default: ${getDefaultProvider("tts")}.`,
+      enum: ["openai", "google", "elevenlabs", "lmstudio"],
+      description: `Provider. Default: ${getDefaultProvider("tts")}. lmstudio uses LMSTUDIO_BASE_URL (local).`,
     },
     tier: {
       type: "string",
@@ -249,6 +250,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "health_check",
       description:
         "Ping each configured provider to verify auth, report latency, and check pricing staleness.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    {
+      name: "check_lmstudio",
+      description:
+        "Hit the local LM Studio /v1/models endpoint and report which models are loaded, with naive image/TTS capability detection. Most LM Studio installs only host text LLMs.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
@@ -660,6 +667,14 @@ async function handleHealthCheck() {
   };
 }
 
+async function handleCheckLmStudio() {
+  const result = await checkLmStudio(config);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
 async function handleSaveStylePreset(args: unknown) {
   const result = await saveStylePreset((args ?? {}) as SaveStylePresetArgs);
   return { structuredContent: result, content: [{ type: "text", text: result.text }] };
@@ -792,6 +807,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "health_check") {
       return await handleHealthCheck();
+    }
+    if (name === "check_lmstudio") {
+      return await handleCheckLmStudio();
     }
     if (name === "save_style_preset") return await handleSaveStylePreset(request.params.arguments);
     if (name === "save_voice_preset") return await handleSaveVoicePreset(request.params.arguments);

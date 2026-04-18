@@ -20,6 +20,9 @@ function hasKeyFor(providerId: ProviderId, config: Config): boolean {
       return Boolean(config.openrouterApiKey);
     case "elevenlabs":
       return Boolean(config.elevenlabsApiKey);
+    case "lmstudio":
+      // No API key required (local). Opt-in via LMSTUDIO_ENABLED to include in failover.
+      return config.lmstudioEnabled;
   }
 }
 
