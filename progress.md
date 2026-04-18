@@ -15,17 +15,6 @@
       - [ ] Auto-composite contact sheet (sharp grid) for variant selection
       - [ ] User picks keeper → other variants moved to trash subdirectory
 
-### Provider failover with logged reason
-
-  - due: 2026-05-04
-  - tags: [reliability, providers]
-  - priority: medium
-  - workload: Medium
-  - steps:
-      - [ ] On 429 / 5xx / timeout, retry on the next-best provider for the requested tier
-      - [ ] Log fallback reason and cost delta in the tool response
-      - [ ] Configurable failover order per modality
-
 ### TTS long-form support
 
   - due: 2026-05-06
@@ -160,6 +149,28 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Provider failover with logged reason
+
+  - due: 2026-05-04
+  - tags: [reliability, providers]
+  - priority: medium
+  - workload: Medium
+  - steps:
+      - [x] `util/failover.ts` — `getFailoverOrder`, `isRetryable`, `withFailover` generic wrapper
+      - [x] Default order: image=google,openai,openrouter; tts=openai,google,elevenlabs
+      - [x] Filters providers without an API key (won't try them)
+      - [x] Skips providers where the requested tier isn't implemented (silently in chain; clear error if it's the preferred provider on first attempt)
+      - [x] Retryable codes: `RATE_LIMIT`, `PROVIDER_ERROR`, `PROVIDER_TIMEOUT`. Auth/content-policy/validation/budget all stop immediately.
+      - [x] `generate_image` and `generate_speech` use `withFailover`; explicit `--model` overrides skip failover
+      - [x] Result carries `failover: {originalProvider, originalModel, originalError, fallbackProvider, fallbackModel, costDelta, currency}` when failover occurred
+      - [x] Smoke tested: no keys → CONFIG_ERROR with "set at least one"; only OPENAI key → google filtered, openai attempted directly with real 401 (AUTH_FAILED, not retried — correct).
+    ```md
+    Failover wrapper is generic over the provider call (callback). The tool
+    computes costDelta after success by re-estimating both original and
+    fallback prices. Pre-existing pricing-key bug for explicit --model on
+    OpenAI surfaces here (variant-keyed entries) — separate follow-up.
+    ```
 
 ### Batch UX — elicitation & notifications
 
