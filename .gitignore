@@ -25,3 +25,13 @@ npm-debug.log*
 
 .claude/
 
+# Runtime state written by the MCP server when STATE_DIR isn't set and cwd
+# happens to be the repo (happens during smoke tests). Real usage puts
+# these in ~/.claude-image-tts-gen/.
+session.json
+budget.json
+presets/
+batch/
+cache/
+projects/
+
