@@ -116,7 +116,7 @@ claude mcp add --transport stdio claude-image-tts-gen \
   -- node /absolute/path/to/claude-image-tts-gen/mcp-server/dist/server.js
 ```
 
-Or point any MCP-aware client at `dist/server.js` directly — the repo's `.mcp.json` shows the env it expects.
+Or point any MCP-aware client at `dist/server.js` directly — the `mcpServers` block in `.claude-plugin/plugin.json` shows the env the server reads.
 
 ## Configuration
 

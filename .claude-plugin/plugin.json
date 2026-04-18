@@ -5,6 +5,28 @@
   "author": {
     "name": "Sherif Butt"
   },
-  "repository": "https://github.com/sherifbutt/claude-image-tts-gen",
-  "license": "MIT"
+  "repository": "https://github.com/sherifButt/claude-image-tts-gen",
+  "license": "MIT",
+  "mcpServers": {
+    "claude-image-tts-gen": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"],
+      "env": {
+        "GEMINI_API_KEY": "${GEMINI_API_KEY:-}",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY:-}",
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY:-}",
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY:-}",
+        "GEMINI_IMAGE_MODEL": "${GEMINI_IMAGE_MODEL:-}",
+        "LMSTUDIO_BASE_URL": "${LMSTUDIO_BASE_URL:-http://localhost:1234/v1}",
+        "LMSTUDIO_ENABLED": "${LMSTUDIO_ENABLED:-false}",
+        "IMAGE_OUTPUT_DIR": "${IMAGE_OUTPUT_DIR:-./generated-images}",
+        "AUDIO_OUTPUT_DIR": "${AUDIO_OUTPUT_DIR:-./generated-audio}",
+        "STATE_DIR": "${STATE_DIR:-}",
+        "BUDGET_USD_PER_DAY": "${BUDGET_USD_PER_DAY:-5}",
+        "REWRITE_PROMPTS": "${REWRITE_PROMPTS:-true}",
+        "AUTOPLAY": "${AUTOPLAY:-false}",
+        "LOG_LEVEL": "${LOG_LEVEL:-info}"
+      }
+    }
+  }
 }
