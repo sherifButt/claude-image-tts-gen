@@ -3,6 +3,10 @@ mcp-server/dist/
 generated-images/
 generated-audio/
 
+CLAUDE.md
+
+progress.md
+
 .env
 .env.local
 .env.*.local
@@ -22,6 +26,3 @@ npm-debug.log*
 
 .claude/
 
-CLAUDE.md
-
-progress.md
