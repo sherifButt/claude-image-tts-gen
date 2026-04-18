@@ -2,25 +2,13 @@
 
 ## To Do
 
-### Batch UX — elicitation & notifications
-
-  - due: 2026-05-02
-  - tags: [batch, ux, mcp]
-  - priority: high
-  - workload: Medium
-  - steps:
-      - [ ] Detect ≥2 same-modality+provider prompts → trigger elicitation
-      - [ ] Elicitation prompt: "batch (50% off, ≤24h) vs sync now?"
-      - [ ] If provider doesn't support batch, skip the prompt
-      - [ ] MCP server-side notification when batch completes
-      - [ ] `regenerate <file>` works for batch outputs identically
-
 ### Iteration loop & variants
 
   - due: 2026-05-03
   - tags: [ux, image, iteration]
   - priority: medium
   - workload: Medium
+  - defaultExpanded: true
   - steps:
       - [ ] "Make it more X" rewrites the prior prompt; preserves lineage in sidecar
       - [ ] `n=4` variants in one call where the provider supports it
@@ -172,6 +160,31 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Batch UX — elicitation & notifications
+
+  - due: 2026-05-02
+  - tags: [batch, ux, mcp]
+  - priority: high
+  - workload: Medium
+  - steps:
+      - [x] `tools/create-assets.ts` orchestrator with `mode: 'batch' | 'sync' | 'auto'`
+      - [x] `checkBatchAvailability` returns `{available, syncCost, batchCost, savings}` for any (modality, prompts, provider, tier)
+      - [x] Single prompt OR non-batchable → forced sync
+      - [x] Sync mode runs parallel `generateImage`/`generateSpeech` calls via `Promise.all`
+      - [x] MCP elicitation in `server.ts handleCreateAssets`: when `mode='auto'` and ≥2 batchable prompts, sends `elicitation/create` with batch-vs-sync schema
+      - [x] Graceful fallback: client without elicitation support → defaults to sync
+      - [x] MCP `notifications/message` sent when `batch_status` observes in_progress→completed/partial_failure/failed transition
+      - [x] `batch_status` returns `transitioned` flag so handler can fire one-shot notification
+      - [x] CLI `--create-assets <file> --mode batch|sync|auto` (auto defaults to sync from CLI)
+      - [x] Existing `regenerate` already works on any sidecar — batch outputs included
+      - [x] Smoke tested: batch+openai → CONFIG_ERROR; sync+openai → CONFIG_ERROR; batch+openrouter → VALIDATION_ERROR (no batch)
+    ```md
+    Tool stays pure: it accepts a resolved 'batch' | 'sync' mode. The MCP
+    handler in server.ts intercepts 'auto' mode, runs MCP elicitation, then
+    calls the tool with the resolved mode. CLI can't elicit so 'auto' falls
+    back to 'sync' there.
+    ```
 
 ### Batch infrastructure (Google image + OpenAI image; Gemini TTS deferred)
 

@@ -7,6 +7,7 @@ import {
 } from "./providers/registry.js";
 import { batchStatus } from "./tools/batch-status.js";
 import { batchSubmit } from "./tools/batch-submit.js";
+import { createAssets, type CreateAssetsMode } from "./tools/create-assets.js";
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
@@ -46,6 +47,8 @@ Options:
       --batch-submit <file>     Submit batch from a JSON file: {modality, prompts, provider?, tier?}
       --batch-status <jobId>    Poll a batch job
       --batch-list              List all batch jobs
+      --create-assets <file>    Orchestrator: takes {modality, prompts[]} JSON file
+      --mode <mode>             create-assets mode: batch | sync | auto (default sync from CLI)
   -h, --help               Show this help
 
 Environment:
@@ -89,6 +92,8 @@ async function main(): Promise<void> {
         "batch-submit": { type: "string", description: "Path to JSON file with prompts array" },
         "batch-status": { type: "string", description: "Job ID to poll" },
         "batch-list": { type: "boolean", default: false },
+        "create-assets": { type: "string", description: "Path to JSON file with prompts array (orchestrator)" },
+        mode: { type: "string", description: "create-assets mode: batch | sync | auto (default sync from CLI)" },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -175,6 +180,25 @@ async function main(): Promise<void> {
         model?: string;
       };
       const result = await batchSubmit(parsed, config);
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values["create-assets"]) {
+      const { readFile } = await import("node:fs/promises");
+      const raw = await readFile(values["create-assets"], "utf8");
+      const parsed = JSON.parse(raw) as {
+        modality: "image" | "tts";
+        prompts: Array<{ text: string; voice?: string }>;
+        provider?: ProviderId;
+        tier?: Tier;
+        model?: string;
+      };
+      const mode = (values.mode ?? "sync") as CreateAssetsMode;
+      if (mode !== "batch" && mode !== "sync" && mode !== "auto") {
+        throw new Error(`Invalid --mode: ${values.mode} (use batch | sync | auto)`);
+      }
+      const result = await createAssets({ ...parsed, mode }, config);
       process.stdout.write(result.text + "\n");
       process.exit(0);
     }

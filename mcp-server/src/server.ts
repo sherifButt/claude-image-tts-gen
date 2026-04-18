@@ -10,8 +10,15 @@ import {
   getDefaultTier,
   listDeclared,
 } from "./providers/registry.js";
+import { z } from "zod";
 import { batchStatus, type BatchStatusArgs } from "./tools/batch-status.js";
 import { batchSubmit, type BatchSubmitArgs } from "./tools/batch-submit.js";
+import {
+  checkBatchAvailability,
+  createAssets,
+  type CreateAssetsArgs,
+  type CreateAssetsMode,
+} from "./tools/create-assets.js";
 import { estimateCostDryRun, type EstimateCostArgs } from "./tools/estimate-cost.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech.js";
@@ -143,6 +150,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
+      name: "create_assets",
+      description:
+        "Generate multiple media assets at once. With mode:'auto' (default), the server elicits the user to choose batch (50% off, ≤24h) vs sync when ≥2 prompts and the provider supports batch. mode:'sync' runs parallel calls; mode:'batch' submits a batch job.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          modality: { type: "string", enum: ["image", "tts"] },
+          prompts: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { text: { type: "string" }, voice: { type: "string" } },
+              required: ["text"],
+            },
+            minItems: 1,
+          },
+          provider: { type: "string", enum: ["google", "openai", "openrouter", "elevenlabs"] },
+          tier: { type: "string", enum: ["small", "mid", "pro"] },
+          model: { type: "string" },
+          mode: { type: "string", enum: ["batch", "sync", "auto"], description: "Default: auto" },
+        },
+        required: ["modality", "prompts"],
+      },
+    },
+    {
       name: "batch_submit",
       description:
         "Submit multiple prompts as a batch (50% off vs sync, ≤24h SLA). Currently implemented: google/image. Returns a jobId to poll with batch_status.",
@@ -266,6 +298,66 @@ async function handleSetBudget(args: unknown) {
   };
 }
 
+const ElicitResultSchema = z.object({
+  action: z.enum(["accept", "decline", "cancel"]),
+  content: z.record(z.unknown()).optional(),
+});
+
+async function elicitBatchVsSync(args: CreateAssetsArgs): Promise<CreateAssetsMode | null> {
+  const availability = checkBatchAvailability(args);
+  if (!availability.available) return "sync";
+  if (availability.savings === undefined || availability.savings <= 0) return "sync";
+
+  const message =
+    `You queued ${args.prompts.length} ${args.modality} prompts for ${args.provider ?? "the default provider"}. ` +
+    `Run as batch (${availability.currency} ${availability.batchCost?.toFixed(4)}, 50% off, up to 24h) ` +
+    `or sync now (${availability.currency} ${availability.syncCost?.toFixed(4)}, immediate)?`;
+
+  try {
+    const result = await server.request(
+      {
+        method: "elicitation/create",
+        params: {
+          message,
+          requestedSchema: {
+            type: "object",
+            properties: {
+              mode: {
+                type: "string",
+                enum: ["batch", "sync"],
+                description: "batch = wait ≤24h for 50% off; sync = run now at full price",
+              },
+            },
+            required: ["mode"],
+          },
+        },
+      },
+      ElicitResultSchema,
+    );
+    if (result.action === "accept") {
+      const mode = result.content?.mode;
+      if (mode === "batch" || mode === "sync") return mode;
+    }
+    return "sync";
+  } catch {
+    // Client doesn't support elicitation, or it failed — fall back to sync.
+    return null;
+  }
+}
+
+async function handleCreateAssets(args: unknown) {
+  const parsed = (args ?? {}) as CreateAssetsArgs;
+  if (parsed.mode === undefined || parsed.mode === "auto") {
+    const elicited = await elicitBatchVsSync(parsed);
+    parsed.mode = elicited ?? "sync";
+  }
+  const result = await createAssets(parsed, config);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
 async function handleBatchSubmit(args: unknown) {
   const result = await batchSubmit((args ?? {}) as BatchSubmitArgs, config);
   return {
@@ -276,6 +368,23 @@ async function handleBatchSubmit(args: unknown) {
 
 async function handleBatchStatus(args: unknown) {
   const result = await batchStatus((args ?? {}) as BatchStatusArgs, config);
+  if (result.transitioned && result.job) {
+    try {
+      await server.notification({
+        method: "notifications/message",
+        params: {
+          level: result.job.status === "completed" ? "info" : "warning",
+          logger: "claude-image-tts-gen",
+          data:
+            `Batch ${result.job.jobId} ${result.job.status}: ` +
+            `${result.job.outputs.length} files, ` +
+            `${result.job.currency} ${result.job.actualCost.toFixed(4)} actual cost.`,
+        },
+      });
+    } catch {
+      // ignore — not all clients support notifications/message
+    }
+  }
   return {
     structuredContent: result,
     content: [{ type: "text", text: result.text }],
@@ -348,6 +457,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "set_budget") {
       return await handleSetBudget(request.params.arguments);
+    }
+    if (name === "create_assets") {
+      return await handleCreateAssets(request.params.arguments);
     }
     if (name === "batch_submit") {
       return await handleBatchSubmit(request.params.arguments);

@@ -20,6 +20,9 @@ export interface BatchStatusOutput {
   success: true;
   jobs?: BatchJob[];
   job?: BatchJob;
+  /** True when this poll observed a transition out of in_progress (i.e. completion this call). */
+  transitioned: boolean;
+  previousStatus?: string;
   text: string;
 }
 
@@ -32,6 +35,7 @@ export async function batchStatus(
     return {
       success: true,
       jobs,
+      transitioned: false,
       text: renderJobsList(jobs),
     };
   }
@@ -45,6 +49,7 @@ export async function batchStatus(
   }
 
   let job = await loadJob(args.jobId);
+  const previousStatus = job.status;
 
   if (job.status === "in_progress" && job.providerJobId) {
     const provider = createBatchProvider(job.provider, job.modality, config);
@@ -70,9 +75,19 @@ export async function batchStatus(
     }
   }
 
+  const transitioned =
+    previousStatus === "in_progress" &&
+    (job.status === "completed" ||
+      job.status === "partial_failure" ||
+      job.status === "failed" ||
+      job.status === "cancelled" ||
+      job.status === "expired");
+
   return {
     success: true,
     job,
+    transitioned,
+    previousStatus,
     text: renderJob(job),
   };
 }
