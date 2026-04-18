@@ -62,6 +62,7 @@ function inlineSlot(provider: ProviderId, tier: Tier, model: string): ResolvedSl
     voices: [],
     defaultVoice: undefined,
     customVoicesAllowed: false,
+    maxCharsPerCall: undefined,
   };
 }
 

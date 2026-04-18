@@ -33,6 +33,8 @@ export interface Slot {
   voices?: readonly string[];
   defaultVoice?: string;
   customVoicesAllowed?: boolean;
+  /** TTS only: max chars per single API call. Long text gets chunked + concat'd. */
+  maxCharsPerCall?: number;
 }
 
 interface TierTable {
@@ -92,6 +94,7 @@ const MATRIX: ProviderEntry[] = [
         implemented: true,
         voices: OPENAI_TTS_VOICES_STD,
         defaultVoice: "alloy",
+        maxCharsPerCall: 4096,
       },
       mid: {
         model: "gpt-4o-mini-tts",
@@ -99,6 +102,7 @@ const MATRIX: ProviderEntry[] = [
         implemented: true,
         voices: OPENAI_TTS_VOICES_GPT4O,
         defaultVoice: "alloy",
+        maxCharsPerCall: 4096,
       },
       pro: {
         model: "tts-1-hd",
@@ -106,6 +110,7 @@ const MATRIX: ProviderEntry[] = [
         implemented: true,
         voices: OPENAI_TTS_VOICES_STD,
         defaultVoice: "alloy",
+        maxCharsPerCall: 4096,
       },
     },
   },
@@ -129,6 +134,7 @@ const MATRIX: ProviderEntry[] = [
         voices: ELEVENLABS_FRIENDLY_VOICES,
         defaultVoice: ELEVENLABS_DEFAULT_VOICE,
         customVoicesAllowed: true,
+        maxCharsPerCall: 5000,
       },
       mid: {
         model: "eleven_multilingual_v2",
@@ -137,6 +143,7 @@ const MATRIX: ProviderEntry[] = [
         voices: ELEVENLABS_FRIENDLY_VOICES,
         defaultVoice: ELEVENLABS_DEFAULT_VOICE,
         customVoicesAllowed: true,
+        maxCharsPerCall: 5000,
       },
       pro: NA,
     },
@@ -168,6 +175,7 @@ export interface ResolvedSlot {
   voices: readonly string[];
   defaultVoice: string | undefined;
   customVoicesAllowed: boolean;
+  maxCharsPerCall: number | undefined;
 }
 
 export function resolveSlot(opts: {
@@ -202,6 +210,7 @@ export function resolveSlot(opts: {
     voices: slot.voices ?? [],
     defaultVoice: slot.defaultVoice,
     customVoicesAllowed: slot.customVoicesAllowed ?? false,
+    maxCharsPerCall: slot.maxCharsPerCall,
   };
 }
 

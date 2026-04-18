@@ -1,6 +1,10 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { buildCacheKey } from "../cache/key.js";
 import { copyFromCache, lookupCache, storeInCache } from "../cache/store.js";
+import { chunkText, type TtsChunk } from "../chunker/tts.js";
 import type { Config } from "../config.js";
+import { concatAudioFiles } from "../post/concat.js";
 import { estimateCost, tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
 import type { CostEstimate } from "../pricing/types.js";
 import {
@@ -10,7 +14,7 @@ import {
   resolveSlot,
   type ResolvedSlot,
 } from "../providers/registry.js";
-import type { ProviderId, Tier } from "../providers/types.js";
+import type { ProviderId, Tier, TtsGenResult } from "../providers/types.js";
 import { readLineageFromParent, writeSidecar } from "../sidecar/metadata.js";
 import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
@@ -18,7 +22,7 @@ import { summarize } from "../state/spend.js";
 import type { BudgetWarning, CallEntry, PeriodTotal } from "../state/types.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
-import { buildOutputPath, saveBinary } from "../util/output.js";
+import { buildOutputPath, saveBinary, slugify, timestamp } from "../util/output.js";
 
 export interface GenerateSpeechArgs {
   text: string;
@@ -47,6 +51,8 @@ export interface GenerateSpeechOutput {
   cached: boolean;
   budgetWarning: BudgetWarning | null;
   failover: FailoverDetails | null;
+  chunkCount: number;
+  chunkFiles?: string[];
 }
 
 export interface GenerateSpeechOpts {
@@ -64,6 +70,7 @@ function inlineSlot(provider: ProviderId, tier: Tier, model: string): ResolvedSl
     voices: [],
     defaultVoice: undefined,
     customVoicesAllowed: true,
+    maxCharsPerCall: undefined,
   };
 }
 
@@ -134,6 +141,13 @@ export async function generateSpeech(
   let modelUsed: string;
   let filePath: string;
   let failover: FailoverDetails | null = null;
+  let chunkFiles: string[] | undefined;
+  let chunkCount = 1;
+
+  // Decide whether to chunk: only when not cached, not explicit-model, and slot.maxCharsPerCall is set + exceeded.
+  const limit = slot.maxCharsPerCall;
+  const needsChunking =
+    !cached && !args.model && limit !== undefined && args.text.length > limit;
 
   if (cached) {
     mimeType = cached.meta.mimeType;
@@ -145,6 +159,62 @@ export async function generateSpeech(
       explicitPath: args.outputPath,
     });
     await copyFromCache(cached, filePath);
+  } else if (needsChunking) {
+    const chunks = chunkText(args.text, limit!);
+    chunkCount = chunks.length;
+
+    // Generate each chunk via failover-aware path.
+    const chunkResults = await Promise.all(
+      chunks.map((c) =>
+        withFailover<TtsGenResult>({
+          modality: "tts",
+          tier,
+          preferredProvider: requestedProvider,
+          config,
+          callProvider: async (resolvedSlot, attemptProviderId) => {
+            const provider = createTtsProvider(attemptProviderId, config);
+            return await provider.generateSpeech({
+              text: c.text,
+              model: resolvedSlot.model,
+              voice: args.voice ?? resolvedSlot.defaultVoice,
+              params: resolvedSlot.params,
+            });
+          },
+        }),
+      ),
+    );
+
+    // All chunks must use the same provider/model — pick from first.
+    const first = chunkResults[0];
+    providerUsed = first.providerUsed;
+    slot = first.slot;
+    voice = args.voice ?? slot.defaultVoice;
+    mimeType = first.result.mimeType;
+    modelUsed = first.result.modelUsed;
+
+    // Save each chunk file.
+    const baseStem = `${timestamp()}-${slugify(args.text)}`;
+    const ext = mimeType.split("/")[1] === "mpeg" ? "mp3" : mimeType.split("/")[1] ?? "bin";
+    const chunksDir = join(config.audioOutputDir, ".chunks");
+    await mkdir(chunksDir, { recursive: true });
+    chunkFiles = [];
+    for (let i = 0; i < chunkResults.length; i++) {
+      const chunkPath = join(chunksDir, `${baseStem}-chunk-${i + 1}.${ext}`);
+      await writeFile(chunkPath, chunkResults[i].result.data);
+      chunkFiles.push(chunkPath);
+    }
+
+    filePath = buildOutputPath({
+      prompt: args.text,
+      mimeType,
+      outputDir: config.audioOutputDir,
+      explicitPath: args.outputPath,
+    });
+    await concatAudioFiles(chunkFiles, filePath);
+    await storeInCache(cacheKey, filePath, {
+      mimeType,
+      modelKey: `${providerUsed}/${modelUsed}`,
+    });
   } else if (args.model) {
     const provider = createTtsProvider(requestedProvider, config);
     let result;
@@ -303,5 +373,7 @@ export async function generateSpeech(
     cached: isCached,
     budgetWarning,
     failover,
+    chunkCount,
+    chunkFiles,
   };
 }

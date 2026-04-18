@@ -2,25 +2,13 @@
 
 ## To Do
 
-### TTS long-form support
-
-  - due: 2026-05-06
-  - tags: [tts, post-process]
-  - priority: medium
-  - workload: Medium
-  - defaultExpanded: true
-  - steps:
-      - [ ] Sentence-boundary chunker (respects provider char limits)
-      - [ ] ffmpeg concat into a single file
-      - [ ] Detect missing ffmpeg → return structured "install ffmpeg" error
-      - [ ] Single-chunk fallback if input fits in one call
-
 ### TTS captions (SRT / VTT)
 
   - due: 2026-05-07
   - tags: [tts, post-process]
   - priority: medium
   - workload: Medium
+  - defaultExpanded: true
   - steps:
       - [ ] Pull word-level timestamps where the provider returns them
       - [ ] Emit `.srt` and `.vtt` alongside the audio file
@@ -137,6 +125,28 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### TTS long-form support
+
+  - due: 2026-05-06
+  - tags: [tts, post-process]
+  - priority: medium
+  - workload: Medium
+  - steps:
+      - [x] Slot gains `maxCharsPerCall` (OpenAI TTS = 4096; ElevenLabs = 5000)
+      - [x] `chunker/tts.ts` — `chunkText(text, limit)` splits at sentence boundaries (`.!?`), groups greedily; falls to clause (`,;:`) then word split for oversized single sentences; hard-cuts words longer than limit
+      - [x] `post/concat.ts` — `ffmpegAvailable()` cached check via spawn; `concatAudioFiles` builds list file and runs `ffmpeg -f concat -c copy`; single-input bypass copies directly
+      - [x] `generate_speech` detects `text.length > maxCharsPerCall`, splits, runs each chunk via `withFailover` in parallel, saves chunks to `<audio_dir>/.chunks/<base>-chunk-N.mp3`, concats into the main output
+      - [x] Returns `chunkCount` + `chunkFiles` so callers can audit
+      - [x] Single ledger entry + sidecar with `units = total chars` (sum of chunk costs)
+      - [x] Structured `CONFIG_ERROR` "install ffmpeg" when missing
+      - [x] Smoke tested: 2849-char text → 17 chunks (limit 200, max chunk 170); oversized single sentence falls to word-splits; ffmpeg detected on host
+    ```md
+    Chunks all share the same provider/model — failover happens per chunk so
+    a flaky provider mid-batch can be skipped (each chunk independently
+    falls over). The concat'd file is the canonical output; chunks remain
+    in `.chunks/` for traceability.
+    ```
 
 ### Iteration loop & variants
 
