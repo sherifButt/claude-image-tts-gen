@@ -4,15 +4,41 @@ Multi-provider AI image and text-to-speech generation, packaged as a Claude Code
 
 Inspired by [guinacio/claude-image-gen](https://github.com/guinacio/claude-image-gen) and extended with multi-provider support, tier abstraction, batch mode, end-to-end cost tracking, MCP elicitation/sampling/notifications/resources, and a reproducible sidecar workflow.
 
+> ## Run it 100% local — for $0/call
+>
+> **First-class [LM Studio](https://lmstudio.ai/) support.** Point this plugin at any model
+> you've loaded in LM Studio's local OpenAI-compatible server and generate images
+> or speech without an API key, without a network round-trip, and without spending
+> a cent. The cost ledger logs $0; the budget cap is irrelevant; everything else
+> (sidecar, cache, regenerate, iterate, variants, post-processing) just works.
+>
+> ```sh
+> # See what's loaded locally
+> node mcp-server/dist/cli.js --check-lmstudio
+>
+> # Generate against a local image model
+> node mcp-server/dist/cli.js -p "a teal cube on white" \
+>   --provider lmstudio --model stable-diffusion-xl-base-1.0
+>
+> # Or local TTS
+> node mcp-server/dist/cli.js --speech -p "hello world" \
+>   --provider lmstudio --model coqui-xtts-v2
+> ```
+>
+> Set `LMSTUDIO_BASE_URL` if your local server isn't on `http://localhost:1234/v1`.
+> Opt in via `LMSTUDIO_ENABLED=true` to include LM Studio in the failover chain
+> alongside the cloud providers.
+
 ## Features
 
 ### Generation
-- **4 providers** behind a single tier abstraction (`small | mid | pro`):
+- **5 providers** behind a single tier abstraction (`small | mid | pro`):
   - **Google Gemini** (image: Flash + Imagen, TTS declared)
   - **OpenAI** (image: gpt-image-1 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
-- **Image-to-image edits** via reference image input (gpt-image-1, Gemini multimodal)
+  - **🖥 LM Studio (local)** — bring your own model, $0/call, no API key, no rate limit
+- **Image-to-image edits** via reference image input (gpt-image-1, Gemini multimodal, LM Studio)
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
@@ -74,13 +100,17 @@ System dependencies (optional but recommended):
 
 ## Configuration
 
-Set at least one provider key:
+Set at least one provider key — **or** run LM Studio locally (no key required):
 
 ```sh
 export GEMINI_API_KEY=...        # default image + TTS provider
 export OPENAI_API_KEY=...        # image (gpt-image-1) + TTS (tts-1, gpt-4o-mini-tts, tts-1-hd)
 export OPENROUTER_API_KEY=...    # image passthrough
 export ELEVENLABS_API_KEY=...    # TTS with timestamps
+
+# LM Studio (local, free, no key)
+export LMSTUDIO_BASE_URL=http://localhost:1234/v1   # default
+export LMSTUDIO_ENABLED=true                         # opt-in to failover chain
 ```
 
 Optional:
@@ -119,6 +149,11 @@ node mcp-server/dist/cli.js --session-spend
 # Resize an image for share targets
 node mcp-server/dist/cli.js --post-process my.png \
   --presets og,twitter,favicon --webp
+
+# Free local generation via LM Studio
+node mcp-server/dist/cli.js --check-lmstudio
+node mcp-server/dist/cli.js -p "a teal cube" \
+  --provider lmstudio --model <id-from-check-lmstudio>
 ```
 
 ## Status
