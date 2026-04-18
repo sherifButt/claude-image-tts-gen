@@ -6,6 +6,7 @@ import { chunkText, type TtsChunk } from "../chunker/tts.js";
 import type { Config } from "../config.js";
 import { writeCaptionFiles, type CaptionFiles, type CaptionFormat } from "../post/captions.js";
 import { concatAudioFiles } from "../post/concat.js";
+import { autoPlay } from "../post/play.js";
 import { estimateCost, tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
 import type { CostEstimate } from "../pricing/types.js";
 import {
@@ -367,6 +368,10 @@ export async function generateSpeech(
     lineage,
     cached: isCached,
   });
+
+  if (config.autoplay) {
+    autoPlay(filePath);
+  }
 
   let captions: CaptionFiles | undefined;
   let captionsSkipped: string | undefined;

@@ -14,6 +14,8 @@ import { generateSpeech } from "./tools/generate-speech.js";
 import { healthCheck } from "./tools/health-check.js";
 import { iterate } from "./tools/iterate.js";
 import { pickVariant } from "./tools/pick-variant.js";
+import { postProcess } from "./tools/post-process.js";
+import type { PresetName } from "./post/image-presets.js";
 import { regenerate } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
@@ -60,6 +62,10 @@ Options:
       --pick-keeper <path>      Keeper file for pick-variant; requires --pick-variants
       --pick-variants <a,b,c>   Comma-separated variant paths
       --pick-sheet <path>       Optional contact-sheet to also trash
+      --post-process <input>    Resize an image; use --presets and/or --webp
+      --presets <a,b,c>         Preset list: og, twitter, favicon, app-icon, linkedin, instagram-square, instagram-story
+      --webp                    Also emit .webp variants
+      --webp-quality <n>        Default 85
   -h, --help               Show this help
 
 Environment:
@@ -113,6 +119,10 @@ async function main(): Promise<void> {
         "pick-keeper": { type: "string", description: "Keeper file for pick-variant" },
         "pick-variants": { type: "string", description: "Comma-separated variant paths for pick-variant" },
         "pick-sheet": { type: "string", description: "Optional contact-sheet path to also trash" },
+        "post-process": { type: "string", description: "Path to image to post-process" },
+        presets: { type: "string", description: "Comma-separated preset names" },
+        webp: { type: "boolean", default: false },
+        "webp-quality": { type: "string", description: "1..100, default 85" },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -228,6 +238,19 @@ async function main(): Promise<void> {
         },
         config,
       );
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values["post-process"]) {
+      const presets = (values.presets ?? "").split(",").map((s) => s.trim()).filter(Boolean) as PresetName[];
+      const quality = values["webp-quality"] ? Number(values["webp-quality"]) : undefined;
+      const result = await postProcess({
+        input: values["post-process"],
+        presets,
+        webp: values.webp,
+        webpQuality: quality,
+      });
       process.stdout.write(result.text + "\n");
       process.exit(0);
     }

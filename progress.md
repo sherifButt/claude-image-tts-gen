@@ -2,35 +2,17 @@
 
 ## To Do
 
-### Auto-play (opt-in)
-
-  - due: 2026-05-07
-  - tags: [tts, ux]
-  - priority: low
-  - workload: Easy
-  - defaultExpanded: true
-  - steps:
-      - [ ] `AUTOPLAY=true` triggers `afplay` on macOS after TTS gen
-      - [ ] Off by default; documented in README and CLAUDE.md
-
-### Image post-processing presets
-
-  - due: 2026-05-08
-  - tags: [image, post-process]
-  - priority: medium
-  - workload: Medium
-  - steps:
-      - [ ] Open Graph (1200×630), Twitter card (1200×675), favicon, app icon (1024×1024)
-      - [ ] webp conversion
-      - [ ] sharp dependency check; structured error if missing
-      - [ ] Exposed via `tools/post-process.ts` and chainable from `generate_image`
-
 ### Style & voice presets
 
   - due: 2026-05-09
   - tags: [presets, ux]
   - priority: medium
   - workload: Medium
+  - defaultExpanded: true
+  - steps:
+      - [ ] `AUTOPLAY=true` triggers `afplay` on macOS after TTS gen
+      - [ ] Off by default; documented in README and CLAUDE.md
+
   - steps:
       - [ ] `presets/styles.json` and `presets/voices.json`
       - [ ] `save_style_preset`, `save_voice_preset`, `list_presets` tools
@@ -114,6 +96,41 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Auto-play (opt-in)
+
+  - due: 2026-05-07
+  - tags: [tts, ux]
+  - priority: low
+  - workload: Easy
+  - steps:
+      - [x] `AUTOPLAY` env var added to `Config`; accepts `true | 1 | yes | on`; default `false`
+      - [x] `post/play.ts` — `autoPlay(filePath)` spawns `afplay` detached on macOS, no-op on other platforms, swallows errors
+      - [x] `generate_speech` calls `autoPlay(filePath)` after save when `config.autoplay`
+      - [x] Smoke tested: env-parser handles all four truthy strings + unset → false
+    ```md
+    macOS only in v1 — Linux/Windows would need their own player binaries
+    (paplay/aplay/PowerShell). Fire-and-forget; never blocks the response.
+    ```
+
+### Image post-processing presets
+
+  - due: 2026-05-08
+  - tags: [image, post-process]
+  - priority: medium
+  - workload: Medium
+  - steps:
+      - [x] `post/image-presets.ts` — 7 presets: og (1200×630), twitter (1200×675), favicon (32×32), app-icon (1024×1024), linkedin (1200×627), instagram-square (1080×1080), instagram-story (1080×1920)
+      - [x] `resizeToPreset` (sharp `cover/centre`), `convertToWebp` (default quality 85)
+      - [x] sharp loaded lazily; structured `CONFIG_ERROR` "install sharp" when missing
+      - [x] `tools/post-process.ts` — accepts `{input, presets[], webp?, webpQuality?}`; runs each preset + optional webp pair
+      - [x] MCP `post_process` tool + CLI `--post-process --presets a,b,c [--webp] [--webp-quality N]`
+      - [x] Smoke tested end-to-end on the teal-cube PNG: 6 outputs (3 presets × png+webp) — 879KB → 668KB (og), 1.5KB (favicon), 7-9KB (webp variants)
+    ```md
+    Each output is named `<input>.<preset>.<format>` so a single source PNG
+    can fan out to a deck of share-target sizes in one call. The webp flag
+    pairs each preset with its compressed counterpart.
+    ```
 
 ### TTS captions (SRT / VTT)
 

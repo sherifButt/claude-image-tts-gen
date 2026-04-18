@@ -7,6 +7,7 @@ export interface Config {
   imageOutputDir: string;
   audioOutputDir: string;
   logLevel: "error" | "warn" | "info" | "debug";
+  autoplay: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -26,6 +27,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",
     logLevel: validLog,
+    autoplay: ["true", "1", "yes", "on"].includes((env.AUTOPLAY ?? "").toLowerCase()),
   };
 }
 

@@ -25,10 +25,12 @@ import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech
 import { healthCheck } from "./tools/health-check.js";
 import { iterate, type IterateArgs } from "./tools/iterate.js";
 import { pickVariant, type PickVariantArgs } from "./tools/pick-variant.js";
+import { postProcess, type PostProcessArgs } from "./tools/post-process.js";
 import { regenerate, type RegenerateArgs } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget, type SetBudgetArgs } from "./tools/set-budget.js";
 import { variants, type VariantsArgs } from "./tools/variants.js";
+import { PRESETS } from "./post/image-presets.js";
 import { formatBudgetWarning } from "./state/budget.js";
 import { asStructuredError } from "./util/errors.js";
 
@@ -219,6 +221,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           jobId: { type: "string" },
           list: { type: "boolean" },
         },
+      },
+    },
+    {
+      name: "post_process",
+      description:
+        `Resize an image to one or more share-target presets and/or convert to webp. Presets: ${Object.keys(PRESETS).join(", ")}.`,
+      inputSchema: {
+        type: "object",
+        properties: {
+          input: { type: "string", description: "Path to source image" },
+          presets: {
+            type: "array",
+            items: { type: "string", enum: Object.keys(PRESETS) },
+          },
+          webp: { type: "boolean", description: "Also emit a .webp" },
+          webpQuality: { type: "number", minimum: 1, maximum: 100, description: "Default 85" },
+        },
+        required: ["input"],
       },
     },
     {
@@ -460,6 +480,14 @@ async function handleHealthCheck() {
   };
 }
 
+async function handlePostProcess(args: unknown) {
+  const result = await postProcess((args ?? {}) as PostProcessArgs);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
 async function handleIterate(args: unknown) {
   const result = await iterate((args ?? {}) as IterateArgs, config);
   const tool = "voiceUsed" in result ? "generate_speech" : "generate_image";
@@ -564,6 +592,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "health_check") {
       return await handleHealthCheck();
+    }
+    if (name === "post_process") {
+      return await handlePostProcess(request.params.arguments);
     }
     if (name === "iterate") {
       return await handleIterate(request.params.arguments);
