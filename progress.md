@@ -2,34 +2,6 @@
 
 ## To Do
 
-### Batch infrastructure (partial — Google image only)
-
-  - due: 2026-05-01
-  - tags: [batch, providers, async]
-  - priority: high
-  - workload: Hard
-  - defaultExpanded: true
-  - steps:
-      - [x] `batch/types.ts` — `BatchJob`, `BatchPrompt`, `BatchOutput`, `BatchStatus`
-      - [x] `batch/store.ts` — locked read/write of `~/.claude-image-tts-gen/batch/<jobId>.json`, `listJobs`, `updateJob`
-      - [x] `batch/provider.ts` — `BatchProvider` interface (`submit`, `poll`)
-      - [x] `batch/google.ts` — Gemini Image batch via `@google/genai` `batches.create`/`batches.get` (cast through unknown — SDK surface may evolve)
-      - [x] `batch/provider-registry.ts` — factory throwing `StructuredError(VALIDATION_ERROR)` for unimplemented combos with useful suggestedFix
-      - [x] `tools/batch-submit.ts` — pre-flight budget check at batch rate (50% off), persist job, submit
-      - [x] `tools/batch-status.ts` — poll, on completion: download outputs, save files, write sidecars + cache + ledger entries
-      - [x] MCP tools: `batch_submit`, `batch_status` (with optional `list:true`)
-      - [x] CLI flags: `--batch-submit <file>`, `--batch-status <jobId>`, `--batch-list`
-      - [x] Smoke tested: empty list works; unimplemented provider returns clean structured error
-      - [ ] Live Gemini Image batch test (deferred — costs real money + requires verifying SDK `batches.*` shape)
-      - [ ] OpenAI Image batch (deferred to follow-up — needs Files API JSONL upload flow)
-      - [ ] Gemini TTS batch (deferred — Gemini TTS sync impl not yet built)
-    ```md
-    Framework is in place; one provider (Google image) wired through.
-    OpenAI image batch needs Files API + JSONL — separate card. Gemini TTS
-    batch waits on Gemini TTS sync impl. The SDK shape for batches is cast
-    through unknown — will need verification on first live run.
-    ```
-
 ### Batch UX — elicitation & notifications
 
   - due: 2026-05-02
@@ -200,6 +172,35 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Batch infrastructure (Google image + OpenAI image; Gemini TTS deferred)
+
+  - due: 2026-05-01
+  - tags: [batch, providers, async]
+  - priority: high
+  - workload: Hard
+  - steps:
+      - [x] `batch/types.ts` — `BatchJob`, `BatchPrompt`, `BatchOutput`, `BatchStatus`
+      - [x] `batch/store.ts` — locked read/write of `~/.claude-image-tts-gen/batch/<jobId>.json`, `listJobs`, `updateJob`
+      - [x] `batch/provider.ts` — `BatchProvider` interface (`submit`, `poll`)
+      - [x] `batch/google.ts` — Gemini Image batch via `@google/genai` `batches.create`/`batches.get` (cast through unknown)
+      - [x] `batch/openai.ts` — OpenAI Image batch via Files API + `batches.create` JSONL flow + `output_file_id` download
+      - [x] `batch/provider-registry.ts` — factory with `StructuredError(VALIDATION_ERROR)` for unimplemented combos
+      - [x] `tools/batch-submit.ts` — pre-flight budget check at batch rate (50% off), persist job, submit
+      - [x] `tools/batch-status.ts` — poll, on completion: download outputs, save files, write sidecars + cache + ledger entries
+      - [x] MCP tools: `batch_submit`, `batch_status` (with optional `list:true`)
+      - [x] CLI flags: `--batch-submit <file>`, `--batch-status <jobId>`, `--batch-list`
+      - [x] `requireXxxKey` helpers refactored to throw `StructuredError("CONFIG_ERROR", ...)` with the right env-var fix
+      - [x] Smoke tested: empty list, unimplemented combo (openrouter), missing key (openai) all give clean structured errors
+      - [ ] Live Gemini Image batch test (deferred — costs real money + requires verifying SDK `batches.*` shape)
+      - [ ] Live OpenAI Image batch test (deferred — costs real money)
+      - [ ] Gemini TTS batch (deferred — Gemini TTS sync impl not yet built)
+    ```md
+    Framework + 2 of 3 declared batch providers wired. Gemini TTS batch
+    blocked on Gemini TTS sync impl (separate future card). SDK shape for
+    Gemini batches is cast through unknown — will need verification on
+    first live run.
+    ```
 
 ### Health check & structured errors
 

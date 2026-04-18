@@ -29,38 +29,32 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   };
 }
 
-export function requireGeminiKey(config: Config): string {
-  if (!config.geminiApiKey) {
-    throw new Error(
-      "GEMINI_API_KEY is required for the google provider. Set it in your environment or plugin config.",
+function requireKey(envName: string, providerLabel: string, value: string | undefined): string {
+  if (!value) {
+    // Imported lazily to avoid a circular import (errors.ts → util/output → config).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { StructuredError } = require("./util/errors.js") as typeof import("./util/errors.js");
+    throw new StructuredError(
+      "CONFIG_ERROR",
+      `${envName} is required for the ${providerLabel} provider`,
+      `Set ${envName}=... in your shell, or via the plugin's user_config.`,
     );
   }
-  return config.geminiApiKey;
+  return value;
+}
+
+export function requireGeminiKey(config: Config): string {
+  return requireKey("GEMINI_API_KEY", "google", config.geminiApiKey);
 }
 
 export function requireOpenAIKey(config: Config): string {
-  if (!config.openaiApiKey) {
-    throw new Error(
-      "OPENAI_API_KEY is required for the openai provider. Set it in your environment or plugin config.",
-    );
-  }
-  return config.openaiApiKey;
+  return requireKey("OPENAI_API_KEY", "openai", config.openaiApiKey);
 }
 
 export function requireOpenRouterKey(config: Config): string {
-  if (!config.openrouterApiKey) {
-    throw new Error(
-      "OPENROUTER_API_KEY is required for the openrouter provider. Set it in your environment or plugin config.",
-    );
-  }
-  return config.openrouterApiKey;
+  return requireKey("OPENROUTER_API_KEY", "openrouter", config.openrouterApiKey);
 }
 
 export function requireElevenLabsKey(config: Config): string {
-  if (!config.elevenlabsApiKey) {
-    throw new Error(
-      "ELEVENLABS_API_KEY is required for the elevenlabs provider. Set it in your environment or plugin config.",
-    );
-  }
-  return config.elevenlabsApiKey;
+  return requireKey("ELEVENLABS_API_KEY", "elevenlabs", config.elevenlabsApiKey);
 }
