@@ -8,9 +8,11 @@ import {
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
+import { healthCheck } from "./tools/health-check.js";
 import { regenerate } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
+import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
 const VERSION = "0.0.1";
@@ -78,6 +80,7 @@ async function main(): Promise<void> {
         "set-budget-daily": { type: "string" },
         "set-budget-weekly": { type: "string" },
         "set-budget-monthly": { type: "string" },
+        "health-check": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -133,6 +136,12 @@ async function main(): Promise<void> {
       });
       process.stdout.write(result.text + "\n");
       process.exit(0);
+    }
+
+    if (values["health-check"]) {
+      const result = await healthCheck(config);
+      process.stdout.write(result.text + "\n");
+      process.exit(result.ok ? 0 : 1);
     }
 
     if (
@@ -193,14 +202,8 @@ async function main(): Promise<void> {
 
     process.stdout.write(JSON.stringify(result) + "\n");
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    process.stdout.write(
-      JSON.stringify({
-        success: false,
-        errorCode: "CLI_ERROR",
-        error: message,
-      }) + "\n",
-    );
+    const structured = asStructuredError(err, "GENERATION_ERROR");
+    process.stdout.write(JSON.stringify(structured.toJSON()) + "\n");
     process.exit(1);
   }
 }

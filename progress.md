@@ -2,25 +2,13 @@
 
 ## To Do
 
-### Health check & structured errors
-
-  - due: 2026-04-27
-  - tags: [reliability, ux]
-  - priority: high
-  - workload: Medium
-  - defaultExpanded: true
-  - steps:
-      - [ ] `tools/health-check.ts` pings each configured provider, reports auth status
-      - [ ] Pricing staleness check
-      - [ ] Error envelope `{ code, message, suggestedFix }` across all tools
-      - [ ] Map common provider errors (auth, rate limit, content policy) to friendly fixes
-
 ### Batch infrastructure
 
   - due: 2026-05-01
   - tags: [batch, providers, async]
   - priority: high
   - workload: Hard
+  - defaultExpanded: true
   - steps:
       - [ ] Gemini Image batch: submit + poll
       - [ ] Gemini TTS batch: submit + poll
@@ -202,6 +190,30 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Health check & structured errors
+
+  - due: 2026-04-27
+  - tags: [reliability, ux]
+  - priority: high
+  - workload: Medium
+  - steps:
+      - [x] `util/errors.ts` — `StructuredError` class + `mapProviderError` heuristic mapper
+      - [x] Error codes: `AUTH_FAILED`, `RATE_LIMIT`, `CONTENT_POLICY`, `VALIDATION_ERROR`, `PROVIDER_ERROR`, `PROVIDER_TIMEOUT`, `BUDGET_EXCEEDED`, `CONFIG_ERROR`, `GENERATION_ERROR`, `NOT_FOUND`, `UNKNOWN`
+      - [x] Each error carries `code`, `message`, `suggestedFix`, optional `cause` (raw provider blob)
+      - [x] `tools/health-check.ts` pings Google `/models`, OpenAI `/models`, OpenRouter `/auth/key`, ElevenLabs `/user` with 8s timeout
+      - [x] Pricing staleness reported (last_updated, daysAgo, isStale, threshold)
+      - [x] Provider calls in gen tools wrapped with `mapProviderError`
+      - [x] Budget block raises `StructuredError("BUDGET_EXCEEDED", ...)`
+      - [x] `server.ts` and `cli.ts` error paths surface code + suggestedFix
+      - [x] CLI: `--health-check` (exit 1 if not all configured providers ok)
+      - [x] Smoke tested: empty config + fake keys (real 401s) + budget-block all give clean structured output
+    ```md
+    Heuristic mapper extracts HTTP status from message strings (regex /\b[45]\d\d\b/)
+    plus keyword matches for content policy / rate limit / auth / not found.
+    Health check uses Promise.all so 4 pings run in parallel; per-call 8s
+    timeout via AbortController.
+    ```
 
 ### Cost preview & budget enforcement
 

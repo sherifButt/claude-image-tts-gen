@@ -13,10 +13,12 @@ import {
 import { estimateCostDryRun, type EstimateCostArgs } from "./tools/estimate-cost.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech.js";
+import { healthCheck } from "./tools/health-check.js";
 import { regenerate, type RegenerateArgs } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget, type SetBudgetArgs } from "./tools/set-budget.js";
 import { formatBudgetWarning } from "./state/budget.js";
+import { asStructuredError } from "./util/errors.js";
 
 const VERSION = "0.0.1";
 const config = loadConfig();
@@ -133,6 +135,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "health_check",
+      description:
+        "Ping each configured provider to verify auth, report latency, and check pricing staleness.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    {
       name: "regenerate",
       description:
         "Re-run a prior generation from its sidecar (.regenerate.json). Pass the original output path or the sidecar path. Lineage is tracked.",
@@ -217,6 +225,14 @@ async function handleSetBudget(args: unknown) {
   };
 }
 
+async function handleHealthCheck() {
+  const result = await healthCheck(config);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
 async function handleRegenerate(args: unknown) {
   const result = await regenerate((args ?? {}) as RegenerateArgs, config);
   const tool = "voiceUsed" in result ? "generate_speech" : "generate_image";
@@ -276,6 +292,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "set_budget") {
       return await handleSetBudget(request.params.arguments);
     }
+    if (name === "health_check") {
+      return await handleHealthCheck();
+    }
     if (name === "regenerate") {
       return await handleRegenerate(request.params.arguments);
     }
@@ -284,15 +303,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [{ type: "text", text: `Unknown tool: ${name}` }],
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const structured = asStructuredError(
+      err,
+      name === "list_providers" ? "VALIDATION_ERROR" : "GENERATION_ERROR",
+    );
     return {
       isError: true,
-      structuredContent: {
-        success: false,
-        errorCode: name === "list_providers" ? "VALIDATION_ERROR" : "GENERATION_ERROR",
-        error: message,
-      },
-      content: [{ type: "text", text: `${name} failed: ${message}` }],
+      structuredContent: structured.toJSON(),
+      content: [
+        {
+          type: "text",
+          text: `${name} failed [${structured.code}]: ${structured.message}\nFix: ${structured.suggestedFix}`,
+        },
+      ],
     };
   }
 });

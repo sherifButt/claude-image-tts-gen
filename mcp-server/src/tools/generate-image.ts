@@ -22,6 +22,7 @@ import type {
   CallEntry,
   PeriodTotal,
 } from "../state/types.js";
+import { mapProviderError, StructuredError } from "../util/errors.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
 
 export interface GenerateImageArgs {
@@ -93,9 +94,11 @@ export async function generateImage(
     );
     const check = await checkBudget(projectedCost.total);
     if (check.block) {
-      const err = new Error(formatBudgetBlockError(check.block));
-      (err as Error & { code?: string }).code = "BUDGET_EXCEEDED";
-      throw err;
+      throw new StructuredError(
+        "BUDGET_EXCEEDED",
+        formatBudgetBlockError(check.block),
+        `Raise the cap with set_budget --daily ${(check.block.cap * 2).toFixed(2)}, switch to a cheaper tier, or wait for the period to reset.`,
+      );
     }
     budgetWarning = check.warning;
   }
@@ -116,11 +119,16 @@ export async function generateImage(
     await copyFromCache(cached, filePath);
   } else {
     const provider = createImageProvider(providerId, config);
-    const result = await provider.generateImage({
-      prompt: args.prompt,
-      model: slot.model,
-      params: slot.params,
-    });
+    let result;
+    try {
+      result = await provider.generateImage({
+        prompt: args.prompt,
+        model: slot.model,
+        params: slot.params,
+      });
+    } catch (err) {
+      throw mapProviderError(err, providerId);
+    }
     mimeType = result.mimeType;
     modelUsed = result.modelUsed;
     filePath = buildOutputPath({
