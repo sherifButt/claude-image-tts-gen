@@ -142,8 +142,30 @@ export AUDIO_OUTPUT_DIR=./generated-audio
 export STATE_DIR=~/.claude-image-tts-gen          # ledger + cache + presets + budget
 export REWRITE_PROMPTS=true                       # MCP-sampling prompt rewriter
 export AUTOPLAY=false                             # macOS afplay after TTS
+export EMIT_SIDECAR=false                         # skip .regenerate.json per output (see below)
 export LOG_LEVEL=info
 ```
+
+## Sidecars (`.regenerate.json`)
+
+Every generation writes a hidden sidecar file next to the output — e.g. for
+`docs/blog/hero.png`, the plugin writes `docs/blog/.hero.png.regenerate.json`.
+The sidecar captures the full recipe (prompt, provider, model, tier, aspect
+ratio, params, cost, lineage) so two tools work later:
+
+- **`regenerate <path>`** — re-run the exact same brief. Useful for a fresh
+  roll of the dice on a prompt you liked.
+- **`iterate <path> --adjustment "warmer lighting"`** — re-run with a tweak,
+  parent → child lineage tracked in the new sidecar.
+
+### How to deal with them
+
+- **Just use them.** The dotfile name keeps `ls` and most git UIs tidy.
+  `.gitignore` them with `.*.regenerate.json` if you don't want them in VCS.
+- **One-shot, don't want it:** pass `sidecar: false` (MCP) or `--no-sidecar` (CLI).
+- **Project never uses regenerate/iterate:** set `EMIT_SIDECAR=false`.
+- **Old-style sidecars** from v0.2 and earlier (`foo.png.regenerate.json`
+  without the leading dot) are still read as a fallback — no migration needed.
 
 ## Quickstart (CLI)
 

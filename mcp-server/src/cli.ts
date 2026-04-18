@@ -30,7 +30,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`
@@ -76,6 +76,7 @@ Options:
       --style <name>            Apply saved image style preset on generation
       --reference <path>        Reference image (image-to-image edit)
   -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
+      --no-sidecar              Skip the hidden .<name>.regenerate.json sidecar
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
       --save-style <name>       Save a style preset (use --provider/--tier/--prefix/--suffix)
       --save-voice <name>       Save a voice preset (use --provider/--tier/--voice)
@@ -158,6 +159,7 @@ async function main(): Promise<void> {
         style: { type: "string", description: "Apply saved style preset on image gen" },
         reference: { type: "string", description: "Reference image path (image-to-image)" },
         "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
+        "no-sidecar": { type: "boolean", default: false, description: "Skip writing the .regenerate.json sidecar" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
         "save-style": { type: "string", description: "Save image style preset (name); --provider/--tier/--prefix/--suffix" },
         "save-voice": { type: "string", description: "Save voice preset (name); --provider/--tier/--voice" },
@@ -430,6 +432,8 @@ async function main(): Promise<void> {
       throw new Error(`Invalid --captions: ${values.captions}`);
     }
 
+    const emitSidecar = values["no-sidecar"] ? false : undefined;
+    const outputDir = values["output-dir"];
     const result = values.speech
       ? await generateSpeech(
           {
@@ -441,6 +445,8 @@ async function main(): Promise<void> {
             captions,
             voicePreset: values["voice-preset"],
             outputPath: values.output,
+            outputDir,
+            sidecar: emitSidecar,
           },
           config,
         )
@@ -454,6 +460,8 @@ async function main(): Promise<void> {
             referenceImagePath: values.reference,
             aspectRatio: values["aspect-ratio"] as GenerateImageArgs["aspectRatio"],
             outputPath: values.output,
+            outputDir,
+            sidecar: emitSidecar,
           },
           config,
         );

@@ -32,12 +32,16 @@ export interface GenerateImageArgs {
   tier?: Tier;
   model?: string;
   outputPath?: string;
+  /** Directory for the auto-generated filename. Overrides config.imageOutputDir. */
+  outputDir?: string;
   /** Apply a saved style preset (provider/tier/model defaults + prompt prefix/suffix). */
   style?: string;
   /** Path to a reference image to use as input (image-to-image). */
   referenceImagePath?: string;
   /** Output aspect ratio. Defaults to 1:1 when omitted. */
   aspectRatio?: AspectRatio;
+  /** Write a .regenerate.json sidecar next to the output. Default true (or EMIT_SIDECAR env). */
+  sidecar?: boolean;
 }
 
 export interface GenerateImageOutput {
@@ -53,6 +57,7 @@ export interface GenerateImageOutput {
     allTime: PeriodTotal;
     currency: string;
   };
+  /** Sidecar file path, or empty string when sidecar writing is disabled. */
   sidecar: string;
   cached: boolean;
   budgetWarning: BudgetWarning | null;
@@ -192,7 +197,7 @@ export async function generateImage(
     filePath = buildOutputPath({
       prompt: resolvedPrompt,
       mimeType,
-      outputDir: config.imageOutputDir,
+      outputDir: args.outputDir ?? config.imageOutputDir,
       explicitPath: args.outputPath,
     });
     await copyFromCache(cached, filePath);
@@ -216,7 +221,7 @@ export async function generateImage(
     filePath = buildOutputPath({
       prompt: resolvedPrompt,
       mimeType,
-      outputDir: config.imageOutputDir,
+      outputDir: args.outputDir ?? config.imageOutputDir,
       explicitPath: args.outputPath,
     });
     await saveBinary(filePath, result.data);
@@ -248,7 +253,7 @@ export async function generateImage(
     filePath = buildOutputPath({
       prompt: resolvedPrompt,
       mimeType,
-      outputDir: config.imageOutputDir,
+      outputDir: args.outputDir ?? config.imageOutputDir,
       explicitPath: args.outputPath,
     });
     await saveBinary(filePath, fallbackResult.result.data);
@@ -319,26 +324,30 @@ export async function generateImage(
   const session = await appendCall(entry);
   const summary = summarize(session);
 
-  const lineage = await readLineageFromParent(opts.parentSidecar);
-  const sidecarPath = await writeSidecar(filePath, {
-    version: 1,
-    createdAt: entry.ts,
-    tool: "generate_image",
-    modality: "image",
-    provider: providerUsed,
-    model: modelUsed,
-    tier,
-    params: slot.params,
-    input: {
-      prompt: resolvedPrompt,
-      ...(args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}),
-      ...(aspectRatio ? { aspectRatio } : {}),
-    },
-    output: { files: [filePath], mimeType },
-    cost: { ...cost, total: chargedCost },
-    lineage,
-    cached: isCached,
-  });
+  const shouldEmitSidecar = args.sidecar ?? config.emitSidecar;
+  let sidecarPath = "";
+  if (shouldEmitSidecar) {
+    const lineage = await readLineageFromParent(opts.parentSidecar);
+    sidecarPath = await writeSidecar(filePath, {
+      version: 1,
+      createdAt: entry.ts,
+      tool: "generate_image",
+      modality: "image",
+      provider: providerUsed,
+      model: modelUsed,
+      tier,
+      params: slot.params,
+      input: {
+        prompt: resolvedPrompt,
+        ...(args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}),
+        ...(aspectRatio ? { aspectRatio } : {}),
+      },
+      output: { files: [filePath], mimeType },
+      cost: { ...cost, total: chargedCost },
+      lineage,
+      cached: isCached,
+    });
+  }
 
   return {
     success: true,

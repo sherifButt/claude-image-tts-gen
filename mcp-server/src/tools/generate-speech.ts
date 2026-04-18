@@ -36,10 +36,14 @@ export interface GenerateSpeechArgs {
   model?: string;
   voice?: string;
   outputPath?: string;
+  /** Directory for the auto-generated filename. Overrides config.audioOutputDir. */
+  outputDir?: string;
   /** "none" (default), "srt", "vtt", or "both". Requires a provider that returns word alignment. */
   captions?: CaptionsMode;
   /** Apply a saved voice preset (provider/tier/model/voice defaults). */
   voicePreset?: string;
+  /** Write a .regenerate.json sidecar next to the output. Default true (or EMIT_SIDECAR env). */
+  sidecar?: boolean;
 }
 
 export interface GenerateSpeechOutput {
@@ -189,7 +193,7 @@ export async function generateSpeech(
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config.audioOutputDir,
+      outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
     await copyFromCache(cached, filePath);
@@ -229,7 +233,7 @@ export async function generateSpeech(
     // Save each chunk file.
     const baseStem = `${timestamp()}-${slugify(args.text)}`;
     const ext = mimeType.split("/")[1] === "mpeg" ? "mp3" : mimeType.split("/")[1] ?? "bin";
-    const chunksDir = join(config.audioOutputDir, ".chunks");
+    const chunksDir = join(args.outputDir ?? config.audioOutputDir, ".chunks");
     await mkdir(chunksDir, { recursive: true });
     chunkFiles = [];
     for (let i = 0; i < chunkResults.length; i++) {
@@ -241,7 +245,7 @@ export async function generateSpeech(
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config.audioOutputDir,
+      outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
     await concatAudioFiles(chunkFiles, filePath);
@@ -269,7 +273,7 @@ export async function generateSpeech(
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config.audioOutputDir,
+      outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
     await saveBinary(filePath, result.data);
@@ -304,7 +308,7 @@ export async function generateSpeech(
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config.audioOutputDir,
+      outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
     await saveBinary(filePath, fallbackResult.result.data);
@@ -376,22 +380,26 @@ export async function generateSpeech(
   const session = await appendCall(entry);
   const summary = summarize(session);
 
-  const lineage = await readLineageFromParent(opts.parentSidecar);
-  const sidecarPath = await writeSidecar(filePath, {
-    version: 1,
-    createdAt: entry.ts,
-    tool: "generate_speech",
-    modality: "tts",
-    provider: providerUsed,
-    model: modelUsed,
-    tier,
-    params: slot.params,
-    input: { text: args.text, voice },
-    output: { files: [filePath], mimeType },
-    cost: { ...cost, total: chargedCost },
-    lineage,
-    cached: isCached,
-  });
+  const shouldEmitSidecar = args.sidecar ?? config.emitSidecar;
+  let sidecarPath = "";
+  if (shouldEmitSidecar) {
+    const lineage = await readLineageFromParent(opts.parentSidecar);
+    sidecarPath = await writeSidecar(filePath, {
+      version: 1,
+      createdAt: entry.ts,
+      tool: "generate_speech",
+      modality: "tts",
+      provider: providerUsed,
+      model: modelUsed,
+      tier,
+      params: slot.params,
+      input: { text: args.text, voice },
+      output: { files: [filePath], mimeType },
+      cost: { ...cost, total: chargedCost },
+      lineage,
+      cached: isCached,
+    });
+  }
 
   if (config.autoplay) {
     autoPlay(filePath);

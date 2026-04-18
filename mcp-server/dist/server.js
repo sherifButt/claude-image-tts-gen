@@ -48282,7 +48282,7 @@ var StdioServerTransport = class {
 // src/server.ts
 import { existsSync as existsSync9 } from "node:fs";
 import { readFile as readFile8 } from "node:fs/promises";
-import { basename as basename5 } from "node:path";
+import { basename as basename6 } from "node:path";
 
 // src/config.ts
 function loadConfig(env = process.env) {
@@ -48307,6 +48307,9 @@ function loadConfig(env = process.env) {
     // Default true per CLAUDE.md decision (opt-out via REWRITE_PROMPTS=false).
     rewritePrompts: !["false", "0", "no", "off"].includes(
       (env.REWRITE_PROMPTS ?? "true").toLowerCase()
+    ),
+    emitSidecar: !["false", "0", "no", "off"].includes(
+      (env.EMIT_SIDECAR ?? "true").toLowerCase()
     )
   };
 }
@@ -74616,8 +74619,8 @@ async function storeInCache(hash, sourceFilePath, meta) {
   await writeFile4(join3(dir, "meta.json"), JSON.stringify(full, null, 2) + "\n", "utf8");
 }
 async function copyFromCache(hit, destPath) {
-  const { dirname: dirname14 } = await import("node:path");
-  await mkdir3(dirname14(destPath), { recursive: true });
+  const { dirname: dirname16 } = await import("node:path");
+  await mkdir3(dirname16(destPath), { recursive: true });
   await copyFile(hit.filePath, destPath);
 }
 
@@ -74842,10 +74845,17 @@ function roundUsd2(n) {
 
 // src/sidecar/metadata.ts
 import { mkdir as mkdir4, readFile as readFile4, writeFile as writeFile5 } from "node:fs/promises";
-import { dirname as dirname3, isAbsolute, resolve } from "node:path";
+import { basename as basename4, dirname as dirname3, isAbsolute, join as join4, resolve } from "node:path";
 var SIDECAR_SUFFIX = ".regenerate.json";
 function sidecarPathFor(outputPath) {
-  if (outputPath.endsWith(SIDECAR_SUFFIX)) return outputPath;
+  if (isSidecarPath(outputPath)) return outputPath;
+  const dir = dirname3(outputPath);
+  const base = basename4(outputPath);
+  const dotted = base.startsWith(".") ? base : `.${base}`;
+  return join4(dir, `${dotted}${SIDECAR_SUFFIX}`);
+}
+function legacySidecarPathFor(outputPath) {
+  if (isSidecarPath(outputPath)) return outputPath;
   return `${outputPath}${SIDECAR_SUFFIX}`;
 }
 function isSidecarPath(p) {
@@ -74859,13 +74869,26 @@ async function writeSidecar(outputPath, metadata) {
   return abs;
 }
 async function readSidecar(path3) {
-  const sidecarPath = isSidecarPath(path3) ? path3 : sidecarPathFor(path3);
-  const raw = await readFile4(sidecarPath, "utf8");
+  if (isSidecarPath(path3)) return await readAndParse(path3);
+  const dotfile = sidecarPathFor(path3);
+  try {
+    return await readAndParse(dotfile);
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+    const legacy = legacySidecarPathFor(path3);
+    return await readAndParse(legacy);
+  }
+}
+async function readAndParse(path3) {
+  const raw = await readFile4(path3, "utf8");
   const parsed = JSON.parse(raw);
   if (parsed.version !== 1) {
     throw new Error(`Unsupported sidecar version: ${parsed.version}`);
   }
   return parsed;
+}
+function isEnoent(err) {
+  return typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT";
 }
 async function readLineageFromParent(parentPath) {
   if (!parentPath) return { parent: null, iteration: 0 };
@@ -74881,7 +74904,7 @@ init_errors();
 
 // src/util/output.ts
 import { mkdir as mkdir5, writeFile as writeFile6 } from "node:fs/promises";
-import { resolve as resolve2, join as join4, dirname as dirname4, isAbsolute as isAbsolute2 } from "node:path";
+import { resolve as resolve2, join as join5, dirname as dirname4, isAbsolute as isAbsolute2 } from "node:path";
 function slugify(input, maxLen = 40) {
   const cleaned = input.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, maxLen).replace(/-+$/g, "");
   return cleaned.length > 0 ? cleaned : "asset";
@@ -74905,7 +74928,7 @@ function buildOutputPath(opts) {
   const ext = extensionForMime(opts.mimeType);
   const filename = `${timestamp()}-${slugify(opts.prompt)}.${ext}`;
   const baseDir = isAbsolute2(opts.outputDir) ? opts.outputDir : resolve2(process.cwd(), opts.outputDir);
-  return join4(baseDir, filename);
+  return join5(baseDir, filename);
 }
 async function saveBinary(filePath, data) {
   await mkdir5(dirname4(filePath), { recursive: true });
@@ -75086,7 +75109,7 @@ function roundUsd3(n) {
 var import_proper_lockfile3 = __toESM(require_proper_lockfile(), 1);
 import { existsSync as existsSync4 } from "node:fs";
 import { mkdir as mkdir6, readFile as readFile5, writeFile as writeFile7 } from "node:fs/promises";
-import { dirname as dirname5, join as join5 } from "node:path";
+import { dirname as dirname5, join as join6 } from "node:path";
 
 // src/state/spend.ts
 var RECENT_LIMIT = 10;
@@ -75184,7 +75207,7 @@ var DEFAULT_BUDGET = {
   softThreshold: 0.8
 };
 function getBudgetPath() {
-  return join5(getStateDir(), "budget.json");
+  return join6(getStateDir(), "budget.json");
 }
 async function ensureBudgetFile(filePath) {
   if (existsSync4(filePath)) return;
@@ -75451,9 +75474,9 @@ import { existsSync as existsSync6 } from "node:fs";
 var import_proper_lockfile4 = __toESM(require_proper_lockfile(), 1);
 import { existsSync as existsSync5 } from "node:fs";
 import { mkdir as mkdir7, readFile as readFile6, writeFile as writeFile8 } from "node:fs/promises";
-import { dirname as dirname6, join as join6 } from "node:path";
+import { dirname as dirname6, join as join7 } from "node:path";
 function getPath(kind) {
-  return join6(getStateDir(), "presets", kind === "style" ? "styles.json" : "voices.json");
+  return join7(getStateDir(), "presets", kind === "style" ? "styles.json" : "voices.json");
 }
 async function ensureFile2(filePath) {
   if (existsSync5(filePath)) return;
@@ -75734,7 +75757,7 @@ async function generateImage(args, config3, opts = {}) {
     filePath = buildOutputPath({
       prompt: resolvedPrompt,
       mimeType,
-      outputDir: config3.imageOutputDir,
+      outputDir: args.outputDir ?? config3.imageOutputDir,
       explicitPath: args.outputPath
     });
     await copyFromCache(cached2, filePath);
@@ -75757,7 +75780,7 @@ async function generateImage(args, config3, opts = {}) {
     filePath = buildOutputPath({
       prompt: resolvedPrompt,
       mimeType,
-      outputDir: config3.imageOutputDir,
+      outputDir: args.outputDir ?? config3.imageOutputDir,
       explicitPath: args.outputPath
     });
     await saveBinary(filePath, result.data);
@@ -75789,7 +75812,7 @@ async function generateImage(args, config3, opts = {}) {
     filePath = buildOutputPath({
       prompt: resolvedPrompt,
       mimeType,
-      outputDir: config3.imageOutputDir,
+      outputDir: args.outputDir ?? config3.imageOutputDir,
       explicitPath: args.outputPath
     });
     await saveBinary(filePath, fallbackResult.result.data);
@@ -75854,26 +75877,30 @@ async function generateImage(args, config3, opts = {}) {
   };
   const session = await appendCall(entry);
   const summary = summarize(session);
-  const lineage = await readLineageFromParent(opts.parentSidecar);
-  const sidecarPath = await writeSidecar(filePath, {
-    version: 1,
-    createdAt: entry.ts,
-    tool: "generate_image",
-    modality: "image",
-    provider: providerUsed,
-    model: modelUsed,
-    tier,
-    params: slot.params,
-    input: {
-      prompt: resolvedPrompt,
-      ...args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {},
-      ...aspectRatio ? { aspectRatio } : {}
-    },
-    output: { files: [filePath], mimeType },
-    cost: { ...cost, total: chargedCost },
-    lineage,
-    cached: isCached
-  });
+  const shouldEmitSidecar = args.sidecar ?? config3.emitSidecar;
+  let sidecarPath = "";
+  if (shouldEmitSidecar) {
+    const lineage = await readLineageFromParent(opts.parentSidecar);
+    sidecarPath = await writeSidecar(filePath, {
+      version: 1,
+      createdAt: entry.ts,
+      tool: "generate_image",
+      modality: "image",
+      provider: providerUsed,
+      model: modelUsed,
+      tier,
+      params: slot.params,
+      input: {
+        prompt: resolvedPrompt,
+        ...args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {},
+        ...aspectRatio ? { aspectRatio } : {}
+      },
+      output: { files: [filePath], mimeType },
+      cost: { ...cost, total: chargedCost },
+      lineage,
+      cached: isCached
+    });
+  }
   return {
     success: true,
     files: [filePath],
@@ -75896,7 +75923,7 @@ async function generateImage(args, config3, opts = {}) {
 
 // src/tools/generate-speech.ts
 import { mkdir as mkdir10, writeFile as writeFile11 } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/chunker/tts.ts
 function chunkText(text, limit2) {
@@ -76052,7 +76079,7 @@ init_errors();
 import { spawn } from "node:child_process";
 import { mkdir as mkdir9, mkdtemp, rm, writeFile as writeFile10 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname as dirname8, join as join7 } from "node:path";
+import { dirname as dirname8, join as join8 } from "node:path";
 var cachedFfmpegAvailable = null;
 async function ffmpegAvailable() {
   if (cachedFfmpegAvailable !== null) return cachedFfmpegAvailable;
@@ -76084,8 +76111,8 @@ async function concatAudioFiles(inputs, outputPath) {
       "Install ffmpeg (macOS: `brew install ffmpeg`; Debian: `apt install ffmpeg`)."
     );
   }
-  const work = await mkdtemp(join7(tmpdir(), "cits-concat-"));
-  const listPath = join7(work, "list.txt");
+  const work = await mkdtemp(join8(tmpdir(), "cits-concat-"));
+  const listPath = join8(work, "list.txt");
   const listBody = inputs.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n") + "\n";
   await writeFile10(listPath, listBody, "utf8");
   await mkdir9(dirname8(outputPath), { recursive: true });
@@ -76218,7 +76245,7 @@ async function generateSpeech(args, config3, opts = {}) {
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config3.audioOutputDir,
+      outputDir: args.outputDir ?? config3.audioOutputDir,
       explicitPath: args.outputPath
     });
     await copyFromCache(cached2, filePath);
@@ -76252,18 +76279,18 @@ async function generateSpeech(args, config3, opts = {}) {
     modelUsed = first.result.modelUsed;
     const baseStem = `${timestamp()}-${slugify(args.text)}`;
     const ext = mimeType.split("/")[1] === "mpeg" ? "mp3" : mimeType.split("/")[1] ?? "bin";
-    const chunksDir = join8(config3.audioOutputDir, ".chunks");
+    const chunksDir = join9(args.outputDir ?? config3.audioOutputDir, ".chunks");
     await mkdir10(chunksDir, { recursive: true });
     chunkFiles = [];
     for (let i2 = 0; i2 < chunkResults.length; i2++) {
-      const chunkPath = join8(chunksDir, `${baseStem}-chunk-${i2 + 1}.${ext}`);
+      const chunkPath = join9(chunksDir, `${baseStem}-chunk-${i2 + 1}.${ext}`);
       await writeFile11(chunkPath, chunkResults[i2].result.data);
       chunkFiles.push(chunkPath);
     }
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config3.audioOutputDir,
+      outputDir: args.outputDir ?? config3.audioOutputDir,
       explicitPath: args.outputPath
     });
     await concatAudioFiles(chunkFiles, filePath);
@@ -76291,7 +76318,7 @@ async function generateSpeech(args, config3, opts = {}) {
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config3.audioOutputDir,
+      outputDir: args.outputDir ?? config3.audioOutputDir,
       explicitPath: args.outputPath
     });
     await saveBinary(filePath, result.data);
@@ -76326,7 +76353,7 @@ async function generateSpeech(args, config3, opts = {}) {
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
-      outputDir: config3.audioOutputDir,
+      outputDir: args.outputDir ?? config3.audioOutputDir,
       explicitPath: args.outputPath
     });
     await saveBinary(filePath, fallbackResult.result.data);
@@ -76392,22 +76419,26 @@ async function generateSpeech(args, config3, opts = {}) {
   };
   const session = await appendCall(entry);
   const summary = summarize(session);
-  const lineage = await readLineageFromParent(opts.parentSidecar);
-  const sidecarPath = await writeSidecar(filePath, {
-    version: 1,
-    createdAt: entry.ts,
-    tool: "generate_speech",
-    modality: "tts",
-    provider: providerUsed,
-    model: modelUsed,
-    tier,
-    params: slot.params,
-    input: { text: args.text, voice },
-    output: { files: [filePath], mimeType },
-    cost: { ...cost, total: chargedCost },
-    lineage,
-    cached: isCached
-  });
+  const shouldEmitSidecar = args.sidecar ?? config3.emitSidecar;
+  let sidecarPath = "";
+  if (shouldEmitSidecar) {
+    const lineage = await readLineageFromParent(opts.parentSidecar);
+    sidecarPath = await writeSidecar(filePath, {
+      version: 1,
+      createdAt: entry.ts,
+      tool: "generate_speech",
+      modality: "tts",
+      provider: providerUsed,
+      model: modelUsed,
+      tier,
+      params: slot.params,
+      input: { text: args.text, voice },
+      output: { files: [filePath], mimeType },
+      cost: { ...cost, total: chargedCost },
+      lineage,
+      cached: isCached
+    });
+  }
   if (config3.autoplay) {
     autoPlay(filePath);
   }
@@ -76855,6 +76886,7 @@ function renderText2(providers, pricing) {
 }
 
 // src/tools/iterate.ts
+import { dirname as dirname10 } from "node:path";
 init_errors();
 async function iterate(args, config3) {
   if (!args.path) {
@@ -76874,16 +76906,20 @@ async function iterate(args, config3) {
   const sidecarPath = sidecarPathFor(args.path);
   const meta = await readSidecar(sidecarPath);
   const mode = args.mode ?? "append";
+  const originalDir = resolveOriginalDir(args.path, meta);
   if (meta.tool === "generate_image") {
-    const original = meta.input.prompt;
-    const newPrompt = mode === "replace" ? args.adjustment : `${original}, ${args.adjustment}`;
+    const input = meta.input;
+    const newPrompt = mode === "replace" ? args.adjustment : `${input.prompt}, ${args.adjustment}`;
     return await generateImage(
       {
         prompt: newPrompt,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
-        outputPath: args.outputPath
+        aspectRatio: input.aspectRatio,
+        referenceImagePath: input.referenceImagePath,
+        outputPath: args.outputPath,
+        outputDir: args.outputPath ? void 0 : originalDir
       },
       config3,
       { parentSidecar: sidecarPath }
@@ -76899,7 +76935,8 @@ async function iterate(args, config3) {
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
-        outputPath: args.outputPath
+        outputPath: args.outputPath,
+        outputDir: args.outputPath ? void 0 : originalDir
       },
       config3,
       { parentSidecar: sidecarPath }
@@ -76911,17 +76948,24 @@ async function iterate(args, config3) {
     "Sidecar may be malformed. Re-generate from a known-good source."
   );
 }
+function resolveOriginalDir(inputPath, meta) {
+  if (!isSidecarPath(inputPath)) {
+    return dirname10(inputPath);
+  }
+  const first = meta.output.files[0];
+  return first ? dirname10(first) : void 0;
+}
 
 // src/tools/pick-variant.ts
 import { existsSync as existsSync7 } from "node:fs";
 import { mkdir as mkdir11, rename } from "node:fs/promises";
-import { basename as basename4, dirname as dirname10, join as join9 } from "node:path";
+import { basename as basename5, dirname as dirname11, join as join10 } from "node:path";
 init_errors();
 var TRASH_DIR_NAME = ".trash";
 async function moveToTrash(filePath, trashDir) {
   if (!existsSync7(filePath)) return filePath;
   await mkdir11(trashDir, { recursive: true });
-  const dest = join9(trashDir, basename4(filePath));
+  const dest = join10(trashDir, basename5(filePath));
   await rename(filePath, dest);
   return dest;
 }
@@ -76943,8 +76987,8 @@ async function pickVariant(args) {
       "Pass the keeper as one of the variant paths."
     );
   }
-  const baseDir = dirname10(args.keeper);
-  const trashDir = join9(baseDir, TRASH_DIR_NAME);
+  const baseDir = dirname11(args.keeper);
+  const trashDir = join10(baseDir, TRASH_DIR_NAME);
   const trashed = [];
   for (const variant of args.variants) {
     if (variant === args.keeper) continue;
@@ -76977,7 +77021,7 @@ import { existsSync as existsSync8 } from "node:fs";
 // src/post/image-presets.ts
 init_errors();
 import { mkdir as mkdir12 } from "node:fs/promises";
-import { dirname as dirname11 } from "node:path";
+import { dirname as dirname12 } from "node:path";
 var PRESETS = {
   og: { width: 1200, height: 630, description: "Open Graph card" },
   twitter: { width: 1200, height: 675, description: "Twitter / X large card" },
@@ -77009,12 +77053,12 @@ async function resizeToPreset(inputPath, preset, outputPath) {
     );
   }
   const sharp = await loadSharp();
-  await mkdir12(dirname11(outputPath), { recursive: true });
+  await mkdir12(dirname12(outputPath), { recursive: true });
   await sharp(inputPath).resize(spec.width, spec.height, { fit: "cover", position: "centre" }).toFile(outputPath);
 }
 async function convertToWebp(inputPath, outputPath, quality = 85) {
   const sharp = await loadSharp();
-  await mkdir12(dirname11(outputPath), { recursive: true });
+  await mkdir12(dirname12(outputPath), { recursive: true });
   await sharp(inputPath).webp({ quality }).toFile(outputPath);
 }
 function suggestOutputPath(inputPath, preset, format = "png") {
@@ -77165,12 +77209,14 @@ function renderText3(styles, voices) {
 }
 
 // src/tools/regenerate.ts
+import { dirname as dirname13 } from "node:path";
 async function regenerate(args, config3) {
   if (!args.path) {
     throw new Error("path is required (sidecar .regenerate.json or original output file)");
   }
   const sidecarPath = sidecarPathFor(args.path);
   const meta = await readSidecar(sidecarPath);
+  const originalDir = resolveOriginalDir2(args.path, meta);
   if (meta.tool === "generate_image") {
     const input = meta.input;
     return await generateImage(
@@ -77179,7 +77225,10 @@ async function regenerate(args, config3) {
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
-        outputPath: args.outputPath
+        aspectRatio: input.aspectRatio,
+        referenceImagePath: input.referenceImagePath,
+        outputPath: args.outputPath,
+        outputDir: args.outputPath ? void 0 : originalDir
       },
       config3,
       { parentSidecar: sidecarPath }
@@ -77194,13 +77243,21 @@ async function regenerate(args, config3) {
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
-        outputPath: args.outputPath
+        outputPath: args.outputPath,
+        outputDir: args.outputPath ? void 0 : originalDir
       },
       config3,
       { parentSidecar: sidecarPath }
     );
   }
   throw new Error(`Unknown tool in sidecar: ${meta.tool}`);
+}
+function resolveOriginalDir2(inputPath, meta) {
+  if (!isSidecarPath(inputPath)) {
+    return dirname13(inputPath);
+  }
+  const first = meta.output.files[0];
+  return first ? dirname13(first) : void 0;
 }
 
 // src/tools/session-spend.ts
@@ -77241,12 +77298,12 @@ async function setBudget(args) {
 }
 
 // src/tools/variants.ts
-import { dirname as dirname13, join as join10 } from "node:path";
+import { dirname as dirname15, join as join11 } from "node:path";
 
 // src/post/contact-sheet.ts
 init_errors();
 import { mkdir as mkdir13, writeFile as writeFile12 } from "node:fs/promises";
-import { dirname as dirname12 } from "node:path";
+import { dirname as dirname14 } from "node:path";
 async function composeContactSheet(inputPaths, outputPath, opts = {}) {
   if (inputPaths.length === 0) {
     throw new StructuredError(
@@ -77289,7 +77346,7 @@ async function composeContactSheet(inputPaths, outputPath, opts = {}) {
   const sheet = await sharp({
     create: { width, height, channels: 4, background }
   }).composite(composites).png().toBuffer();
-  await mkdir13(dirname12(outputPath), { recursive: true });
+  await mkdir13(dirname14(outputPath), { recursive: true });
   await writeFile12(outputPath, sheet);
 }
 
@@ -77323,8 +77380,8 @@ async function variants(args, config3) {
     )
   );
   const variantPaths = results.map((r2) => r2.files[0]);
-  const baseDir = dirname13(variantPaths[0]);
-  const sheetPath = join10(baseDir, `contact-sheet-${timestamp()}-${slugify(args.prompt)}.png`);
+  const baseDir = dirname15(variantPaths[0]);
+  const sheetPath = join11(baseDir, `contact-sheet-${timestamp()}-${slugify(args.prompt)}.png`);
   await composeContactSheet(variantPaths, sheetPath);
   const totalCost = results.reduce((sum, r2) => sum + r2.cost.total, 0);
   const currency = results[0]?.cost.currency ?? "USD";
@@ -77435,7 +77492,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   const recent = session.calls.slice(-RECENT_RESOURCE_LIMIT).reverse();
   const resources = recent.filter((c) => c.files.length > 0 && existsSync9(c.files[0])).map((c) => ({
     uri: `${RESOURCE_PREFIX}${encodeURIComponent(c.files[0])}`,
-    name: basename5(c.files[0]),
+    name: basename6(c.files[0]),
     description: `${c.tool} via ${c.provider}/${c.tier} on ${c.ts.slice(0, 19)}Z (USD ${c.cost.toFixed(4)})`,
     mimeType: fileExtToMime(c.files[0])
   }));
@@ -77486,6 +77543,14 @@ var imageInputSchema = {
       type: "string",
       enum: ["1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "21:9"],
       description: "Output aspect ratio. Defaults to 1:1 if omitted. OG / social-landscape \u2192 16:9 or 3:2; story/mobile portrait \u2192 9:16; Instagram square \u2192 1:1."
+    },
+    outputDir: {
+      type: "string",
+      description: "Directory for the auto-generated filename (ignored if outputPath is passed). Overrides the image output dir from env."
+    },
+    sidecar: {
+      type: "boolean",
+      description: "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true (enables regenerate/iterate). Set false for one-shot throwaway renders."
     }
   },
   required: ["prompt"]
@@ -77512,7 +77577,15 @@ var speechInputSchema = {
       enum: ["none", "srt", "vtt", "both"],
       description: "Write caption files alongside audio. Requires provider with word-level timestamps (ElevenLabs)."
     },
-    voicePreset: { type: "string", description: "Apply a saved voice preset by name." }
+    voicePreset: { type: "string", description: "Apply a saved voice preset by name." },
+    outputDir: {
+      type: "string",
+      description: "Directory for the auto-generated filename (ignored if outputPath is passed). Overrides the audio output dir from env."
+    },
+    sidecar: {
+      type: "boolean",
+      description: "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true. Set false for one-shot throwaway renders."
+    }
   },
   required: ["text"]
 };

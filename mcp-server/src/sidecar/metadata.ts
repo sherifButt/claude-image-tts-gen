@@ -1,11 +1,25 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { SidecarLineage, SidecarMetadata } from "./types.js";
 
 const SIDECAR_SUFFIX = ".regenerate.json";
 
+/**
+ * Current (dotfile) sidecar path: /dir/.foo.png.regenerate.json.
+ * Hidden from `ls`, Finder, and most git UIs by default.
+ */
 export function sidecarPathFor(outputPath: string): string {
-  if (outputPath.endsWith(SIDECAR_SUFFIX)) return outputPath;
+  if (isSidecarPath(outputPath)) return outputPath;
+  const dir = dirname(outputPath);
+  const base = basename(outputPath);
+  // Don't double-dot if caller already passed ".foo.png"
+  const dotted = base.startsWith(".") ? base : `.${base}`;
+  return join(dir, `${dotted}${SIDECAR_SUFFIX}`);
+}
+
+/** Legacy (pre-0.3.0) sidecar path — kept for read-fallback only. */
+export function legacySidecarPathFor(outputPath: string): string {
+  if (isSidecarPath(outputPath)) return outputPath;
   return `${outputPath}${SIDECAR_SUFFIX}`;
 }
 
@@ -25,13 +39,37 @@ export async function writeSidecar(
 }
 
 export async function readSidecar(path: string): Promise<SidecarMetadata> {
-  const sidecarPath = isSidecarPath(path) ? path : sidecarPathFor(path);
-  const raw = await readFile(sidecarPath, "utf8");
+  // Caller may pass the sidecar path directly (either dotfile or legacy).
+  if (isSidecarPath(path)) return await readAndParse(path);
+
+  // Try the current (dotfile) name first, fall back to the legacy name so
+  // files generated before 0.3.0 still work.
+  const dotfile = sidecarPathFor(path);
+  try {
+    return await readAndParse(dotfile);
+  } catch (err) {
+    if (!isEnoent(err)) throw err;
+    const legacy = legacySidecarPathFor(path);
+    return await readAndParse(legacy);
+  }
+}
+
+async function readAndParse(path: string): Promise<SidecarMetadata> {
+  const raw = await readFile(path, "utf8");
   const parsed = JSON.parse(raw) as SidecarMetadata;
   if (parsed.version !== 1) {
     throw new Error(`Unsupported sidecar version: ${parsed.version}`);
   }
   return parsed;
+}
+
+function isEnoent(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "ENOENT"
+  );
 }
 
 export async function readLineageFromParent(

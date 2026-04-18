@@ -1,7 +1,9 @@
+import { dirname } from "node:path";
 import type { Config } from "../config.js";
-import { readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
+import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
 import type {
   SidecarImageInput,
+  SidecarMetadata,
   SidecarSpeechInput,
 } from "../sidecar/types.js";
 import { StructuredError } from "../util/errors.js";
@@ -45,17 +47,21 @@ export async function iterate(
   const sidecarPath = sidecarPathFor(args.path);
   const meta = await readSidecar(sidecarPath);
   const mode = args.mode ?? "append";
+  const originalDir = resolveOriginalDir(args.path, meta);
 
   if (meta.tool === "generate_image") {
-    const original = (meta.input as SidecarImageInput).prompt;
-    const newPrompt = mode === "replace" ? args.adjustment : `${original}, ${args.adjustment}`;
+    const input = meta.input as SidecarImageInput;
+    const newPrompt = mode === "replace" ? args.adjustment : `${input.prompt}, ${args.adjustment}`;
     return await generateImage(
       {
         prompt: newPrompt,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
+        aspectRatio: input.aspectRatio,
+        referenceImagePath: input.referenceImagePath,
         outputPath: args.outputPath,
+        outputDir: args.outputPath ? undefined : originalDir,
       },
       config,
       { parentSidecar: sidecarPath },
@@ -73,6 +79,7 @@ export async function iterate(
         tier: meta.tier,
         model: meta.model,
         outputPath: args.outputPath,
+        outputDir: args.outputPath ? undefined : originalDir,
       },
       config,
       { parentSidecar: sidecarPath },
@@ -84,4 +91,15 @@ export async function iterate(
     `Unknown tool in sidecar: ${(meta as { tool: string }).tool}`,
     "Sidecar may be malformed. Re-generate from a known-good source.",
   );
+}
+
+function resolveOriginalDir(
+  inputPath: string,
+  meta: SidecarMetadata,
+): string | undefined {
+  if (!isSidecarPath(inputPath)) {
+    return dirname(inputPath);
+  }
+  const first = meta.output.files[0];
+  return first ? dirname(first) : undefined;
 }

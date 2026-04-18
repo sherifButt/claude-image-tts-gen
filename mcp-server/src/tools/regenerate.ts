@@ -1,7 +1,9 @@
+import { dirname } from "node:path";
 import type { Config } from "../config.js";
-import { readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
+import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
 import type {
   SidecarImageInput,
+  SidecarMetadata,
   SidecarSpeechInput,
 } from "../sidecar/types.js";
 import { generateImage, type GenerateImageOutput } from "./generate-image.js";
@@ -24,6 +26,7 @@ export async function regenerate(
 
   const sidecarPath = sidecarPathFor(args.path);
   const meta = await readSidecar(sidecarPath);
+  const originalDir = resolveOriginalDir(args.path, meta);
 
   if (meta.tool === "generate_image") {
     const input = meta.input as SidecarImageInput;
@@ -33,7 +36,10 @@ export async function regenerate(
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
+        aspectRatio: input.aspectRatio,
+        referenceImagePath: input.referenceImagePath,
         outputPath: args.outputPath,
+        outputDir: args.outputPath ? undefined : originalDir,
       },
       config,
       { parentSidecar: sidecarPath },
@@ -50,6 +56,7 @@ export async function regenerate(
         tier: meta.tier,
         model: meta.model,
         outputPath: args.outputPath,
+        outputDir: args.outputPath ? undefined : originalDir,
       },
       config,
       { parentSidecar: sidecarPath },
@@ -57,4 +64,21 @@ export async function regenerate(
   }
 
   throw new Error(`Unknown tool in sidecar: ${(meta as { tool: string }).tool}`);
+}
+
+/**
+ * Figure out the directory the original output lived in, so the re-roll
+ * lands next to it unless the caller passed an explicit outputPath. Falls
+ * back to the sidecar's recorded file if the caller passed only a sidecar
+ * path (no file).
+ */
+function resolveOriginalDir(
+  inputPath: string,
+  meta: SidecarMetadata,
+): string | undefined {
+  if (!isSidecarPath(inputPath)) {
+    return dirname(inputPath);
+  }
+  const first = meta.output.files[0];
+  return first ? dirname(first) : undefined;
 }

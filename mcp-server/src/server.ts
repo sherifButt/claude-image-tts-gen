@@ -140,6 +140,16 @@ const imageInputSchema = {
       description:
         "Output aspect ratio. Defaults to 1:1 if omitted. OG / social-landscape → 16:9 or 3:2; story/mobile portrait → 9:16; Instagram square → 1:1.",
     },
+    outputDir: {
+      type: "string",
+      description:
+        "Directory for the auto-generated filename (ignored if outputPath is passed). Overrides the image output dir from env.",
+    },
+    sidecar: {
+      type: "boolean",
+      description:
+        "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true (enables regenerate/iterate). Set false for one-shot throwaway renders.",
+    },
   },
   required: ["prompt"],
 } as const;
@@ -167,6 +177,16 @@ const speechInputSchema = {
       description: "Write caption files alongside audio. Requires provider with word-level timestamps (ElevenLabs).",
     },
     voicePreset: { type: "string", description: "Apply a saved voice preset by name." },
+    outputDir: {
+      type: "string",
+      description:
+        "Directory for the auto-generated filename (ignored if outputPath is passed). Overrides the audio output dir from env.",
+    },
+    sidecar: {
+      type: "boolean",
+      description:
+        "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true. Set false for one-shot throwaway renders.",
+    },
   },
   required: ["text"],
 } as const;

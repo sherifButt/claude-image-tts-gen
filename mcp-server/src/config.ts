@@ -13,6 +13,8 @@ export interface Config {
   logLevel: "error" | "warn" | "info" | "debug";
   autoplay: boolean;
   rewritePrompts: boolean;
+  /** Write .regenerate.json sidecars next to outputs. Default true. */
+  emitSidecar: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -41,6 +43,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // Default true per CLAUDE.md decision (opt-out via REWRITE_PROMPTS=false).
     rewritePrompts: !["false", "0", "no", "off"].includes(
       (env.REWRITE_PROMPTS ?? "true").toLowerCase(),
+    ),
+    emitSidecar: !["false", "0", "no", "off"].includes(
+      (env.EMIT_SIDECAR ?? "true").toLowerCase(),
     ),
   };
 }
