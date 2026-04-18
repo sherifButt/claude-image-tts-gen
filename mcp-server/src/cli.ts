@@ -85,8 +85,11 @@ Options:
 Environment:
   GEMINI_API_KEY           Required for google provider
   OPENAI_API_KEY           Required for openai provider
-  OPENROUTER_API_KEY       (not yet wired)
-  ELEVENLABS_API_KEY       (not yet wired)
+  OPENROUTER_API_KEY       Required for openrouter provider (image only)
+  ELEVENLABS_API_KEY       Required for elevenlabs provider (TTS only)
+  REWRITE_PROMPTS          true (default) | false  — opt out of MCP-sampling prompt rewrite
+  AUTOPLAY                 false (default) | true  — afplay TTS output (macOS)
+  STATE_DIR                ~/.claude-image-tts-gen (default)
 `);
 }
 
