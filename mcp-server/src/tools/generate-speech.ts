@@ -11,9 +11,17 @@ import {
 } from "../providers/registry.js";
 import type { ProviderId, Tier } from "../providers/types.js";
 import { readLineageFromParent, writeSidecar } from "../sidecar/metadata.js";
+import {
+  checkBudget,
+  formatBudgetBlockError,
+} from "../state/budget.js";
 import { appendCall } from "../state/store.js";
 import { summarize } from "../state/spend.js";
-import type { CallEntry, PeriodTotal } from "../state/types.js";
+import type {
+  BudgetWarning,
+  CallEntry,
+  PeriodTotal,
+} from "../state/types.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
 
 export interface GenerateSpeechArgs {
@@ -41,6 +49,7 @@ export interface GenerateSpeechOutput {
   };
   sidecar: string;
   cached: boolean;
+  budgetWarning: BudgetWarning | null;
 }
 
 export interface GenerateSpeechOpts {
@@ -94,6 +103,21 @@ export async function generateSpeech(
     params: slot.params,
   });
   const cached = await lookupCache(cacheKey);
+
+  let budgetWarning: BudgetWarning | null = null;
+  if (!cached) {
+    const projectedCost = estimateCost(
+      { provider: providerId, model: slot.model, modality: "tts", params: slot.params },
+      args.text.length,
+    );
+    const check = await checkBudget(projectedCost.total);
+    if (check.block) {
+      const err = new Error(formatBudgetBlockError(check.block));
+      (err as Error & { code?: string }).code = "BUDGET_EXCEEDED";
+      throw err;
+    }
+    budgetWarning = check.warning;
+  }
 
   let mimeType: string;
   let modelUsed: string;
@@ -197,5 +221,6 @@ export async function generateSpeech(
     },
     sidecar: sidecarPath,
     cached: isCached,
+    budgetWarning,
   };
 }

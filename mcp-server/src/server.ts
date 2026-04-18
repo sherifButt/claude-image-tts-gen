@@ -10,10 +10,13 @@ import {
   getDefaultTier,
   listDeclared,
 } from "./providers/registry.js";
+import { estimateCostDryRun, type EstimateCostArgs } from "./tools/estimate-cost.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech.js";
 import { regenerate, type RegenerateArgs } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
+import { setBudget, type SetBudgetArgs } from "./tools/set-budget.js";
+import { formatBudgetWarning } from "./state/budget.js";
 
 const VERSION = "0.0.1";
 const config = loadConfig();
@@ -99,6 +102,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
+      name: "estimate_cost",
+      description:
+        "Dry-run cost estimate across implemented providers and tiers for a given modality. Shows standard + batch prices and identifies the cheapest option.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          modality: { type: "string", enum: ["image", "tts"] },
+          count: { type: "number", description: "Number of images (default 1)" },
+          text: { type: "string", description: "TTS text — char count is used" },
+          chars: { type: "number", description: "Override TTS char count directly" },
+          provider: { type: "string", enum: ["google", "openai", "openrouter", "elevenlabs"] },
+          tier: { type: "string", enum: ["small", "mid", "pro"] },
+        },
+        required: ["modality"],
+      },
+    },
+    {
+      name: "set_budget",
+      description:
+        "Update spend caps. Pass null to clear a cap. softThreshold is 0..1 (default 0.8 = warn at 80%).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          daily: { type: ["number", "null"] },
+          weekly: { type: ["number", "null"] },
+          monthly: { type: ["number", "null"] },
+          softThreshold: { type: "number", minimum: 0, maximum: 1 },
+        },
+      },
+    },
+    {
       name: "regenerate",
       description:
         "Re-run a prior generation from its sidecar (.regenerate.json). Pass the original output path or the sidecar path. Lineage is tracked.",
@@ -122,50 +156,61 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 async function handleImageCall(args: unknown) {
   const result = await generateImage((args ?? {}) as GenerateImageArgs, config);
+  const lines = [
+    `Image generated.`,
+    `File: ${result.files[0]}`,
+    `Provider: ${result.providerUsed} (${result.tier} tier)`,
+    `Model: ${result.modelUsed}`,
+    `Cost: ${result.cost.currency} ${result.cost.total.toFixed(4)}` +
+      `${result.cached ? ` [cached, would have been ${result.cost.currency} ${result.cost.pricePerUnit.toFixed(4)}]` : result.cost.isBatchPrice ? " [batch]" : ""}`,
+    `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
+      `(${result.sessionTotal.today.callCount} calls)`,
+  ];
+  if (result.budgetWarning) lines.push(formatBudgetWarning(result.budgetWarning));
   return {
     structuredContent: result,
-    content: [
-      {
-        type: "text",
-        text:
-          `Image generated.\n` +
-          `File: ${result.files[0]}\n` +
-          `Provider: ${result.providerUsed} (${result.tier} tier)\n` +
-          `Model: ${result.modelUsed}\n` +
-          `Cost: ${result.cost.currency} ${result.cost.total.toFixed(4)}` +
-          `${result.cached ? ` [cached, would have been ${result.cost.currency} ${result.cost.pricePerUnit.toFixed(4)}]` : result.cost.isBatchPrice ? " [batch]" : ""}\n` +
-          `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
-          `(${result.sessionTotal.today.callCount} calls)`,
-      },
-    ],
+    content: [{ type: "text", text: lines.join("\n") }],
   };
 }
 
 async function handleSpeechCall(args: unknown) {
   const result = await generateSpeech((args ?? {}) as GenerateSpeechArgs, config);
+  const lines = [
+    `Speech generated.`,
+    `File: ${result.files[0]}`,
+    `Provider: ${result.providerUsed} (${result.tier} tier)`,
+    `Model: ${result.modelUsed}`,
+    `Voice: ${result.voiceUsed ?? "(default)"}`,
+    `Cost: ${result.cost.currency} ${result.cost.total.toFixed(4)} (${result.cost.units} chars)` +
+      `${result.cached ? " [cached]" : ""}`,
+    `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
+      `(${result.sessionTotal.today.callCount} calls)`,
+  ];
+  if (result.budgetWarning) lines.push(formatBudgetWarning(result.budgetWarning));
   return {
     structuredContent: result,
-    content: [
-      {
-        type: "text",
-        text:
-          `Speech generated.\n` +
-          `File: ${result.files[0]}\n` +
-          `Provider: ${result.providerUsed} (${result.tier} tier)\n` +
-          `Model: ${result.modelUsed}\n` +
-          `Voice: ${result.voiceUsed ?? "(default)"}\n` +
-          `Cost: ${result.cost.currency} ${result.cost.total.toFixed(4)} ` +
-          `(${result.cost.units} chars)` +
-          `${result.cached ? " [cached]" : ""}\n` +
-          `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
-          `(${result.sessionTotal.today.callCount} calls)`,
-      },
-    ],
+    content: [{ type: "text", text: lines.join("\n") }],
   };
 }
 
 async function handleSessionSpend() {
   const result = await sessionSpend();
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
+function handleEstimateCost(args: unknown) {
+  const result = estimateCostDryRun((args ?? {}) as EstimateCostArgs);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
+async function handleSetBudget(args: unknown) {
+  const result = await setBudget((args ?? {}) as SetBudgetArgs);
   return {
     structuredContent: result,
     content: [{ type: "text", text: result.text }],
@@ -224,6 +269,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "session_spend") {
       return await handleSessionSpend();
+    }
+    if (name === "estimate_cost") {
+      return handleEstimateCost(request.params.arguments);
+    }
+    if (name === "set_budget") {
+      return await handleSetBudget(request.params.arguments);
     }
     if (name === "regenerate") {
       return await handleRegenerate(request.params.arguments);

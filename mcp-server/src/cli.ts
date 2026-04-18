@@ -5,10 +5,12 @@ import {
   getDefaultTier,
   listDeclared,
 } from "./providers/registry.js";
+import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
 import { regenerate } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
+import { setBudget } from "./tools/set-budget.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
 const VERSION = "0.0.1";
@@ -33,6 +35,10 @@ Options:
       --list-providers <m> List declared providers for modality m (image|tts)
       --session-spend      Show running spend totals (today/week/month/all-time)
   -R, --regenerate <path>  Re-run a prior generation from its sidecar or output path
+      --estimate-cost      Dry-run cost estimate across implemented providers/tiers
+      --set-budget-daily <n>    Set daily cap (USD; "null" to clear)
+      --set-budget-weekly <n>   Set weekly cap
+      --set-budget-monthly <n>  Set monthly cap
   -h, --help               Show this help
 
 Environment:
@@ -68,6 +74,10 @@ async function main(): Promise<void> {
         "list-providers": { type: "string" },
         "session-spend": { type: "boolean", default: false },
         regenerate: { type: "string", short: "R" },
+        "estimate-cost": { type: "boolean", default: false },
+        "set-budget-daily": { type: "string" },
+        "set-budget-weekly": { type: "string" },
+        "set-budget-monthly": { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -110,6 +120,39 @@ async function main(): Promise<void> {
         config,
       );
       process.stdout.write(JSON.stringify(result) + "\n");
+      process.exit(0);
+    }
+
+    if (values["estimate-cost"]) {
+      const modality = values.speech ? "tts" : "image";
+      const result = estimateCostDryRun({
+        modality,
+        text: modality === "tts" ? values.prompt : undefined,
+        provider: values.provider as ProviderId | undefined,
+        tier: values.tier as Tier | undefined,
+      });
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (
+      values["set-budget-daily"] !== undefined ||
+      values["set-budget-weekly"] !== undefined ||
+      values["set-budget-monthly"] !== undefined
+    ) {
+      const parseCap = (v: string | undefined): number | null | undefined => {
+        if (v === undefined) return undefined;
+        if (v === "null" || v === "none" || v === "off") return null;
+        const n = Number(v);
+        if (Number.isNaN(n)) throw new Error(`Invalid budget value: ${v}`);
+        return n;
+      };
+      const result = await setBudget({
+        daily: parseCap(values["set-budget-daily"]),
+        weekly: parseCap(values["set-budget-weekly"]),
+        monthly: parseCap(values["set-budget-monthly"]),
+      });
+      process.stdout.write(result.text + "\n");
       process.exit(0);
     }
 

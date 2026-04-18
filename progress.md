@@ -2,26 +2,13 @@
 
 ## To Do
 
-### Cost preview & budget enforcement
-
-  - due: 2026-04-27
-  - tags: [cost, budget, ux]
-  - priority: high
-  - workload: Medium
-  - defaultExpanded: true
-  - steps:
-      - [ ] `tools/estimate-cost.ts` — dry-run pricing across (provider, tier, batch?) combos
-      - [ ] `tools/set-budget.ts` — daily / weekly / monthly caps
-      - [ ] Soft warn at 80% (returned in tool response, not blocking)
-      - [ ] Hard block at 100% (pre-call check; structured error with current spend)
-      - [ ] Default cap seeded to `$5/day` on first run
-
 ### Health check & structured errors
 
   - due: 2026-04-27
   - tags: [reliability, ux]
   - priority: high
   - workload: Medium
+  - defaultExpanded: true
   - steps:
       - [ ] `tools/health-check.ts` pings each configured provider, reports auth status
       - [ ] Pricing staleness check
@@ -215,6 +202,28 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Cost preview & budget enforcement
+
+  - due: 2026-04-27
+  - tags: [cost, budget, ux]
+  - priority: high
+  - workload: Medium
+  - steps:
+      - [x] `state/types.ts` — `Budget`, `BudgetWarning`, `BudgetBlock`, `BudgetPeriod`
+      - [x] `state/budget.ts` — read/write `~/.claude-image-tts-gen/budget.json` (lock-protected); `checkBudget(addCost)` returns block + warning
+      - [x] Default `$5/day` seeded on first read (matches CLAUDE.md decision)
+      - [x] `tools/estimate-cost.ts` — dry-run across implemented slots, sorted by cost, identifies cheapest standard + cheapest batch
+      - [x] `tools/set-budget.ts` — daily/weekly/monthly + softThreshold (0..1)
+      - [x] Pre-call hard block in `generate_image` and `generate_speech` (skipped when cached)
+      - [x] Soft warn at 80% returned in `result.budgetWarning` (non-blocking)
+      - [x] CLI: `--estimate-cost`, `--set-budget-daily/weekly/monthly` (`null` to clear)
+      - [x] Smoke tested: estimate sorts correctly; tiny cap blocks pre-call with clear message; clearing cap allows again
+    ```md
+    Budget enforcement is pre-call inside the tool — hooks would run too
+    late. Cached calls bypass the check (cost=0). Daily cap default is
+    $5; user can set/clear caps independently per period.
+    ```
 
 ### Hash-based cache
 

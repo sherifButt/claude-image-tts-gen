@@ -42,3 +42,27 @@ export interface SpendSummary {
   byTier: Record<string, PeriodTotal>;
   recentCalls: CallEntry[];
 }
+
+export type BudgetPeriod = "daily" | "weekly" | "monthly";
+
+export interface Budget {
+  daily: number | null;
+  weekly: number | null;
+  monthly: number | null;
+  currency: string;
+  softThreshold: number;
+}
+
+export interface BudgetWarning {
+  period: BudgetPeriod;
+  cap: number;
+  currentSpend: number;
+  projectedSpend: number;
+  pctUsed: number;
+  threshold: number;
+  currency: string;
+}
+
+export interface BudgetBlock extends BudgetWarning {
+  reason: "would_exceed_cap";
+}
