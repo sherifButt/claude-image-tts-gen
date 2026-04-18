@@ -2,7 +2,7 @@
 
 ## To Do
 
-### Batch infrastructure
+### Batch infrastructure (partial — Google image only)
 
   - due: 2026-05-01
   - tags: [batch, providers, async]
@@ -10,14 +10,24 @@
   - workload: Hard
   - defaultExpanded: true
   - steps:
-      - [ ] Gemini Image batch: submit + poll
-      - [ ] Gemini TTS batch: submit + poll
-      - [ ] OpenAI Image batch: submit + poll
-      - [ ] `batch/<job-id>.json` job state store with expected cost
-      - [ ] `tools/batch-submit.ts` and `tools/batch-status.ts`
+      - [x] `batch/types.ts` — `BatchJob`, `BatchPrompt`, `BatchOutput`, `BatchStatus`
+      - [x] `batch/store.ts` — locked read/write of `~/.claude-image-tts-gen/batch/<jobId>.json`, `listJobs`, `updateJob`
+      - [x] `batch/provider.ts` — `BatchProvider` interface (`submit`, `poll`)
+      - [x] `batch/google.ts` — Gemini Image batch via `@google/genai` `batches.create`/`batches.get` (cast through unknown — SDK surface may evolve)
+      - [x] `batch/provider-registry.ts` — factory throwing `StructuredError(VALIDATION_ERROR)` for unimplemented combos with useful suggestedFix
+      - [x] `tools/batch-submit.ts` — pre-flight budget check at batch rate (50% off), persist job, submit
+      - [x] `tools/batch-status.ts` — poll, on completion: download outputs, save files, write sidecars + cache + ledger entries
+      - [x] MCP tools: `batch_submit`, `batch_status` (with optional `list:true`)
+      - [x] CLI flags: `--batch-submit <file>`, `--batch-status <jobId>`, `--batch-list`
+      - [x] Smoke tested: empty list works; unimplemented provider returns clean structured error
+      - [ ] Live Gemini Image batch test (deferred — costs real money + requires verifying SDK `batches.*` shape)
+      - [ ] OpenAI Image batch (deferred to follow-up — needs Files API JSONL upload flow)
+      - [ ] Gemini TTS batch (deferred — Gemini TTS sync impl not yet built)
     ```md
-    Batch is async (≤24h SLA). Persist job ID + expected cost on submit.
-    Polling can run from the user's machine on demand or via background hook.
+    Framework is in place; one provider (Google image) wired through.
+    OpenAI image batch needs Files API + JSONL — separate card. Gemini TTS
+    batch waits on Gemini TTS sync impl. The SDK shape for batches is cast
+    through unknown — will need verification on first live run.
     ```
 
 ### Batch UX — elicitation & notifications

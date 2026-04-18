@@ -5,6 +5,8 @@ import {
   getDefaultTier,
   listDeclared,
 } from "./providers/registry.js";
+import { batchStatus } from "./tools/batch-status.js";
+import { batchSubmit } from "./tools/batch-submit.js";
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
@@ -41,6 +43,9 @@ Options:
       --set-budget-daily <n>    Set daily cap (USD; "null" to clear)
       --set-budget-weekly <n>   Set weekly cap
       --set-budget-monthly <n>  Set monthly cap
+      --batch-submit <file>     Submit batch from a JSON file: {modality, prompts, provider?, tier?}
+      --batch-status <jobId>    Poll a batch job
+      --batch-list              List all batch jobs
   -h, --help               Show this help
 
 Environment:
@@ -81,6 +86,9 @@ async function main(): Promise<void> {
         "set-budget-weekly": { type: "string" },
         "set-budget-monthly": { type: "string" },
         "health-check": { type: "boolean", default: false },
+        "batch-submit": { type: "string", description: "Path to JSON file with prompts array" },
+        "batch-status": { type: "string", description: "Job ID to poll" },
+        "batch-list": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -142,6 +150,33 @@ async function main(): Promise<void> {
       const result = await healthCheck(config);
       process.stdout.write(result.text + "\n");
       process.exit(result.ok ? 0 : 1);
+    }
+
+    if (values["batch-list"]) {
+      const result = await batchStatus({ list: true }, config);
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values["batch-status"]) {
+      const result = await batchStatus({ jobId: values["batch-status"] }, config);
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values["batch-submit"]) {
+      const { readFile } = await import("node:fs/promises");
+      const raw = await readFile(values["batch-submit"], "utf8");
+      const parsed = JSON.parse(raw) as {
+        modality: "image" | "tts";
+        prompts: Array<{ text: string; voice?: string }>;
+        provider?: ProviderId;
+        tier?: Tier;
+        model?: string;
+      };
+      const result = await batchSubmit(parsed, config);
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
     }
 
     if (

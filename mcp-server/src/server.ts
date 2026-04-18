@@ -10,6 +10,8 @@ import {
   getDefaultTier,
   listDeclared,
 } from "./providers/registry.js";
+import { batchStatus, type BatchStatusArgs } from "./tools/batch-status.js";
+import { batchSubmit, type BatchSubmitArgs } from "./tools/batch-submit.js";
 import { estimateCostDryRun, type EstimateCostArgs } from "./tools/estimate-cost.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech.js";
@@ -141,6 +143,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
+      name: "batch_submit",
+      description:
+        "Submit multiple prompts as a batch (50% off vs sync, ≤24h SLA). Currently implemented: google/image. Returns a jobId to poll with batch_status.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          modality: { type: "string", enum: ["image", "tts"] },
+          prompts: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                text: { type: "string" },
+                voice: { type: "string" },
+              },
+              required: ["text"],
+            },
+            minItems: 1,
+          },
+          provider: { type: "string", enum: ["google", "openai", "openrouter", "elevenlabs"] },
+          tier: { type: "string", enum: ["small", "mid", "pro"] },
+          model: { type: "string" },
+        },
+        required: ["modality", "prompts"],
+      },
+    },
+    {
+      name: "batch_status",
+      description:
+        "Poll a batch job by jobId, or list all jobs. On completion, downloads results, writes files + sidecars + ledger entries.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          jobId: { type: "string" },
+          list: { type: "boolean" },
+        },
+      },
+    },
+    {
       name: "regenerate",
       description:
         "Re-run a prior generation from its sidecar (.regenerate.json). Pass the original output path or the sidecar path. Lineage is tracked.",
@@ -225,6 +266,22 @@ async function handleSetBudget(args: unknown) {
   };
 }
 
+async function handleBatchSubmit(args: unknown) {
+  const result = await batchSubmit((args ?? {}) as BatchSubmitArgs, config);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
+async function handleBatchStatus(args: unknown) {
+  const result = await batchStatus((args ?? {}) as BatchStatusArgs, config);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
 async function handleHealthCheck() {
   const result = await healthCheck(config);
   return {
@@ -291,6 +348,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "set_budget") {
       return await handleSetBudget(request.params.arguments);
+    }
+    if (name === "batch_submit") {
+      return await handleBatchSubmit(request.params.arguments);
+    }
+    if (name === "batch_status") {
+      return await handleBatchStatus(request.params.arguments);
     }
     if (name === "health_check") {
       return await handleHealthCheck();
