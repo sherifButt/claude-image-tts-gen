@@ -1,0 +1,41 @@
+{
+  "name": "claude-image-tts-gen-mcp",
+  "version": "0.0.1",
+  "description": "MCP server for multi-provider image and TTS generation",
+  "type": "module",
+  "main": "dist/server.js",
+  "bin": {
+    "claude-image-tts-gen": "./dist/server.js",
+    "claude-image-tts-gen-cli": "./dist/cli.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build:server": "esbuild src/server.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/server.js --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "build:cli": "esbuild src/cli.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\nimport { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "build:refresh": "esbuild src/pricing/refresh.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/refresh.js --banner:js=\"#!/usr/bin/env node\nimport { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "build": "npm run typecheck && npm run build:server && npm run build:cli && npm run build:refresh",
+    "start": "node dist/server.js",
+    "start:cli": "node dist/cli.js --help",
+    "pricing:refresh": "node dist/refresh.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@google/genai": "^1.50.1",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "openai": "^6.34.0",
+    "proper-lockfile": "^4.1.2",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.27.2",
+    "typescript": "^5.4.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

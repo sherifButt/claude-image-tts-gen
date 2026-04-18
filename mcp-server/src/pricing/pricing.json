@@ -1,0 +1,122 @@
+{
+  "last_updated": "2026-04-18",
+  "currency": "USD",
+  "sources": [
+    "https://ai.google.dev/gemini-api/docs/pricing",
+    "https://openai.com/api/pricing/",
+    "https://platform.openai.com/docs/pricing",
+    "https://openrouter.ai/models",
+    "https://elevenlabs.io/pricing"
+  ],
+  "models": {
+    "google/gemini-2.5-flash-image": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.039,
+        "batch": 0.0195
+      },
+      "notes": "1290 output tokens per image at $30/1M output. Batch via batchGenerateContent (50% off)."
+    },
+    "google/imagen-4.0-generate-001": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.04
+      },
+      "notes": "Imagen 4 standard. No batch pricing."
+    },
+    "google/gemini-3-pro-image-preview": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.134,
+        "batch": 0.067
+      },
+      "notes": "Gemini 3 Pro Image Preview. Estimate per image; verify against current quote."
+    },
+    "openai/gpt-image-1:low": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.011,
+        "batch": 0.0055
+      },
+      "notes": "1024x1024 low quality."
+    },
+    "openai/gpt-image-1:medium": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.042,
+        "batch": 0.021
+      },
+      "notes": "1024x1024 medium quality."
+    },
+    "openai/gpt-image-1:high": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.167,
+        "batch": 0.0835
+      },
+      "notes": "1024x1024 high quality. Larger sizes (1024x1536, 1536x1024) cost ~$0.25."
+    },
+    "openai/tts-1": {
+      "modality": "tts",
+      "pricing": {
+        "type": "million_chars",
+        "standard": 15.0
+      },
+      "notes": "Standard TTS. Not on Batch API."
+    },
+    "openai/tts-1-hd": {
+      "modality": "tts",
+      "pricing": {
+        "type": "million_chars",
+        "standard": 30.0
+      },
+      "notes": "High-definition TTS. Not on Batch API."
+    },
+    "openai/gpt-4o-mini-tts": {
+      "modality": "tts",
+      "pricing": {
+        "type": "million_chars",
+        "standard": 12.0
+      },
+      "notes": "Approximate per-char rate; OpenAI also bills per-token internally. Not on Batch API."
+    },
+    "elevenlabs/eleven_turbo_v2_5": {
+      "modality": "tts",
+      "pricing": {
+        "type": "million_chars",
+        "standard": 100.0
+      },
+      "notes": "Pay-As-You-Go effective rate (~$0.10/1K chars). Plans differ — Creator/Pro/Scale."
+    },
+    "elevenlabs/eleven_multilingual_v2": {
+      "modality": "tts",
+      "pricing": {
+        "type": "million_chars",
+        "standard": 180.0
+      },
+      "notes": "Pay-As-You-Go effective rate (~$0.18/1K chars). Plans differ."
+    },
+    "openrouter/google/gemini-2.5-flash-image": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.039
+      },
+      "notes": "Passthrough to Google Gemini Flash Image. OpenRouter may apply small margin (~5%); verify your invoices."
+    },
+    "openrouter/google/gemini-3-pro-image-preview": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.134
+      },
+      "notes": "Passthrough to Gemini 3 Pro Image. OpenRouter may apply small margin."
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "claude-image-tts-gen-marketplace",
+  "owner": {
+    "name": "Sherif Butt"
+  },
+  "plugins": [
+    {
+      "name": "claude-image-tts-gen",
+      "source": "./",
+      "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
+      "version": "0.0.1",
+      "author": {
+        "name": "Sherif Butt"
+      }
+    }
+  ]
+}

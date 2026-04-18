@@ -1,0 +1,10 @@
+{
+  "name": "claude-image-tts-gen",
+  "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
+  "version": "0.0.1",
+  "author": {
+    "name": "Sherif Butt"
+  },
+  "repository": "https://github.com/sherifbutt/claude-image-tts-gen",
+  "license": "MIT"
+}

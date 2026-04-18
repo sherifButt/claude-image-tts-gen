@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "claude-image-tts-gen": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"],
+      "env": {
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "OUTPUT_DIR": "${OUTPUT_DIR:-./generated-images}",
+        "LOG_LEVEL": "${LOG_LEVEL:-info}"
+      }
+    }
+  }
+}

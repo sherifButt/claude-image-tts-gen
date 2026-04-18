@@ -1,0 +1,165 @@
+import { parseArgs } from "node:util";
+import { loadConfig } from "./config.js";
+import {
+  getDefaultProvider,
+  getDefaultTier,
+  listDeclared,
+} from "./providers/registry.js";
+import { generateImage } from "./tools/generate-image.js";
+import { generateSpeech } from "./tools/generate-speech.js";
+import { regenerate } from "./tools/regenerate.js";
+import { sessionSpend } from "./tools/session-spend.js";
+import type { Modality, ProviderId, Tier } from "./providers/types.js";
+
+const VERSION = "0.0.1";
+
+function printHelp(imageOutputDir: string, audioOutputDir: string): void {
+  process.stdout.write(`
+claude-image-tts-gen-cli v${VERSION}
+
+Usage:
+  cli [options]                            # generate image (default)
+  cli --speech -p "..." [options]          # generate TTS audio
+
+Options:
+  -p, --prompt <text>      Prompt (image) or text (speech). Required for generation.
+  -P, --provider <id>      Provider. Default image: ${getDefaultProvider("image")}, default tts: ${getDefaultProvider("tts")}.
+  -t, --tier <tier>        Quality/cost tier: small | mid | pro (default: ${getDefaultTier()})
+  -m, --model <model>      Explicit model override (skips registry)
+  -v, --voice <voice>      Voice ID for TTS (registry-validated)
+  -o, --output <path>      Output file path (auto-generated if omitted)
+  -d, --output-dir <dir>   Output directory (image: ${imageOutputDir}, audio: ${audioOutputDir})
+      --speech             Generate speech audio instead of an image
+      --list-providers <m> List declared providers for modality m (image|tts)
+      --session-spend      Show running spend totals (today/week/month/all-time)
+  -R, --regenerate <path>  Re-run a prior generation from its sidecar or output path
+  -h, --help               Show this help
+
+Environment:
+  GEMINI_API_KEY           Required for google provider
+  OPENAI_API_KEY           Required for openai provider
+  OPENROUTER_API_KEY       (not yet wired)
+  ELEVENLABS_API_KEY       (not yet wired)
+`);
+}
+
+function isProvider(s: string | undefined): s is ProviderId {
+  return s === "google" || s === "openai" || s === "openrouter" || s === "elevenlabs";
+}
+function isTier(s: string | undefined): s is Tier {
+  return s === "small" || s === "mid" || s === "pro";
+}
+function isModality(s: string | undefined): s is Modality {
+  return s === "image" || s === "tts";
+}
+
+async function main(): Promise<void> {
+  try {
+    const { values } = parseArgs({
+      options: {
+        prompt: { type: "string", short: "p" },
+        provider: { type: "string", short: "P" },
+        tier: { type: "string", short: "t" },
+        model: { type: "string", short: "m" },
+        voice: { type: "string", short: "v" },
+        output: { type: "string", short: "o" },
+        "output-dir": { type: "string", short: "d" },
+        speech: { type: "boolean", default: false },
+        "list-providers": { type: "string" },
+        "session-spend": { type: "boolean", default: false },
+        regenerate: { type: "string", short: "R" },
+        help: { type: "boolean", short: "h", default: false },
+      },
+      strict: true,
+    });
+
+    const config = loadConfig({
+      ...process.env,
+      ...(values["output-dir"] && values.speech
+        ? { AUDIO_OUTPUT_DIR: values["output-dir"] }
+        : {}),
+      ...(values["output-dir"] && !values.speech
+        ? { IMAGE_OUTPUT_DIR: values["output-dir"] }
+        : {}),
+    });
+
+    if (values.help) {
+      printHelp(config.imageOutputDir, config.audioOutputDir);
+      process.exit(0);
+    }
+
+    if (values["list-providers"] !== undefined) {
+      const modality = values["list-providers"];
+      if (!isModality(modality)) {
+        throw new Error(`--list-providers requires 'image' or 'tts', got: ${modality}`);
+      }
+      const entries = listDeclared(modality);
+      process.stdout.write(JSON.stringify({ modality, entries }, null, 2) + "\n");
+      process.exit(0);
+    }
+
+    if (values["session-spend"]) {
+      const result = await sessionSpend();
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values.regenerate) {
+      const result = await regenerate(
+        { path: values.regenerate, outputPath: values.output },
+        config,
+      );
+      process.stdout.write(JSON.stringify(result) + "\n");
+      process.exit(0);
+    }
+
+    if (!values.prompt) {
+      printHelp(config.imageOutputDir, config.audioOutputDir);
+      process.exit(1);
+    }
+
+    if (values.provider !== undefined && !isProvider(values.provider)) {
+      throw new Error(`Invalid --provider: ${values.provider}`);
+    }
+    if (values.tier !== undefined && !isTier(values.tier)) {
+      throw new Error(`Invalid --tier: ${values.tier}`);
+    }
+
+    const result = values.speech
+      ? await generateSpeech(
+          {
+            text: values.prompt,
+            provider: values.provider as ProviderId | undefined,
+            tier: values.tier as Tier | undefined,
+            model: values.model,
+            voice: values.voice,
+            outputPath: values.output,
+          },
+          config,
+        )
+      : await generateImage(
+          {
+            prompt: values.prompt,
+            provider: values.provider as ProviderId | undefined,
+            tier: values.tier as Tier | undefined,
+            model: values.model,
+            outputPath: values.output,
+          },
+          config,
+        );
+
+    process.stdout.write(JSON.stringify(result) + "\n");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(
+      JSON.stringify({
+        success: false,
+        errorCode: "CLI_ERROR",
+        error: message,
+      }) + "\n",
+    );
+    process.exit(1);
+  }
+}
+
+main();
