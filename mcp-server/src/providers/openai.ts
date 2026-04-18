@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import type {
   ImageGenRequest,
   ImageGenResult,
@@ -30,15 +30,36 @@ export class OpenAIProvider implements ImageProvider, TtsProvider {
     const quality = (params.quality as ImageQuality | undefined) ?? "auto";
     const size = (params.size as ImageSize | undefined) ?? "auto";
 
-    const response = await this.client.images.generate({
-      model: req.model,
-      prompt: req.prompt,
-      quality,
-      size,
-      n: 1,
-    });
+    let item;
+    if (req.referenceImage) {
+      const ext = (req.referenceImage.mimeType.split("/")[1] ?? "png").replace(
+        /[^a-z0-9]/gi,
+        "",
+      );
+      const filename = `reference.${ext === "jpeg" ? "png" : ext}`;
+      const file = await toFile(req.referenceImage.data, filename, {
+        type: req.referenceImage.mimeType,
+      });
+      const response = await this.client.images.edit({
+        model: req.model,
+        image: file,
+        prompt: req.prompt,
+        n: 1,
+        size,
+        quality,
+      });
+      item = response.data?.[0];
+    } else {
+      const response = await this.client.images.generate({
+        model: req.model,
+        prompt: req.prompt,
+        quality,
+        size,
+        n: 1,
+      });
+      item = response.data?.[0];
+    }
 
-    const item = response.data?.[0];
     if (!item?.b64_json) {
       throw new Error("OpenAI image API returned no b64_json data");
     }

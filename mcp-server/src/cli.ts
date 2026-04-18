@@ -72,6 +72,7 @@ Options:
       --webp                    Also emit .webp variants
       --webp-quality <n>        Default 85
       --style <name>            Apply saved image style preset on generation
+      --reference <path>        Reference image (image-to-image edit)
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
       --save-style <name>       Save a style preset (use --provider/--tier/--prefix/--suffix)
       --save-voice <name>       Save a voice preset (use --provider/--tier/--voice)
@@ -136,6 +137,7 @@ async function main(): Promise<void> {
         webp: { type: "boolean", default: false },
         "webp-quality": { type: "string", description: "1..100, default 85" },
         style: { type: "string", description: "Apply saved style preset on image gen" },
+        reference: { type: "string", description: "Reference image path (image-to-image)" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
         "save-style": { type: "string", description: "Save image style preset (name); --provider/--tier/--prefix/--suffix" },
         "save-voice": { type: "string", description: "Save voice preset (name); --provider/--tier/--voice" },
@@ -416,6 +418,7 @@ async function main(): Promise<void> {
             tier: values.tier as Tier | undefined,
             model: values.model,
             style: values.style,
+            referenceImagePath: values.reference,
             outputPath: values.output,
           },
           config,

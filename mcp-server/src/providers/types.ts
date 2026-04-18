@@ -2,10 +2,17 @@ export type ProviderId = "google" | "openai" | "openrouter" | "elevenlabs";
 export type Modality = "image" | "tts";
 export type Tier = "small" | "mid" | "pro";
 
+export interface ReferenceImage {
+  data: Buffer;
+  mimeType: string;
+  path?: string;
+}
+
 export interface ImageGenRequest {
   prompt: string;
   model: string;
   params?: Record<string, unknown>;
+  referenceImage?: ReferenceImage;
 }
 
 export interface ImageGenResult {

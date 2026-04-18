@@ -16,9 +16,26 @@ export class GoogleProvider implements ImageProvider {
   }
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
+    const contents = req.referenceImage
+      ? [
+          {
+            role: "user",
+            parts: [
+              {
+                inlineData: {
+                  mimeType: req.referenceImage.mimeType,
+                  data: req.referenceImage.data.toString("base64"),
+                },
+              },
+              { text: req.prompt },
+            ],
+          },
+        ]
+      : req.prompt;
+
     const response = await this.client.models.generateContent({
       model: req.model,
-      contents: req.prompt,
+      contents: contents as never,
     });
 
     const parts = response.candidates?.[0]?.content?.parts ?? [];

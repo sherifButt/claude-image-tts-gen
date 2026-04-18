@@ -16,7 +16,11 @@ import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
 import { summarize } from "../state/spend.js";
 import type { BudgetWarning, CallEntry, PeriodTotal } from "../state/types.js";
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { readStylePresets } from "../presets/store.js";
+import type { ReferenceImage } from "../providers/types.js";
+import { extensionForMime } from "../util/output.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
@@ -29,6 +33,8 @@ export interface GenerateImageArgs {
   outputPath?: string;
   /** Apply a saved style preset (provider/tier/model defaults + prompt prefix/suffix). */
   style?: string;
+  /** Path to a reference image to use as input (image-to-image). */
+  referenceImagePath?: string;
 }
 
 export interface GenerateImageOutput {
@@ -107,6 +113,26 @@ export async function generateImage(
   const tier = args.tier ?? presetTier ?? getDefaultTier();
   const explicitModel = args.model ?? presetModel;
 
+  // Load reference image if requested.
+  let referenceImage: ReferenceImage | undefined;
+  if (args.referenceImagePath) {
+    if (!existsSync(args.referenceImagePath)) {
+      throw new StructuredError(
+        "NOT_FOUND",
+        `Reference image not found: ${args.referenceImagePath}`,
+        "Pass an existing image file path.",
+      );
+    }
+    const data = await readFile(args.referenceImagePath);
+    const ext = args.referenceImagePath.toLowerCase().split(".").pop() ?? "png";
+    const mimeType =
+      ext === "jpg" || ext === "jpeg" ? "image/jpeg" :
+      ext === "webp" ? "image/webp" :
+      ext === "png" ? "image/png" :
+      "image/png";
+    referenceImage = { data, mimeType, path: args.referenceImagePath };
+  }
+
   let providerUsed: ProviderId = requestedProvider;
   let slot: ResolvedSlot = explicitModel
     ? inlineSlot(requestedProvider, tier, explicitModel)
@@ -117,7 +143,7 @@ export async function generateImage(
     model: slot.model,
     modality: "image",
     text: resolvedPrompt,
-    params: slot.params,
+    params: { ...slot.params, ...(referenceImage ? { ref: referenceImage.path ?? "buffer" } : {}) },
   });
   const cached = await lookupCache(cacheKey);
 
@@ -163,6 +189,7 @@ export async function generateImage(
         prompt: resolvedPrompt,
         model: slot.model,
         params: slot.params,
+        referenceImage,
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -192,6 +219,7 @@ export async function generateImage(
           prompt: resolvedPrompt,
           model: resolvedSlot.model,
           params: resolvedSlot.params,
+          referenceImage,
         });
       },
     });
@@ -283,7 +311,10 @@ export async function generateImage(
     model: modelUsed,
     tier,
     params: slot.params,
-    input: { prompt: resolvedPrompt },
+    input: {
+      prompt: resolvedPrompt,
+      ...(args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}),
+    },
     output: { files: [filePath], mimeType },
     cost: { ...cost, total: chargedCost },
     lineage,

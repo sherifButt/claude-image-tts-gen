@@ -8,6 +8,8 @@ export interface SidecarLineage {
 
 export interface SidecarImageInput {
   prompt: string;
+  /** Path to a reference image used as conditioning input (image-to-image). */
+  referenceImagePath?: string;
 }
 
 export interface SidecarSpeechInput {

@@ -69,6 +69,10 @@ const imageInputSchema = {
     model: { type: "string", description: "Optional explicit model override." },
     outputPath: { type: "string", description: "Optional explicit output path." },
     style: { type: "string", description: "Apply a saved style preset by name." },
+    referenceImagePath: {
+      type: "string",
+      description: "Path to a reference image (image-to-image). Supports gpt-image-1 (edits) and Gemini multimodal.",
+    },
   },
   required: ["prompt"],
 } as const;
