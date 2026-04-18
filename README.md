@@ -82,21 +82,41 @@ Inspired by [guinacio/claude-image-gen](https://github.com/guinacio/claude-image
 
 ## Installation
 
-```sh
-# Clone and build the MCP server
-git clone https://github.com/sherifbutt/claude-image-tts-gen.git
-cd claude-image-tts-gen/mcp-server
-npm install
-npm run build
+### Claude Code (recommended)
 
-# In another shell or your editor, install as a Claude Code plugin
-# (point the plugin command at the repo root; the .claude-plugin/plugin.json
-# and .mcp.json will be picked up automatically)
+Two commands inside a Claude Code session — no clone, no build:
+
 ```
+/plugin marketplace add sherifButt/claude-image-tts-gen
+/plugin install claude-image-tts-gen@claude-image-tts-gen-marketplace
+```
+
+Then set at least one provider key (see [Configuration](#configuration)) and start a new session. The plugin registers its slash commands (`/gen-image`, `/gen-speech`, …) and MCP tools automatically.
 
 System dependencies (optional but recommended):
 - **`ffmpeg`** — required for long-text TTS concat and audio post-processing. macOS: `brew install ffmpeg`.
-- **`sharp`** (auto-installed via npm) — required for variants contact sheet and image post-processing presets.
+- **`sharp`** — bundled with the MCP server via npm; no manual install needed.
+
+### Manual / development install
+
+If you want to hack on the MCP server, run the CLI standalone, or use this outside Claude Code:
+
+```sh
+git clone https://github.com/sherifButt/claude-image-tts-gen.git
+cd claude-image-tts-gen/mcp-server
+npm install
+npm run build      # bundles dist/server.js, dist/cli.js, dist/refresh.js
+```
+
+Wire the built server into Claude Code manually:
+
+```sh
+claude mcp add --transport stdio claude-image-tts-gen \
+  --env GEMINI_API_KEY=$GEMINI_API_KEY \
+  -- node /absolute/path/to/claude-image-tts-gen/mcp-server/dist/server.js
+```
+
+Or point any MCP-aware client at `dist/server.js` directly — the repo's `.mcp.json` shows the env it expects.
 
 ## Configuration
 

@@ -1,0 +1,50 @@
+name: dist sync check
+
+on:
+  pull_request:
+    paths:
+      - "mcp-server/src/**"
+      - "mcp-server/package.json"
+      - "mcp-server/package-lock.json"
+      - "mcp-server/tsconfig.json"
+      - "mcp-server/dist/**"
+      - ".github/workflows/dist-check.yml"
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mcp-server
+        run: npm run typecheck
+
+      - name: Rebuild dist
+        working-directory: mcp-server
+        run: |
+          rm -rf dist
+          npm run build:server
+          npm run build:cli
+          npm run build:refresh
+
+      - name: Fail if committed dist/ differs from rebuild
+        run: |
+          if ! git diff --quiet --exit-code -- mcp-server/dist; then
+            echo "::error::mcp-server/dist is out of sync with src/. Run 'npm run build' in mcp-server/ and commit the result."
+            git --no-pager diff --stat -- mcp-server/dist
+            exit 1
+          fi
+          echo "dist/ is in sync with src/."
