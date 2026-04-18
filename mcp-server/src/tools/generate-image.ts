@@ -1,7 +1,7 @@
 import { buildCacheKey } from "../cache/key.js";
 import { copyFromCache, lookupCache, storeInCache } from "../cache/store.js";
 import type { Config } from "../config.js";
-import { estimateCost } from "../pricing/load.js";
+import { estimateCost, tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
 import type { CostEstimate } from "../pricing/types.js";
 import {
   createImageProvider,
@@ -97,10 +97,11 @@ export async function generateImage(
 
   let budgetWarning: BudgetWarning | null = null;
   if (!cached) {
-    const projectedCost = estimateCost(
-      { provider: requestedProvider, model: slot.model, modality: "image", params: slot.params },
-      1,
-    );
+    const projectedCost =
+      tryEstimateCost(
+        { provider: requestedProvider, model: slot.model, modality: "image", params: slot.params },
+        1,
+      ) ?? { total: 0 };
     const check = await checkBudget(projectedCost.total);
     if (check.block) {
       throw new StructuredError(
@@ -216,10 +217,14 @@ export async function generateImage(
     }
   }
 
-  const cost = estimateCost(
-    { provider: providerUsed, model: modelUsed, modality: "image", params: slot.params },
-    1,
-  );
+  const costQuery = {
+    provider: providerUsed,
+    model: modelUsed,
+    modality: "image" as const,
+    params: slot.params,
+  };
+  const cost =
+    tryEstimateCost(costQuery, 1) ?? unknownCostEstimate(costQuery, 1);
 
   const isCached = cached !== null;
   const chargedCost = isCached ? 0 : cost.total;

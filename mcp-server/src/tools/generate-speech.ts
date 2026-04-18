@@ -1,7 +1,7 @@
 import { buildCacheKey } from "../cache/key.js";
 import { copyFromCache, lookupCache, storeInCache } from "../cache/store.js";
 import type { Config } from "../config.js";
-import { estimateCost } from "../pricing/load.js";
+import { estimateCost, tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
 import type { CostEstimate } from "../pricing/types.js";
 import {
   createTtsProvider,
@@ -114,10 +114,11 @@ export async function generateSpeech(
 
   let budgetWarning: BudgetWarning | null = null;
   if (!cached) {
-    const projectedCost = estimateCost(
-      { provider: requestedProvider, model: slot.model, modality: "tts", params: slot.params },
-      args.text.length,
-    );
+    const projectedCost =
+      tryEstimateCost(
+        { provider: requestedProvider, model: slot.model, modality: "tts", params: slot.params },
+        args.text.length,
+      ) ?? { total: 0 };
     const check = await checkBudget(projectedCost.total);
     if (check.block) {
       throw new StructuredError(
@@ -237,10 +238,14 @@ export async function generateSpeech(
   }
 
   const charCount = args.text.length;
-  const cost = estimateCost(
-    { provider: providerUsed, model: modelUsed, modality: "tts", params: slot.params },
-    charCount,
-  );
+  const costQuery = {
+    provider: providerUsed,
+    model: modelUsed,
+    modality: "tts" as const,
+    params: slot.params,
+  };
+  const cost =
+    tryEstimateCost(costQuery, charCount) ?? unknownCostEstimate(costQuery, charCount);
 
   const isCached = cached !== null;
   const chargedCost = isCached ? 0 : cost.total;

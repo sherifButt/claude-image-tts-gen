@@ -63,6 +63,32 @@ export function resolvePrice(
   };
 }
 
+/** Like estimateCost but returns null on missing pricing entries instead of throwing. */
+export function tryEstimateCost(
+  query: PriceQuery,
+  units: number,
+  opts: { useBatch?: boolean } = {},
+): CostEstimate | null {
+  try {
+    return estimateCost(query, units, opts);
+  } catch {
+    return null;
+  }
+}
+
+/** Synthesises a cost estimate when pricing is unknown (e.g. explicit --model override). */
+export function unknownCostEstimate(query: PriceQuery, units: number): CostEstimate {
+  return {
+    total: 0,
+    currency: TABLE.currency,
+    unit: query.modality === "image" ? "image" : "million_chars",
+    units,
+    pricePerUnit: 0,
+    isBatchPrice: false,
+    modelKey: makePriceKey(query.provider, query.model, query.params) + " (unknown pricing)",
+  };
+}
+
 export function estimateCost(
   query: PriceQuery,
   units: number,
