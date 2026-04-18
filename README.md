@@ -200,9 +200,12 @@ node mcp-server/dist/cli.js -p "a teal cube" \
 
 ## Status
 
-v1.0 — see commit log for the full feature timeline. Known deferred items:
-- **Google TTS sync** — declared in registry, not yet wired (only batch).
-- **Gemini TTS batch** — depends on Gemini TTS sync above.
+v0.4.0 — see commit log for the full feature timeline. Implemented since v0.2:
+- **Google image pro** (Imagen 4) — photoreal landscape/portrait without needing OPENAI_API_KEY.
+- **Google TTS sync** (Gemini 2.5 Flash TTS / Pro TTS) — 30 prebuilt voices, default `Kore`. Returns `.wav`.
+
+Known deferred items:
+- **Gemini TTS batch** — sync implementation shipped in 0.4.0; batch uses the same SDK shape and will follow.
 - **Multi-chunk TTS captions** — single-chunk only in v1 (offset math deferred).
 - **Quality fallback** for low-tier text rendering — postponed (needs OCR heuristic).
 

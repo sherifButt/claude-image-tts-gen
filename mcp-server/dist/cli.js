@@ -48574,12 +48574,91 @@ var LABELS = {
 function describeAspect(aspect) {
   return `${aspect} (${LABELS[aspect]})`;
 }
+function aspectToImagen(aspect) {
+  switch (aspect) {
+    case "1:1":
+      return "1:1";
+    case "3:4":
+    case "2:3":
+      return "3:4";
+    case "4:3":
+    case "3:2":
+      return "4:3";
+    case "9:16":
+      return "9:16";
+    case "16:9":
+    case "21:9":
+      return "16:9";
+  }
+}
 function injectAspectIntoPrompt(prompt, aspect) {
   if (prompt.includes(aspect)) return prompt;
   return `Aspect ratio: ${describeAspect(aspect)}. ${prompt}`;
 }
 
+// src/util/wav.ts
+function pcmToWav(pcm, opts) {
+  const channels = opts.channels ?? 1;
+  const bitsPerSample = opts.bitsPerSample ?? 16;
+  const byteRate = opts.sampleRate * channels * bitsPerSample / 8;
+  const blockAlign = channels * bitsPerSample / 8;
+  const dataSize = pcm.length;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(opts.sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+  return Buffer.concat([header, pcm]);
+}
+function parseSampleRate(mimeType, fallback = 24e3) {
+  if (!mimeType) return fallback;
+  const m2 = mimeType.match(/rate=(\d+)/);
+  return m2 ? Number(m2[1]) : fallback;
+}
+
 // src/providers/google.ts
+var GEMINI_TTS_VOICES = [
+  "Zephyr",
+  "Puck",
+  "Charon",
+  "Kore",
+  "Fenrir",
+  "Leda",
+  "Orus",
+  "Aoede",
+  "Callirrhoe",
+  "Autonoe",
+  "Enceladus",
+  "Iapetus",
+  "Umbriel",
+  "Algieba",
+  "Despina",
+  "Erinome",
+  "Algenib",
+  "Rasalgethi",
+  "Laomedeia",
+  "Achernar",
+  "Alnilam",
+  "Schedar",
+  "Gacrux",
+  "Pulcherrima",
+  "Achird",
+  "Zubenelgenubi",
+  "Vindemiatrix",
+  "Sadachbia",
+  "Sadaltager",
+  "Sulafat"
+];
+var GEMINI_DEFAULT_VOICE = "Kore";
 var GoogleProvider = class {
   id = "google";
   client;
@@ -48587,6 +48666,40 @@ var GoogleProvider = class {
     this.client = new GoogleGenAI({ apiKey: opts.apiKey });
   }
   async generateImage(req) {
+    if (isImagenModel(req.model)) {
+      return await this.generateImageViaImagen(req);
+    }
+    return await this.generateImageViaGemini(req);
+  }
+  async generateImageViaImagen(req) {
+    if (req.referenceImage) {
+      throw new Error(
+        "Imagen 4 does not accept reference images for generation. Use gemini-2.5-flash-image for image-to-image, or call images.edit separately."
+      );
+    }
+    const response = await this.client.models.generateImages({
+      model: req.model,
+      prompt: req.prompt,
+      config: {
+        numberOfImages: 1,
+        ...req.aspectRatio ? { aspectRatio: aspectToImagen(req.aspectRatio) } : {}
+      }
+    });
+    const first = response.generatedImages?.[0]?.image;
+    if (!first?.imageBytes) {
+      const filtered = response.generatedImages?.[0]?.raiFilteredReason;
+      throw new Error(
+        filtered ? `Imagen filtered the output: ${filtered}` : "Imagen returned no image data"
+      );
+    }
+    return {
+      mimeType: first.mimeType ?? "image/png",
+      data: Buffer.from(first.imageBytes, "base64"),
+      modelUsed: req.model,
+      providerUsed: this.id
+    };
+  }
+  async generateImageViaGemini(req) {
     const effectivePrompt = req.aspectRatio ? injectAspectIntoPrompt(req.prompt, req.aspectRatio) : req.prompt;
     const contents = req.referenceImage ? [
       {
@@ -48624,7 +48737,43 @@ var GoogleProvider = class {
     const reason = textParts.length > 0 ? textParts.join(" ") : "no image in response";
     throw new Error(`Gemini returned no image data (${reason})`);
   }
+  async generateSpeech(req) {
+    const voice = req.voice ?? GEMINI_DEFAULT_VOICE;
+    const response = await this.client.models.generateContent({
+      model: req.model,
+      contents: req.text,
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voice }
+          }
+        }
+      }
+    });
+    const parts = response.candidates?.[0]?.content?.parts ?? [];
+    for (const part of parts) {
+      const inline = part.inlineData;
+      if (inline?.data && inline.mimeType?.startsWith("audio/")) {
+        const pcm = Buffer.from(inline.data, "base64");
+        const sampleRate = parseSampleRate(inline.mimeType);
+        const wav = pcmToWav(pcm, { sampleRate });
+        return {
+          mimeType: "audio/wav",
+          data: wav,
+          modelUsed: req.model,
+          providerUsed: this.id
+        };
+      }
+    }
+    const textParts = parts.map((p) => p.text).filter((t2) => typeof t2 === "string");
+    const reason = textParts.length > 0 ? textParts.join(" ") : "no audio in response";
+    throw new Error(`Gemini TTS returned no audio data (${reason})`);
+  }
 };
+function isImagenModel(model) {
+  return model.toLowerCase().startsWith("imagen");
+}
 
 // node_modules/openai/internal/tslib.mjs
 function __classPrivateFieldSet(receiver, state, value, kind, f3) {
@@ -56063,12 +56212,27 @@ var MATRIX = [
     image: {
       small: { model: "gemini-2.5-flash-image", batchable: true, implemented: true },
       mid: NA,
-      pro: { model: "imagen-4.0-generate-001", batchable: false, implemented: false }
+      pro: { model: "imagen-4.0-generate-001", batchable: false, implemented: true }
     },
     tts: {
-      small: { model: "gemini-2.5-flash-preview-tts", batchable: true, implemented: false },
+      small: {
+        model: "gemini-2.5-flash-preview-tts",
+        batchable: true,
+        implemented: true,
+        voices: GEMINI_TTS_VOICES,
+        defaultVoice: GEMINI_DEFAULT_VOICE,
+        // Gemini TTS accepts prompts up to ~8k tokens; chunk well under that in chars.
+        maxCharsPerCall: 4e3
+      },
       mid: NA,
-      pro: { model: "gemini-2.5-pro-preview-tts", batchable: true, implemented: false }
+      pro: {
+        model: "gemini-2.5-pro-preview-tts",
+        batchable: true,
+        implemented: true,
+        voices: GEMINI_TTS_VOICES,
+        defaultVoice: GEMINI_DEFAULT_VOICE,
+        maxCharsPerCall: 4e3
+      }
     }
   },
   {
@@ -56288,14 +56452,14 @@ function createImageProvider(id, config) {
 }
 function createTtsProvider(id, config) {
   switch (id) {
+    case "google":
+      return new GoogleProvider({ apiKey: requireGeminiKey(config) });
     case "openai":
       return new OpenAIProvider({ apiKey: requireOpenAIKey(config) });
     case "elevenlabs":
       return new ElevenLabsProvider({ apiKey: requireElevenLabsKey(config) });
     case "lmstudio":
       return new LMStudioProvider({ baseUrl: config.lmstudioBaseUrl });
-    case "google":
-      throw new Error(`${id} TTS provider is declared in the registry but not yet implemented`);
     case "openrouter":
       throw new Error("openrouter does not support TTS");
   }
@@ -56851,6 +57015,24 @@ var pricing_default = {
         standard: 0.134
       },
       notes: "Passthrough to Gemini 3 Pro Image. OpenRouter may apply small margin."
+    },
+    "google/gemini-2.5-flash-preview-tts": {
+      modality: "tts",
+      pricing: {
+        type: "million_chars",
+        standard: 10,
+        batch: 5
+      },
+      notes: "Gemini 2.5 Flash TTS sync. Effective per-char derived from token pricing; verify against current quote. Batch 50% off."
+    },
+    "google/gemini-2.5-pro-preview-tts": {
+      modality: "tts",
+      pricing: {
+        type: "million_chars",
+        standard: 20,
+        batch: 10
+      },
+      notes: "Gemini 2.5 Pro TTS sync. Approximate per-char. Batch 50% off."
     }
   }
 };
@@ -59491,7 +59673,7 @@ Pick a keeper with pick_variant --keeper <path> --variants ${variantPaths.length
 
 // src/cli.ts
 init_errors();
-var VERSION3 = "0.3.0";
+var VERSION3 = "0.4.0";
 function printHelp(imageOutputDir, audioOutputDir) {
   process.stdout.write(`
 claude-image-tts-gen-cli v${VERSION3}

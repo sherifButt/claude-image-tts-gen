@@ -11,7 +11,11 @@ import {
   ELEVENLABS_FRIENDLY_VOICES,
   ElevenLabsProvider,
 } from "./elevenlabs.js";
-import { GoogleProvider } from "./google.js";
+import {
+  GEMINI_DEFAULT_VOICE,
+  GEMINI_TTS_VOICES,
+  GoogleProvider,
+} from "./google.js";
 import { LMStudioProvider } from "./lmstudio.js";
 import { OpenAIProvider } from "./openai.js";
 import { OpenRouterProvider } from "./openrouter.js";
@@ -59,12 +63,27 @@ const MATRIX: ProviderEntry[] = [
     image: {
       small: { model: "gemini-2.5-flash-image", batchable: true, implemented: true },
       mid: NA,
-      pro: { model: "imagen-4.0-generate-001", batchable: false, implemented: false },
+      pro: { model: "imagen-4.0-generate-001", batchable: false, implemented: true },
     },
     tts: {
-      small: { model: "gemini-2.5-flash-preview-tts", batchable: true, implemented: false },
+      small: {
+        model: "gemini-2.5-flash-preview-tts",
+        batchable: true,
+        implemented: true,
+        voices: GEMINI_TTS_VOICES,
+        defaultVoice: GEMINI_DEFAULT_VOICE,
+        // Gemini TTS accepts prompts up to ~8k tokens; chunk well under that in chars.
+        maxCharsPerCall: 4000,
+      },
       mid: NA,
-      pro: { model: "gemini-2.5-pro-preview-tts", batchable: true, implemented: false },
+      pro: {
+        model: "gemini-2.5-pro-preview-tts",
+        batchable: true,
+        implemented: true,
+        voices: GEMINI_TTS_VOICES,
+        defaultVoice: GEMINI_DEFAULT_VOICE,
+        maxCharsPerCall: 4000,
+      },
     },
   },
   {
@@ -324,14 +343,14 @@ export function createImageProvider(id: ProviderId, config: Config): ImageProvid
 
 export function createTtsProvider(id: ProviderId, config: Config): TtsProvider {
   switch (id) {
+    case "google":
+      return new GoogleProvider({ apiKey: requireGeminiKey(config) });
     case "openai":
       return new OpenAIProvider({ apiKey: requireOpenAIKey(config) });
     case "elevenlabs":
       return new ElevenLabsProvider({ apiKey: requireElevenLabsKey(config) });
     case "lmstudio":
       return new LMStudioProvider({ baseUrl: config.lmstudioBaseUrl });
-    case "google":
-      throw new Error(`${id} TTS provider is declared in the registry but not yet implemented`);
     case "openrouter":
       throw new Error("openrouter does not support TTS");
   }

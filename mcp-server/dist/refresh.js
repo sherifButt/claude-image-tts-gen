@@ -121,6 +121,24 @@ var pricing_default = {
         standard: 0.134
       },
       notes: "Passthrough to Gemini 3 Pro Image. OpenRouter may apply small margin."
+    },
+    "google/gemini-2.5-flash-preview-tts": {
+      modality: "tts",
+      pricing: {
+        type: "million_chars",
+        standard: 10,
+        batch: 5
+      },
+      notes: "Gemini 2.5 Flash TTS sync. Effective per-char derived from token pricing; verify against current quote. Batch 50% off."
+    },
+    "google/gemini-2.5-pro-preview-tts": {
+      modality: "tts",
+      pricing: {
+        type: "million_chars",
+        standard: 20,
+        batch: 10
+      },
+      notes: "Gemini 2.5 Pro TTS sync. Approximate per-char. Batch 50% off."
     }
   }
 };

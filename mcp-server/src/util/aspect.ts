@@ -53,6 +53,30 @@ export function describeAspect(aspect: AspectRatio): string {
 }
 
 /**
+ * Imagen 4 accepts only: 1:1, 3:4, 4:3, 9:16, 16:9. Map our wider enum
+ * onto the nearest supported bucket.
+ */
+export function aspectToImagen(
+  aspect: AspectRatio,
+): "1:1" | "3:4" | "4:3" | "9:16" | "16:9" {
+  switch (aspect) {
+    case "1:1":
+      return "1:1";
+    case "3:4":
+    case "2:3":
+      return "3:4";
+    case "4:3":
+    case "3:2":
+      return "4:3";
+    case "9:16":
+      return "9:16";
+    case "16:9":
+    case "21:9":
+      return "16:9";
+  }
+}
+
+/**
  * Belt-and-suspenders for providers without a formal aspect param (Gemini
  * Flash Image today): prepend a one-line directive so the model composes
  * for the requested ratio. Idempotent: if the prompt already mentions the
