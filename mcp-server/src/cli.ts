@@ -9,6 +9,7 @@ import { batchStatus } from "./tools/batch-status.js";
 import { batchSubmit } from "./tools/batch-submit.js";
 import { createAssets, type CreateAssetsMode } from "./tools/create-assets.js";
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
+import { exportSpend } from "./tools/export-spend.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
 import { healthCheck } from "./tools/health-check.js";
@@ -114,6 +115,10 @@ async function main(): Promise<void> {
         speech: { type: "boolean", default: false },
         "list-providers": { type: "string" },
         "session-spend": { type: "boolean", default: false },
+        "project-spend": { type: "boolean", default: false, description: "With --session-spend, scope to current project" },
+        "export-spend": { type: "boolean", default: false, description: "Export ledger; pair with --month / --format" },
+        month: { type: "string", description: "YYYY-MM filter for --export-spend" },
+        format: { type: "string", description: "csv | json (default csv)" },
         regenerate: { type: "string", short: "R" },
         "estimate-cost": { type: "boolean", default: false },
         "set-budget-daily": { type: "string" },
@@ -213,8 +218,15 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
+    if (values["export-spend"]) {
+      const fmt = (values.format ?? "csv") as "csv" | "json";
+      const result = await exportSpend({ month: values.month, format: fmt });
+      process.stdout.write(result.text);
+      process.exit(0);
+    }
+
     if (values["session-spend"]) {
-      const result = await sessionSpend();
+      const result = await sessionSpend({ project: values["project-spend"] });
       process.stdout.write(result.text + "\n");
       process.exit(0);
     }

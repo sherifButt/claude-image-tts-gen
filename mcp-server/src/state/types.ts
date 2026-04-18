@@ -15,6 +15,10 @@ export interface CallEntry {
   cost: number;
   files: string[];
   cached?: boolean;
+  /** SHA1-truncated hash of cwd at call time. */
+  project?: string;
+  /** Absolute cwd at call time (for human-readable per-project rollups). */
+  projectPath?: string;
 }
 
 export interface Session {

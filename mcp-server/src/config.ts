@@ -8,6 +8,7 @@ export interface Config {
   audioOutputDir: string;
   logLevel: "error" | "warn" | "info" | "debug";
   autoplay: boolean;
+  rewritePrompts: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -28,6 +29,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",
     logLevel: validLog,
     autoplay: ["true", "1", "yes", "on"].includes((env.AUTOPLAY ?? "").toLowerCase()),
+    // Default true per CLAUDE.md decision (opt-out via REWRITE_PROMPTS=false).
+    rewritePrompts: !["false", "0", "no", "off"].includes(
+      (env.REWRITE_PROMPTS ?? "true").toLowerCase(),
+    ),
   };
 }
 

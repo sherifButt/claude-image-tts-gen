@@ -2,8 +2,13 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { loadConfig } from "./config.js";
 import {
   getDefaultProvider,
@@ -20,6 +25,7 @@ import {
   type CreateAssetsMode,
 } from "./tools/create-assets.js";
 import { estimateCostDryRun, type EstimateCostArgs } from "./tools/estimate-cost.js";
+import { exportSpend, type ExportSpendArgs } from "./tools/export-spend.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech.js";
 import { healthCheck } from "./tools/health-check.js";
@@ -41,7 +47,9 @@ import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget, type SetBudgetArgs } from "./tools/set-budget.js";
 import { variants, type VariantsArgs } from "./tools/variants.js";
 import { PRESETS } from "./post/image-presets.js";
+import { rewritePromptViaMcpSampling } from "./rewriter/sampling.js";
 import { formatBudgetWarning } from "./state/budget.js";
+import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
 
 const VERSION = "0.0.1";
@@ -49,8 +57,60 @@ const config = loadConfig();
 
 const server = new Server(
   { name: "claude-image-tts-gen", version: VERSION },
-  { capabilities: { tools: {} } },
+  { capabilities: { tools: {}, resources: { listChanged: false } } },
 );
+
+// Expose recently generated assets as MCP resources so the host
+// (Claude Desktop) can render them in an asset panel.
+const RESOURCE_PREFIX = "claude-image-tts-gen://output/";
+const RECENT_RESOURCE_LIMIT = 50;
+
+function fileExtToMime(p: string): string {
+  const ext = p.toLowerCase().split(".").pop() ?? "";
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  if (ext === "mp3") return "audio/mpeg";
+  if (ext === "wav") return "audio/wav";
+  if (ext === "opus") return "audio/ogg";
+  if (ext === "srt" || ext === "vtt") return "text/plain";
+  return "application/octet-stream";
+}
+
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  const session = await readSession();
+  const recent = session.calls.slice(-RECENT_RESOURCE_LIMIT).reverse();
+  const resources = recent
+    .filter((c) => c.files.length > 0 && existsSync(c.files[0]))
+    .map((c) => ({
+      uri: `${RESOURCE_PREFIX}${encodeURIComponent(c.files[0])}`,
+      name: basename(c.files[0]),
+      description: `${c.tool} via ${c.provider}/${c.tier} on ${c.ts.slice(0, 19)}Z (USD ${c.cost.toFixed(4)})`,
+      mimeType: fileExtToMime(c.files[0]),
+    }));
+  return { resources };
+});
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const uri = request.params.uri;
+  if (!uri.startsWith(RESOURCE_PREFIX)) {
+    throw new Error(`Unknown resource URI: ${uri}`);
+  }
+  const filePath = decodeURIComponent(uri.slice(RESOURCE_PREFIX.length));
+  if (!existsSync(filePath)) {
+    throw new Error(`Resource file no longer exists: ${filePath}`);
+  }
+  const mimeType = fileExtToMime(filePath);
+  const data = await readFile(filePath);
+  if (mimeType.startsWith("text/")) {
+    return {
+      contents: [{ uri, mimeType, text: data.toString("utf8") }],
+    };
+  }
+  return {
+    contents: [{ uri, mimeType, blob: data.toString("base64") }],
+  };
+});
 
 const imageInputSchema = {
   type: "object",
@@ -136,7 +196,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "session_spend",
       description:
         "Show running spend totals (today / week / month / all-time), per-provider, per-tier, plus 10 most recent calls.",
-      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      inputSchema: {
+        type: "object",
+        properties: {
+          project: { type: "boolean", description: "Scope to current project (cwd-hashed) instead of global session" },
+        },
+      },
+    },
+    {
+      name: "export_spend",
+      description: "Export the spend ledger as CSV or JSON, optionally filtered to a YYYY-MM month.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          month: { type: "string", pattern: "^\\d{4}-\\d{2}$", description: "Optional YYYY-MM filter" },
+          format: { type: "string", enum: ["csv", "json"], description: "Default: csv" },
+        },
+      },
     },
     {
       name: "estimate_cost",
@@ -394,7 +470,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }));
 
 async function handleImageCall(args: unknown) {
-  const result = await generateImage((args ?? {}) as GenerateImageArgs, config);
+  const parsed = (args ?? {}) as GenerateImageArgs;
+
+  // Optional MCP-sampling-based prompt rewrite (image only). Falls back gracefully.
+  let rewriteNote: string | null = null;
+  if (config.rewritePrompts && parsed.prompt) {
+    const providerHint = parsed.provider ?? getDefaultProvider("image");
+    const rewrite = await rewritePromptViaMcpSampling(server, parsed.prompt, providerHint);
+    if (rewrite) {
+      rewriteNote = `Prompt rewritten via MCP sampling for ${providerHint}.`;
+      parsed.prompt = rewrite.rewritten;
+    }
+  }
+
+  const result = await generateImage(parsed, config);
   const lines = [
     `Image generated.`,
     `File: ${result.files[0]}`,
@@ -405,6 +494,7 @@ async function handleImageCall(args: unknown) {
     `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
       `(${result.sessionTotal.today.callCount} calls)`,
   ];
+  if (rewriteNote) lines.push(rewriteNote);
   if (result.budgetWarning) lines.push(formatBudgetWarning(result.budgetWarning));
   return {
     structuredContent: result,
@@ -436,8 +526,17 @@ async function handleSpeechCall(args: unknown) {
   };
 }
 
-async function handleSessionSpend() {
-  const result = await sessionSpend();
+async function handleExportSpend(args: unknown) {
+  const result = await exportSpend((args ?? {}) as ExportSpendArgs);
+  return {
+    structuredContent: { ...result, text: undefined },
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
+async function handleSessionSpend(args: unknown) {
+  const parsed = (args ?? {}) as { project?: boolean };
+  const result = await sessionSpend({ project: parsed.project });
   return {
     structuredContent: result,
     content: [{ type: "text", text: result.text }],
@@ -671,7 +770,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return handleListProviders(request.params.arguments);
     }
     if (name === "session_spend") {
-      return await handleSessionSpend();
+      return await handleSessionSpend(request.params.arguments);
+    }
+    if (name === "export_spend") {
+      return await handleExportSpend(request.params.arguments);
     }
     if (name === "estimate_cost") {
       return handleEstimateCost(request.params.arguments);
