@@ -2,10 +2,10 @@
 
 ## To Do
 
-### Iteration loop & variants
+### TTS long-form support
 
-  - due: 2026-05-03
-  - tags: [ux, image, iteration]
+  - due: 2026-05-06
+  - tags: [tts, post-process]
   - priority: medium
   - workload: Medium
   - defaultExpanded: true
@@ -149,6 +149,26 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Iteration loop & variants
+
+  - due: 2026-05-03
+  - tags: [ux, image, iteration]
+  - priority: medium
+  - workload: Medium
+  - steps:
+      - [x] `tools/iterate.ts` — reads parent sidecar, builds new prompt (`append` or `replace` mode), calls underlying gen with `parentSidecar` so lineage threads
+      - [x] `tools/variants.ts` — N parallel `generateImage` calls + auto contact sheet (default n=4, max 9 → 3x3)
+      - [x] `post/contact-sheet.ts` — sharp-based grid composer; sqrt-based layout (4→2x2, 9→3x3), white background, 12px gap, 512px cells; clear "install sharp" error if missing
+      - [x] `tools/pick-variant.ts` — soft-deletes non-keepers, their sidecars, and the contact sheet to `{dir}/.trash/`
+      - [x] MCP tools: `iterate`, `variants`, `pick_variant`
+      - [x] CLI: `--iterate <path> --adjustment <text>`, `--variants <prompt> --n <count>`, `--pick-keeper / --pick-variants / --pick-sheet`
+      - [x] Smoke tested end-to-end: 4 inputs → 446KB contact sheet PNG → pick var-2 → keeper retained, others + sheet in `.trash/`
+    ```md
+    Variants always runs sync-parallel (no provider-specific n>1 path) — keeps
+    the implementation provider-agnostic. Sharp loaded lazily so its absence
+    only fails contact-sheet calls, not the rest of the server.
+    ```
 
 ### Provider failover with logged reason
 

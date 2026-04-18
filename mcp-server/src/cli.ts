@@ -12,9 +12,12 @@ import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
 import { healthCheck } from "./tools/health-check.js";
+import { iterate } from "./tools/iterate.js";
+import { pickVariant } from "./tools/pick-variant.js";
 import { regenerate } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
+import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
@@ -49,6 +52,13 @@ Options:
       --batch-list              List all batch jobs
       --create-assets <file>    Orchestrator: takes {modality, prompts[]} JSON file
       --mode <mode>             create-assets mode: batch | sync | auto (default sync from CLI)
+      --iterate <path>          Iterate on a prior gen (sidecar or output path)
+      --adjustment <text>       Required with --iterate ("make it more dramatic")
+      --variants <prompt>       Generate N variants + contact sheet
+      --n <count>               Variant count (default 4)
+      --pick-keeper <path>      Keeper file for pick-variant; requires --pick-variants
+      --pick-variants <a,b,c>   Comma-separated variant paths
+      --pick-sheet <path>       Optional contact-sheet to also trash
   -h, --help               Show this help
 
 Environment:
@@ -94,6 +104,13 @@ async function main(): Promise<void> {
         "batch-list": { type: "boolean", default: false },
         "create-assets": { type: "string", description: "Path to JSON file with prompts array (orchestrator)" },
         mode: { type: "string", description: "create-assets mode: batch | sync | auto (default sync from CLI)" },
+        iterate: { type: "string", description: "Iterate on a prior gen: path to its sidecar/output" },
+        adjustment: { type: "string", description: "Adjustment text for --iterate" },
+        variants: { type: "string", description: "Generate N variants of a prompt (text)" },
+        n: { type: "string", description: "Number of variants (default 4)" },
+        "pick-keeper": { type: "string", description: "Keeper file for pick-variant" },
+        "pick-variants": { type: "string", description: "Comma-separated variant paths for pick-variant" },
+        "pick-sheet": { type: "string", description: "Optional contact-sheet path to also trash" },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -180,6 +197,49 @@ async function main(): Promise<void> {
         model?: string;
       };
       const result = await batchSubmit(parsed, config);
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values.iterate) {
+      if (!values.adjustment) {
+        throw new Error("--iterate requires --adjustment <text>");
+      }
+      const result = await iterate(
+        { path: values.iterate, adjustment: values.adjustment, outputPath: values.output },
+        config,
+      );
+      process.stdout.write(JSON.stringify(result) + "\n");
+      process.exit(0);
+    }
+
+    if (values.variants) {
+      const n = values.n ? Number(values.n) : 4;
+      if (Number.isNaN(n)) throw new Error(`Invalid --n: ${values.n}`);
+      const result = await variants(
+        {
+          prompt: values.variants,
+          n,
+          provider: values.provider as ProviderId | undefined,
+          tier: values.tier as Tier | undefined,
+          model: values.model,
+        },
+        config,
+      );
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values["pick-keeper"]) {
+      if (!values["pick-variants"]) {
+        throw new Error("--pick-keeper requires --pick-variants <comma-separated paths>");
+      }
+      const variantPaths = values["pick-variants"].split(",").map((s) => s.trim()).filter(Boolean);
+      const result = await pickVariant({
+        keeper: values["pick-keeper"],
+        variants: variantPaths,
+        contactSheet: values["pick-sheet"],
+      });
       process.stdout.write(result.text + "\n");
       process.exit(0);
     }

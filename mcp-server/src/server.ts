@@ -23,9 +23,12 @@ import { estimateCostDryRun, type EstimateCostArgs } from "./tools/estimate-cost
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech.js";
 import { healthCheck } from "./tools/health-check.js";
+import { iterate, type IterateArgs } from "./tools/iterate.js";
+import { pickVariant, type PickVariantArgs } from "./tools/pick-variant.js";
 import { regenerate, type RegenerateArgs } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget, type SetBudgetArgs } from "./tools/set-budget.js";
+import { variants, type VariantsArgs } from "./tools/variants.js";
 import { formatBudgetWarning } from "./state/budget.js";
 import { asStructuredError } from "./util/errors.js";
 
@@ -214,6 +217,55 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "iterate",
+      description:
+        "Iterate on a prior generation by appending an adjustment to its prompt (e.g. 'make it more dramatic'). Lineage is preserved in the new sidecar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Sidecar path or original output file" },
+          adjustment: { type: "string", description: "Tweak instruction" },
+          mode: {
+            type: "string",
+            enum: ["append", "replace"],
+            description: "append (default) appends to original; replace replaces it entirely",
+          },
+          outputPath: { type: "string" },
+        },
+        required: ["path", "adjustment"],
+      },
+    },
+    {
+      name: "variants",
+      description:
+        "Generate N variants of a prompt in parallel and produce a contact-sheet PNG for selection. Use pick_variant to keep one.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string" },
+          n: { type: "number", minimum: 2, maximum: 9, description: "Default 4" },
+          provider: { type: "string", enum: ["google", "openai", "openrouter"] },
+          tier: { type: "string", enum: ["small", "mid", "pro"] },
+          model: { type: "string" },
+        },
+        required: ["prompt"],
+      },
+    },
+    {
+      name: "pick_variant",
+      description:
+        "Soft-deletes non-keeper variants (and their sidecars + contact sheet) into a .trash/ subdirectory.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          keeper: { type: "string" },
+          variants: { type: "array", items: { type: "string" }, minItems: 1 },
+          contactSheet: { type: "string" },
+        },
+        required: ["keeper", "variants"],
+      },
+    },
+    {
       name: "regenerate",
       description:
         "Re-run a prior generation from its sidecar (.regenerate.json). Pass the original output path or the sidecar path. Lineage is tracked.",
@@ -399,6 +451,40 @@ async function handleHealthCheck() {
   };
 }
 
+async function handleIterate(args: unknown) {
+  const result = await iterate((args ?? {}) as IterateArgs, config);
+  const tool = "voiceUsed" in result ? "generate_speech" : "generate_image";
+  return {
+    structuredContent: result,
+    content: [
+      {
+        type: "text",
+        text:
+          `Iterated (${tool}).\n` +
+          `File: ${result.files[0]}\n` +
+          `Sidecar: ${result.sidecar}\n` +
+          `Cost: ${result.cost.currency} ${result.cost.total.toFixed(4)}`,
+      },
+    ],
+  };
+}
+
+async function handleVariants(args: unknown) {
+  const result = await variants((args ?? {}) as VariantsArgs, config);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
+async function handlePickVariant(args: unknown) {
+  const result = await pickVariant((args ?? {}) as PickVariantArgs);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
 async function handleRegenerate(args: unknown) {
   const result = await regenerate((args ?? {}) as RegenerateArgs, config);
   const tool = "voiceUsed" in result ? "generate_speech" : "generate_image";
@@ -469,6 +555,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "health_check") {
       return await handleHealthCheck();
+    }
+    if (name === "iterate") {
+      return await handleIterate(request.params.arguments);
+    }
+    if (name === "variants") {
+      return await handleVariants(request.params.arguments);
+    }
+    if (name === "pick_variant") {
+      return await handlePickVariant(request.params.arguments);
     }
     if (name === "regenerate") {
       return await handleRegenerate(request.params.arguments);
