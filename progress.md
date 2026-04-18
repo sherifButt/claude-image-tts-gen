@@ -2,24 +2,13 @@
 
 ## To Do
 
-### TTS captions (SRT / VTT)
-
-  - due: 2026-05-07
-  - tags: [tts, post-process]
-  - priority: medium
-  - workload: Medium
-  - defaultExpanded: true
-  - steps:
-      - [ ] Pull word-level timestamps where the provider returns them
-      - [ ] Emit `.srt` and `.vtt` alongside the audio file
-      - [ ] Skip silently when timestamps are unavailable
-
 ### Auto-play (opt-in)
 
   - due: 2026-05-07
   - tags: [tts, ux]
   - priority: low
   - workload: Easy
+  - defaultExpanded: true
   - steps:
       - [ ] `AUTOPLAY=true` triggers `afplay` on macOS after TTS gen
       - [ ] Off by default; documented in README and CLAUDE.md
@@ -125,6 +114,27 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### TTS captions (SRT / VTT)
+
+  - due: 2026-05-07
+  - tags: [tts, post-process]
+  - priority: medium
+  - workload: Medium
+  - steps:
+      - [x] `WordAlignment` type + `wantTimestamps?` flag on `TtsGenRequest`; `alignment?` on `TtsGenResult`
+      - [x] ElevenLabs provider extended: when `wantTimestamps`, calls `/with-timestamps`, parses base64 audio + character-level alignment, aggregates to word-level
+      - [x] `post/captions.ts` — `toSrt`, `toVtt`, `writeCaptionFiles`; default 8 words/line; HH:MM:SS,mmm (SRT) / HH:MM:SS.mmm (VTT)
+      - [x] `generate_speech` accepts `captions: 'none' | 'srt' | 'vtt' | 'both'`
+      - [x] Threads `wantTimestamps` to provider call; writes caption files when alignment available
+      - [x] Skips with `captionsSkipped` note when chunked (multi-chunk offset math deferred) or when provider returns no alignment (e.g. OpenAI TTS)
+      - [x] CLI: `--captions <mode>`; MCP schema includes captions enum
+      - [x] Smoke tested: 10-word fixture → valid SRT (3-line/2-line groups) and VTT files written next to .mp3
+    ```md
+    Only ElevenLabs supports word-level timestamps in v1 (OpenAI TTS doesn't).
+    Captions for chunked TTS deferred — would need ffprobe to compute per-chunk
+    durations and offset alignment timestamps. Single-chunk TTS works today.
+    ```
 
 ### TTS long-form support
 

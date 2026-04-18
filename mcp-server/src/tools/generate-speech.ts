@@ -4,6 +4,7 @@ import { buildCacheKey } from "../cache/key.js";
 import { copyFromCache, lookupCache, storeInCache } from "../cache/store.js";
 import { chunkText, type TtsChunk } from "../chunker/tts.js";
 import type { Config } from "../config.js";
+import { writeCaptionFiles, type CaptionFiles, type CaptionFormat } from "../post/captions.js";
 import { concatAudioFiles } from "../post/concat.js";
 import { estimateCost, tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
 import type { CostEstimate } from "../pricing/types.js";
@@ -14,7 +15,7 @@ import {
   resolveSlot,
   type ResolvedSlot,
 } from "../providers/registry.js";
-import type { ProviderId, Tier, TtsGenResult } from "../providers/types.js";
+import type { ProviderId, Tier, TtsGenResult, WordAlignment } from "../providers/types.js";
 import { readLineageFromParent, writeSidecar } from "../sidecar/metadata.js";
 import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
@@ -24,6 +25,8 @@ import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
 import { buildOutputPath, saveBinary, slugify, timestamp } from "../util/output.js";
 
+export type CaptionsMode = "none" | "srt" | "vtt" | "both";
+
 export interface GenerateSpeechArgs {
   text: string;
   provider?: ProviderId;
@@ -31,6 +34,8 @@ export interface GenerateSpeechArgs {
   model?: string;
   voice?: string;
   outputPath?: string;
+  /** "none" (default), "srt", "vtt", or "both". Requires a provider that returns word alignment. */
+  captions?: CaptionsMode;
 }
 
 export interface GenerateSpeechOutput {
@@ -53,6 +58,8 @@ export interface GenerateSpeechOutput {
   failover: FailoverDetails | null;
   chunkCount: number;
   chunkFiles?: string[];
+  captions?: CaptionFiles;
+  captionsSkipped?: string;
 }
 
 export interface GenerateSpeechOpts {
@@ -143,6 +150,8 @@ export async function generateSpeech(
   let failover: FailoverDetails | null = null;
   let chunkFiles: string[] | undefined;
   let chunkCount = 1;
+  let alignment: WordAlignment[] | undefined;
+  const captionsMode: CaptionsMode = args.captions ?? "none";
 
   // Decide whether to chunk: only when not cached, not explicit-model, and slot.maxCharsPerCall is set + exceeded.
   const limit = slot.maxCharsPerCall;
@@ -224,12 +233,14 @@ export async function generateSpeech(
         model: slot.model,
         voice,
         params: slot.params,
+        wantTimestamps: captionsMode !== "none",
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
     }
     mimeType = result.mimeType;
     modelUsed = result.modelUsed;
+    alignment = result.alignment;
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
@@ -255,6 +266,7 @@ export async function generateSpeech(
           model: resolvedSlot.model,
           voice: attemptVoice,
           params: resolvedSlot.params,
+          wantTimestamps: captionsMode !== "none",
         });
       },
     });
@@ -263,6 +275,7 @@ export async function generateSpeech(
     voice = args.voice ?? slot.defaultVoice;
     mimeType = fallbackResult.result.mimeType;
     modelUsed = fallbackResult.result.modelUsed;
+    alignment = fallbackResult.result.alignment;
     filePath = buildOutputPath({
       prompt: args.text,
       mimeType,
@@ -355,6 +368,21 @@ export async function generateSpeech(
     cached: isCached,
   });
 
+  let captions: CaptionFiles | undefined;
+  let captionsSkipped: string | undefined;
+  if (captionsMode !== "none") {
+    if (chunkCount > 1) {
+      captionsSkipped =
+        "Captions skipped: chunked TTS (multi-chunk timestamp offsets are not yet supported in v1).";
+    } else if (!alignment || alignment.length === 0) {
+      captionsSkipped = `Captions skipped: ${providerUsed} did not return word alignment for this call.`;
+    } else {
+      const formats: CaptionFormat[] =
+        captionsMode === "both" ? ["srt", "vtt"] : [captionsMode];
+      captions = await writeCaptionFiles(filePath, alignment, formats);
+    }
+  }
+
   return {
     success: true,
     files: [filePath],
@@ -375,5 +403,7 @@ export async function generateSpeech(
     failover,
     chunkCount,
     chunkFiles,
+    captions,
+    captionsSkipped,
   };
 }

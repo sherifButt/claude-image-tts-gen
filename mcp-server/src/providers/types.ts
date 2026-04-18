@@ -20,6 +20,15 @@ export interface TtsGenRequest {
   model: string;
   voice?: string;
   params?: Record<string, unknown>;
+  /** Request word-level alignment data when the provider supports it. */
+  wantTimestamps?: boolean;
+}
+
+export interface WordAlignment {
+  word: string;
+  /** Seconds from start of this audio. */
+  start: number;
+  end: number;
 }
 
 export interface TtsGenResult {
@@ -27,6 +36,8 @@ export interface TtsGenResult {
   data: Buffer;
   modelUsed: string;
   providerUsed: ProviderId;
+  /** Present only when the provider returns alignment (e.g. ElevenLabs with-timestamps). */
+  alignment?: WordAlignment[];
 }
 
 export interface ImageProvider {

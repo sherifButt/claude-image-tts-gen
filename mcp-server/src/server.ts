@@ -77,6 +77,11 @@ const speechInputSchema = {
     model: { type: "string", description: "Optional explicit model override." },
     voice: { type: "string", description: "Voice ID. Per-provider list via list_providers." },
     outputPath: { type: "string", description: "Optional explicit output path." },
+    captions: {
+      type: "string",
+      enum: ["none", "srt", "vtt", "both"],
+      description: "Write caption files alongside audio. Requires provider with word-level timestamps (ElevenLabs).",
+    },
   },
   required: ["text"],
 } as const;
@@ -319,6 +324,10 @@ async function handleSpeechCall(args: unknown) {
     `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
       `(${result.sessionTotal.today.callCount} calls)`,
   ];
+  if (result.chunkCount > 1) lines.push(`Chunks: ${result.chunkCount} (concat'd via ffmpeg)`);
+  if (result.captions?.srt) lines.push(`SRT: ${result.captions.srt}`);
+  if (result.captions?.vtt) lines.push(`VTT: ${result.captions.vtt}`);
+  if (result.captionsSkipped) lines.push(result.captionsSkipped);
   if (result.budgetWarning) lines.push(formatBudgetWarning(result.budgetWarning));
   return {
     structuredContent: result,

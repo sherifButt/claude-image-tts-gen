@@ -37,6 +37,7 @@ Options:
   -t, --tier <tier>        Quality/cost tier: small | mid | pro (default: ${getDefaultTier()})
   -m, --model <model>      Explicit model override (skips registry)
   -v, --voice <voice>      Voice ID for TTS (registry-validated)
+      --captions <mode>    TTS only: none (default) | srt | vtt | both
   -o, --output <path>      Output file path (auto-generated if omitted)
   -d, --output-dir <dir>   Output directory (image: ${imageOutputDir}, audio: ${audioOutputDir})
       --speech             Generate speech audio instead of an image
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
         tier: { type: "string", short: "t" },
         model: { type: "string", short: "m" },
         voice: { type: "string", short: "v" },
+        captions: { type: "string", description: "TTS captions: none | srt | vtt | both" },
         output: { type: "string", short: "o" },
         "output-dir": { type: "string", short: "d" },
         speech: { type: "boolean", default: false },
@@ -296,6 +298,22 @@ async function main(): Promise<void> {
       throw new Error(`Invalid --tier: ${values.tier}`);
     }
 
+    const captions = values.captions as
+      | "none"
+      | "srt"
+      | "vtt"
+      | "both"
+      | undefined;
+    if (
+      captions !== undefined &&
+      captions !== "none" &&
+      captions !== "srt" &&
+      captions !== "vtt" &&
+      captions !== "both"
+    ) {
+      throw new Error(`Invalid --captions: ${values.captions}`);
+    }
+
     const result = values.speech
       ? await generateSpeech(
           {
@@ -304,6 +322,7 @@ async function main(): Promise<void> {
             tier: values.tier as Tier | undefined,
             model: values.model,
             voice: values.voice,
+            captions,
             outputPath: values.output,
           },
           config,
