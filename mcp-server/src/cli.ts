@@ -16,6 +16,11 @@ import { iterate } from "./tools/iterate.js";
 import { pickVariant } from "./tools/pick-variant.js";
 import { postProcess } from "./tools/post-process.js";
 import type { PresetName } from "./post/image-presets.js";
+import {
+  listPresets,
+  saveStylePreset,
+  saveVoicePreset,
+} from "./tools/presets.js";
 import { regenerate } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
@@ -66,6 +71,13 @@ Options:
       --presets <a,b,c>         Preset list: og, twitter, favicon, app-icon, linkedin, instagram-square, instagram-story
       --webp                    Also emit .webp variants
       --webp-quality <n>        Default 85
+      --style <name>            Apply saved image style preset on generation
+      --voice-preset <name>     Apply saved TTS voice preset on speech gen
+      --save-style <name>       Save a style preset (use --provider/--tier/--prefix/--suffix)
+      --save-voice <name>       Save a voice preset (use --provider/--tier/--voice)
+      --prefix <text>           Style prompt prefix (with --save-style)
+      --suffix <text>           Style prompt suffix (with --save-style)
+      --list-presets [style|voice|all]   List saved presets
   -h, --help               Show this help
 
 Environment:
@@ -123,6 +135,13 @@ async function main(): Promise<void> {
         presets: { type: "string", description: "Comma-separated preset names" },
         webp: { type: "boolean", default: false },
         "webp-quality": { type: "string", description: "1..100, default 85" },
+        style: { type: "string", description: "Apply saved style preset on image gen" },
+        "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
+        "save-style": { type: "string", description: "Save image style preset (name); --provider/--tier/--prefix/--suffix" },
+        "save-voice": { type: "string", description: "Save voice preset (name); --provider/--tier/--voice" },
+        prefix: { type: "string", description: "Style prefix" },
+        suffix: { type: "string", description: "Style suffix" },
+        "list-presets": { type: "string", description: "List presets: 'style' | 'voice' | 'all'" },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
@@ -150,6 +169,45 @@ async function main(): Promise<void> {
       }
       const entries = listDeclared(modality);
       process.stdout.write(JSON.stringify({ modality, entries }, null, 2) + "\n");
+      process.exit(0);
+    }
+
+    if (values["save-style"]) {
+      const result = await saveStylePreset({
+        name: values["save-style"],
+        preset: {
+          provider: values.provider as ProviderId | undefined,
+          tier: values.tier as Tier | undefined,
+          model: values.model,
+          promptPrefix: values.prefix,
+          promptSuffix: values.suffix,
+        },
+      });
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values["save-voice"]) {
+      const result = await saveVoicePreset({
+        name: values["save-voice"],
+        preset: {
+          provider: values.provider as ProviderId | undefined,
+          tier: values.tier as Tier | undefined,
+          model: values.model,
+          voice: values.voice,
+        },
+      });
+      process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values["list-presets"] !== undefined) {
+      const kind = values["list-presets"] || "all";
+      if (kind !== "style" && kind !== "voice" && kind !== "all") {
+        throw new Error(`--list-presets must be 'style', 'voice', or 'all'`);
+      }
+      const result = await listPresets({ kind: kind as "style" | "voice" | "all" });
+      process.stdout.write(result.text + "\n");
       process.exit(0);
     }
 
@@ -346,6 +404,7 @@ async function main(): Promise<void> {
             model: values.model,
             voice: values.voice,
             captions,
+            voicePreset: values["voice-preset"],
             outputPath: values.output,
           },
           config,
@@ -356,6 +415,7 @@ async function main(): Promise<void> {
             provider: values.provider as ProviderId | undefined,
             tier: values.tier as Tier | undefined,
             model: values.model,
+            style: values.style,
             outputPath: values.output,
           },
           config,

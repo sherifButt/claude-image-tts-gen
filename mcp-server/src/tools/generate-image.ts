@@ -16,6 +16,7 @@ import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
 import { summarize } from "../state/spend.js";
 import type { BudgetWarning, CallEntry, PeriodTotal } from "../state/types.js";
+import { readStylePresets } from "../presets/store.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
@@ -26,6 +27,8 @@ export interface GenerateImageArgs {
   tier?: Tier;
   model?: string;
   outputPath?: string;
+  /** Apply a saved style preset (provider/tier/model defaults + prompt prefix/suffix). */
+  style?: string;
 }
 
 export interface GenerateImageOutput {
@@ -79,19 +82,41 @@ export async function generateImage(
     throw new StructuredError("VALIDATION_ERROR", "prompt is required", "Pass a non-empty prompt.");
   }
 
-  const requestedProvider = args.provider ?? getDefaultProvider("image");
-  const tier = args.tier ?? getDefaultTier();
+  // Apply style preset if requested. Explicit args still win.
+  let resolvedPrompt = args.prompt;
+  let presetProvider: ProviderId | undefined;
+  let presetTier: Tier | undefined;
+  let presetModel: string | undefined;
+  if (args.style) {
+    const presets = await readStylePresets();
+    const preset = presets[args.style];
+    if (!preset) {
+      throw new StructuredError(
+        "NOT_FOUND",
+        `Style preset "${args.style}" not found`,
+        "Run list_presets to see what's saved, or save_style_preset to create it.",
+      );
+    }
+    resolvedPrompt = `${preset.promptPrefix ?? ""}${preset.promptPrefix ? " " : ""}${args.prompt}${preset.promptSuffix ? ", " + preset.promptSuffix : ""}`.trim();
+    presetProvider = preset.provider;
+    presetTier = preset.tier;
+    presetModel = preset.model;
+  }
+
+  const requestedProvider = args.provider ?? presetProvider ?? getDefaultProvider("image");
+  const tier = args.tier ?? presetTier ?? getDefaultTier();
+  const explicitModel = args.model ?? presetModel;
 
   let providerUsed: ProviderId = requestedProvider;
-  let slot: ResolvedSlot = args.model
-    ? inlineSlot(requestedProvider, tier, args.model)
+  let slot: ResolvedSlot = explicitModel
+    ? inlineSlot(requestedProvider, tier, explicitModel)
     : resolveSlot({ provider: requestedProvider, modality: "image", tier });
 
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
     modality: "image",
-    text: args.prompt,
+    text: resolvedPrompt,
     params: slot.params,
   });
   const cached = await lookupCache(cacheKey);
@@ -123,19 +148,19 @@ export async function generateImage(
     mimeType = cached.meta.mimeType;
     modelUsed = slot.model;
     filePath = buildOutputPath({
-      prompt: args.prompt,
+      prompt: resolvedPrompt,
       mimeType,
       outputDir: config.imageOutputDir,
       explicitPath: args.outputPath,
     });
     await copyFromCache(cached, filePath);
-  } else if (args.model) {
+  } else if (explicitModel) {
     // Explicit model override — skip failover, user wants this exact model.
     const provider = createImageProvider(requestedProvider, config);
     let result;
     try {
       result = await provider.generateImage({
-        prompt: args.prompt,
+        prompt: resolvedPrompt,
         model: slot.model,
         params: slot.params,
       });
@@ -145,7 +170,7 @@ export async function generateImage(
     mimeType = result.mimeType;
     modelUsed = result.modelUsed;
     filePath = buildOutputPath({
-      prompt: args.prompt,
+      prompt: resolvedPrompt,
       mimeType,
       outputDir: config.imageOutputDir,
       explicitPath: args.outputPath,
@@ -164,7 +189,7 @@ export async function generateImage(
       callProvider: async (resolvedSlot, attemptProviderId) => {
         const provider = createImageProvider(attemptProviderId, config);
         return await provider.generateImage({
-          prompt: args.prompt,
+          prompt: resolvedPrompt,
           model: resolvedSlot.model,
           params: resolvedSlot.params,
         });
@@ -175,7 +200,7 @@ export async function generateImage(
     mimeType = fallbackResult.result.mimeType;
     modelUsed = fallbackResult.result.modelUsed;
     filePath = buildOutputPath({
-      prompt: args.prompt,
+      prompt: resolvedPrompt,
       mimeType,
       outputDir: config.imageOutputDir,
       explicitPath: args.outputPath,
@@ -258,7 +283,7 @@ export async function generateImage(
     model: modelUsed,
     tier,
     params: slot.params,
-    input: { prompt: args.prompt },
+    input: { prompt: resolvedPrompt },
     output: { files: [filePath], mimeType },
     cost: { ...cost, total: chargedCost },
     lineage,

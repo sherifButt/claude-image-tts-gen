@@ -22,6 +22,7 @@ import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
 import { summarize } from "../state/spend.js";
 import type { BudgetWarning, CallEntry, PeriodTotal } from "../state/types.js";
+import { readVoicePresets } from "../presets/store.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
 import { buildOutputPath, saveBinary, slugify, timestamp } from "../util/output.js";
@@ -37,6 +38,8 @@ export interface GenerateSpeechArgs {
   outputPath?: string;
   /** "none" (default), "srt", "vtt", or "both". Requires a provider that returns word alignment. */
   captions?: CaptionsMode;
+  /** Apply a saved voice preset (provider/tier/model/voice defaults). */
+  voicePreset?: string;
 }
 
 export interface GenerateSpeechOutput {
@@ -95,15 +98,36 @@ export async function generateSpeech(
     throw new StructuredError("VALIDATION_ERROR", "text is required", "Pass non-empty text.");
   }
 
-  const requestedProvider = args.provider ?? getDefaultProvider("tts");
-  const tier = args.tier ?? getDefaultTier();
+  let presetProvider: ProviderId | undefined;
+  let presetTier: Tier | undefined;
+  let presetModel: string | undefined;
+  let presetVoice: string | undefined;
+  if (args.voicePreset) {
+    const presets = await readVoicePresets();
+    const preset = presets[args.voicePreset];
+    if (!preset) {
+      throw new StructuredError(
+        "NOT_FOUND",
+        `Voice preset "${args.voicePreset}" not found`,
+        "Run list_presets to see what's saved, or save_voice_preset to create it.",
+      );
+    }
+    presetProvider = preset.provider;
+    presetTier = preset.tier;
+    presetModel = preset.model;
+    presetVoice = preset.voice;
+  }
+
+  const requestedProvider = args.provider ?? presetProvider ?? getDefaultProvider("tts");
+  const tier = args.tier ?? presetTier ?? getDefaultTier();
+  const explicitModel = args.model ?? presetModel;
 
   let providerUsed: ProviderId = requestedProvider;
-  let slot: ResolvedSlot = args.model
-    ? inlineSlot(requestedProvider, tier, args.model)
+  let slot: ResolvedSlot = explicitModel
+    ? inlineSlot(requestedProvider, tier, explicitModel)
     : resolveSlot({ provider: requestedProvider, modality: "tts", tier });
 
-  let voice = args.voice ?? slot.defaultVoice;
+  let voice = args.voice ?? presetVoice ?? slot.defaultVoice;
   if (
     voice &&
     slot.voices.length > 0 &&
@@ -157,7 +181,7 @@ export async function generateSpeech(
   // Decide whether to chunk: only when not cached, not explicit-model, and slot.maxCharsPerCall is set + exceeded.
   const limit = slot.maxCharsPerCall;
   const needsChunking =
-    !cached && !args.model && limit !== undefined && args.text.length > limit;
+    !cached && !explicitModel && limit !== undefined && args.text.length > limit;
 
   if (cached) {
     mimeType = cached.meta.mimeType;
@@ -225,7 +249,7 @@ export async function generateSpeech(
       mimeType,
       modelKey: `${providerUsed}/${modelUsed}`,
     });
-  } else if (args.model) {
+  } else if (explicitModel) {
     const provider = createTtsProvider(requestedProvider, config);
     let result;
     try {

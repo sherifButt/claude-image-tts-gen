@@ -26,6 +26,16 @@ import { healthCheck } from "./tools/health-check.js";
 import { iterate, type IterateArgs } from "./tools/iterate.js";
 import { pickVariant, type PickVariantArgs } from "./tools/pick-variant.js";
 import { postProcess, type PostProcessArgs } from "./tools/post-process.js";
+import {
+  deletePreset,
+  listPresets,
+  saveStylePreset,
+  saveVoicePreset,
+  type DeletePresetArgs,
+  type ListPresetsArgs,
+  type SaveStylePresetArgs,
+  type SaveVoicePresetArgs,
+} from "./tools/presets.js";
 import { regenerate, type RegenerateArgs } from "./tools/regenerate.js";
 import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget, type SetBudgetArgs } from "./tools/set-budget.js";
@@ -58,6 +68,7 @@ const imageInputSchema = {
     },
     model: { type: "string", description: "Optional explicit model override." },
     outputPath: { type: "string", description: "Optional explicit output path." },
+    style: { type: "string", description: "Apply a saved style preset by name." },
   },
   required: ["prompt"],
 } as const;
@@ -84,6 +95,7 @@ const speechInputSchema = {
       enum: ["none", "srt", "vtt", "both"],
       description: "Write caption files alongside audio. Requires provider with word-level timestamps (ElevenLabs).",
     },
+    voicePreset: { type: "string", description: "Apply a saved voice preset by name." },
   },
   required: ["text"],
 } as const;
@@ -221,6 +233,71 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           jobId: { type: "string" },
           list: { type: "boolean" },
         },
+      },
+    },
+    {
+      name: "save_style_preset",
+      description: "Save a named image style preset (defaults + prompt prefix/suffix). Reference it later via the 'style' field on generate_image.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+          preset: {
+            type: "object",
+            properties: {
+              provider: { type: "string", enum: ["google", "openai", "openrouter"] },
+              tier: { type: "string", enum: ["small", "mid", "pro"] },
+              model: { type: "string" },
+              promptPrefix: { type: "string" },
+              promptSuffix: { type: "string" },
+              notes: { type: "string" },
+            },
+          },
+        },
+        required: ["name", "preset"],
+      },
+    },
+    {
+      name: "save_voice_preset",
+      description: "Save a named TTS voice preset. Reference it via 'voicePreset' on generate_speech.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+          preset: {
+            type: "object",
+            properties: {
+              provider: { type: "string", enum: ["openai", "google", "elevenlabs"] },
+              tier: { type: "string", enum: ["small", "mid", "pro"] },
+              model: { type: "string" },
+              voice: { type: "string" },
+              notes: { type: "string" },
+            },
+          },
+        },
+        required: ["name", "preset"],
+      },
+    },
+    {
+      name: "list_presets",
+      description: "List saved style and/or voice presets.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["style", "voice", "all"], description: "Default: all" },
+        },
+      },
+    },
+    {
+      name: "delete_preset",
+      description: "Delete a saved preset by kind + name.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["style", "voice"] },
+          name: { type: "string", pattern: "^[a-zA-Z0-9_-]+$" },
+        },
+        required: ["kind", "name"],
       },
     },
     {
@@ -480,6 +557,23 @@ async function handleHealthCheck() {
   };
 }
 
+async function handleSaveStylePreset(args: unknown) {
+  const result = await saveStylePreset((args ?? {}) as SaveStylePresetArgs);
+  return { structuredContent: result, content: [{ type: "text", text: result.text }] };
+}
+async function handleSaveVoicePreset(args: unknown) {
+  const result = await saveVoicePreset((args ?? {}) as SaveVoicePresetArgs);
+  return { structuredContent: result, content: [{ type: "text", text: result.text }] };
+}
+async function handleListPresets(args: unknown) {
+  const result = await listPresets((args ?? {}) as ListPresetsArgs);
+  return { structuredContent: result, content: [{ type: "text", text: result.text }] };
+}
+async function handleDeletePreset(args: unknown) {
+  const result = await deletePreset((args ?? {}) as DeletePresetArgs);
+  return { structuredContent: result, content: [{ type: "text", text: result.text }] };
+}
+
 async function handlePostProcess(args: unknown) {
   const result = await postProcess((args ?? {}) as PostProcessArgs);
   return {
@@ -593,6 +687,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "health_check") {
       return await handleHealthCheck();
     }
+    if (name === "save_style_preset") return await handleSaveStylePreset(request.params.arguments);
+    if (name === "save_voice_preset") return await handleSaveVoicePreset(request.params.arguments);
+    if (name === "list_presets") return await handleListPresets(request.params.arguments);
+    if (name === "delete_preset") return await handleDeletePreset(request.params.arguments);
     if (name === "post_process") {
       return await handlePostProcess(request.params.arguments);
     }

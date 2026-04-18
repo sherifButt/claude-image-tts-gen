@@ -2,10 +2,10 @@
 
 ## To Do
 
-### Style & voice presets
+### Reference image input
 
   - due: 2026-05-09
-  - tags: [presets, ux]
+  - tags: [image, providers]
   - priority: medium
   - workload: Medium
   - defaultExpanded: true
@@ -19,16 +19,6 @@
       - [ ] Presets resolve at gen time; user references them by name
       - [ ] Slash command for quick save
 
-### Reference image input
-
-  - due: 2026-05-09
-  - tags: [image, providers]
-  - priority: medium
-  - workload: Medium
-  - steps:
-      - [ ] Pass reference image to `gpt-image-1` (edits endpoint)
-      - [ ] Pass reference image to Gemini multimodal input
-      - [ ] Sidecar records reference path for reproducibility
 
 ### Prompt rewriter via MCP sampling (opt-out)
 
@@ -96,6 +86,27 @@
       - [ ] Skill instructs Claude to prefer batch when ≥2 prompts queued and no rush
 
 ## Done
+
+### Style & voice presets
+
+  - due: 2026-05-09
+  - tags: [presets, ux]
+  - priority: medium
+  - workload: Medium
+  - steps:
+      - [x] `presets/types.ts` — `StylePreset`, `VoicePreset`
+      - [x] `presets/store.ts` — locked read/write of `~/.claude-image-tts-gen/presets/{styles,voices}.json` with CRUD
+      - [x] `tools/presets.ts` — `save_style_preset`, `save_voice_preset`, `list_presets`, `delete_preset` (alphanumeric/underscore/hyphen names only)
+      - [x] `generate_image` accepts `style?: string` — preset's provider/tier/model become defaults; `promptPrefix + prompt + ", " + promptSuffix` builds the resolved prompt
+      - [x] `generate_speech` accepts `voicePreset?: string` — preset's provider/tier/model/voice become defaults
+      - [x] Explicit args always override preset defaults
+      - [x] Sidecar stores the resolved prompt so regenerate produces identical output
+      - [x] CLI: `--save-style/--save-voice/--list-presets`, `--style/--voice-preset`, `--prefix/--suffix` for save
+      - [x] Smoke tested end-to-end: save 2 presets, list both, NOT_FOUND on missing, valid preset routes to correct provider's failover chain (no key → CONFIG_ERROR)
+    ```md
+    Resolution order at gen time: explicit arg → preset field → registry default.
+    Style prompt template: `{prefix} {prompt}, {suffix}` (trimmed, only with non-empty parts).
+    ```
 
 ### Auto-play (opt-in)
 
