@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { injectAspectIntoPrompt } from "../util/aspect.js";
 import type {
   ImageGenRequest,
   ImageGenResult,
@@ -16,6 +17,10 @@ export class GoogleProvider implements ImageProvider {
   }
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
+    const effectivePrompt = req.aspectRatio
+      ? injectAspectIntoPrompt(req.prompt, req.aspectRatio)
+      : req.prompt;
+
     const contents = req.referenceImage
       ? [
           {
@@ -27,15 +32,23 @@ export class GoogleProvider implements ImageProvider {
                   data: req.referenceImage.data.toString("base64"),
                 },
               },
-              { text: req.prompt },
+              { text: effectivePrompt },
             ],
           },
         ]
-      : req.prompt;
+      : effectivePrompt;
+
+    // Loose-typed config passthrough: newer Gemini image models accept
+    // imageConfig.aspectRatio; older Flash-Image builds only honor it via
+    // prompt. Passing both is harmless — unknown config keys are ignored.
+    const config = req.aspectRatio
+      ? { imageConfig: { aspectRatio: req.aspectRatio } }
+      : undefined;
 
     const response = await this.client.models.generateContent({
       model: req.model,
       contents: contents as never,
+      ...(config ? { config: config as never } : {}),
     });
 
     const parts = response.candidates?.[0]?.content?.parts ?? [];

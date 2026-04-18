@@ -48523,6 +48523,53 @@ function getApiKeyFromEnv() {
   return envGoogleApiKey || envGeminiApiKey || void 0;
 }
 
+// src/util/aspect.ts
+var ASPECT_RATIOS = [
+  "1:1",
+  "4:3",
+  "3:4",
+  "16:9",
+  "9:16",
+  "3:2",
+  "2:3",
+  "21:9"
+];
+function isAspectRatio(v) {
+  return typeof v === "string" && ASPECT_RATIOS.includes(v);
+}
+function aspectToOpenAISize(aspect) {
+  switch (aspect) {
+    case "1:1":
+      return "1024x1024";
+    case "4:3":
+    case "3:2":
+    case "16:9":
+    case "21:9":
+      return "1536x1024";
+    case "3:4":
+    case "2:3":
+    case "9:16":
+      return "1024x1536";
+  }
+}
+var LABELS = {
+  "1:1": "square",
+  "4:3": "classic landscape",
+  "3:4": "classic portrait",
+  "16:9": "widescreen landscape",
+  "9:16": "vertical / mobile portrait",
+  "3:2": "photo landscape",
+  "2:3": "photo portrait",
+  "21:9": "ultra-wide cinematic"
+};
+function describeAspect(aspect) {
+  return `${aspect} (${LABELS[aspect]})`;
+}
+function injectAspectIntoPrompt(prompt, aspect) {
+  if (prompt.includes(aspect)) return prompt;
+  return `Aspect ratio: ${describeAspect(aspect)}. ${prompt}`;
+}
+
 // src/providers/google.ts
 var GoogleProvider = class {
   id = "google";
@@ -48531,6 +48578,7 @@ var GoogleProvider = class {
     this.client = new GoogleGenAI({ apiKey: opts.apiKey });
   }
   async generateImage(req) {
+    const effectivePrompt = req.aspectRatio ? injectAspectIntoPrompt(req.prompt, req.aspectRatio) : req.prompt;
     const contents = req.referenceImage ? [
       {
         role: "user",
@@ -48541,13 +48589,15 @@ var GoogleProvider = class {
               data: req.referenceImage.data.toString("base64")
             }
           },
-          { text: req.prompt }
+          { text: effectivePrompt }
         ]
       }
-    ] : req.prompt;
+    ] : effectivePrompt;
+    const config = req.aspectRatio ? { imageConfig: { aspectRatio: req.aspectRatio } } : void 0;
     const response = await this.client.models.generateContent({
       model: req.model,
-      contents
+      contents,
+      ...config ? { config } : {}
     });
     const parts = response.candidates?.[0]?.content?.parts ?? [];
     for (const part of parts) {
@@ -55755,10 +55805,12 @@ var LMStudioProvider = class {
         providerUsed: this.id
       };
     }
+    const size = req.aspectRatio ? aspectToOpenAISize(req.aspectRatio) : void 0;
     const response = await this.client.images.generate({
       model: req.model,
       prompt: req.prompt,
-      n: 1
+      n: 1,
+      ...size ? { size } : {}
     });
     const item = response.data?.[0];
     if (!item?.b64_json) {
@@ -55831,7 +55883,7 @@ var OpenAIProvider = class {
   async generateImage(req) {
     const params = req.params ?? {};
     const quality = params.quality ?? "auto";
-    const size = params.size ?? "auto";
+    const size = req.aspectRatio ? aspectToOpenAISize(req.aspectRatio) : params.size ?? "auto";
     let item;
     if (req.referenceImage) {
       const ext = (req.referenceImage.mimeType.split("/")[1] ?? "png").replace(
@@ -55917,9 +55969,10 @@ var OpenRouterProvider = class {
     this.apiKey = opts.apiKey;
   }
   async generateImage(req) {
+    const effectivePrompt = req.aspectRatio ? injectAspectIntoPrompt(req.prompt, req.aspectRatio) : req.prompt;
     const body = {
       model: req.model,
-      messages: [{ role: "user", content: req.prompt }],
+      messages: [{ role: "user", content: effectivePrompt }],
       modalities: ["image", "text"],
       ...req.params ?? {}
     };
@@ -57631,6 +57684,14 @@ async function generateImage(args, config, opts = {}) {
   if (!args.prompt || args.prompt.trim().length === 0) {
     throw new StructuredError("VALIDATION_ERROR", "prompt is required", "Pass a non-empty prompt.");
   }
+  if (args.aspectRatio !== void 0 && !isAspectRatio(args.aspectRatio)) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown aspectRatio: ${String(args.aspectRatio)}`,
+      `Use one of 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9.`
+    );
+  }
+  const aspectRatio = args.aspectRatio;
   let resolvedPrompt = args.prompt;
   let presetProvider;
   let presetTier;
@@ -57674,7 +57735,11 @@ async function generateImage(args, config, opts = {}) {
     model: slot.model,
     modality: "image",
     text: resolvedPrompt,
-    params: { ...slot.params, ...referenceImage ? { ref: referenceImage.path ?? "buffer" } : {} }
+    params: {
+      ...slot.params,
+      ...aspectRatio ? { aspectRatio } : {},
+      ...referenceImage ? { ref: referenceImage.path ?? "buffer" } : {}
+    }
   });
   const cached = await lookupCache(cacheKey);
   let budgetWarning = null;
@@ -57715,7 +57780,8 @@ async function generateImage(args, config, opts = {}) {
         prompt: resolvedPrompt,
         model: slot.model,
         params: slot.params,
-        referenceImage
+        referenceImage,
+        aspectRatio
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -57745,7 +57811,8 @@ async function generateImage(args, config, opts = {}) {
           prompt: resolvedPrompt,
           model: resolvedSlot.model,
           params: resolvedSlot.params,
-          referenceImage
+          referenceImage,
+          aspectRatio
         });
       }
     });
@@ -57833,7 +57900,8 @@ async function generateImage(args, config, opts = {}) {
     params: slot.params,
     input: {
       prompt: resolvedPrompt,
-      ...args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}
+      ...args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {},
+      ...aspectRatio ? { aspectRatio } : {}
     },
     output: { files: [filePath], mimeType },
     cost: { ...cost, total: chargedCost },
@@ -59305,7 +59373,7 @@ Pick a keeper with pick_variant --keeper <path> --variants ${variantPaths.length
 
 // src/cli.ts
 init_errors();
-var VERSION3 = "0.0.1";
+var VERSION3 = "0.1.0";
 function printHelp(imageOutputDir, audioOutputDir) {
   process.stdout.write(`
 claude-image-tts-gen-cli v${VERSION3}
@@ -59349,6 +59417,7 @@ Options:
       --webp-quality <n>        Default 85
       --style <name>            Apply saved image style preset on generation
       --reference <path>        Reference image (image-to-image edit)
+  -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
       --save-style <name>       Save a style preset (use --provider/--tier/--prefix/--suffix)
       --save-voice <name>       Save a voice preset (use --provider/--tier/--voice)
@@ -59422,6 +59491,7 @@ async function main() {
         "webp-quality": { type: "string", description: "1..100, default 85" },
         style: { type: "string", description: "Apply saved style preset on image gen" },
         reference: { type: "string", description: "Reference image path (image-to-image)" },
+        "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
         "save-style": { type: "string", description: "Save image style preset (name); --provider/--tier/--prefix/--suffix" },
         "save-voice": { type: "string", description: "Save voice preset (name); --provider/--tier/--voice" },
@@ -59658,6 +59728,7 @@ async function main() {
         model: values.model,
         style: values.style,
         referenceImagePath: values.reference,
+        aspectRatio: values["aspect-ratio"],
         outputPath: values.output
       },
       config

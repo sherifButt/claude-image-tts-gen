@@ -1,0 +1,64 @@
+export const ASPECT_RATIOS = [
+  "1:1",
+  "4:3",
+  "3:4",
+  "16:9",
+  "9:16",
+  "3:2",
+  "2:3",
+  "21:9",
+] as const;
+
+export type AspectRatio = (typeof ASPECT_RATIOS)[number];
+
+export function isAspectRatio(v: unknown): v is AspectRatio {
+  return typeof v === "string" && (ASPECT_RATIOS as readonly string[]).includes(v);
+}
+
+/**
+ * gpt-image-1 only supports three concrete sizes. Map each aspect into the
+ * nearest bucket: square, landscape (3:2), or portrait (2:3).
+ */
+export function aspectToOpenAISize(
+  aspect: AspectRatio,
+): "1024x1024" | "1536x1024" | "1024x1536" {
+  switch (aspect) {
+    case "1:1":
+      return "1024x1024";
+    case "4:3":
+    case "3:2":
+    case "16:9":
+    case "21:9":
+      return "1536x1024";
+    case "3:4":
+    case "2:3":
+    case "9:16":
+      return "1024x1536";
+  }
+}
+
+const LABELS: Record<AspectRatio, string> = {
+  "1:1": "square",
+  "4:3": "classic landscape",
+  "3:4": "classic portrait",
+  "16:9": "widescreen landscape",
+  "9:16": "vertical / mobile portrait",
+  "3:2": "photo landscape",
+  "2:3": "photo portrait",
+  "21:9": "ultra-wide cinematic",
+};
+
+export function describeAspect(aspect: AspectRatio): string {
+  return `${aspect} (${LABELS[aspect]})`;
+}
+
+/**
+ * Belt-and-suspenders for providers without a formal aspect param (Gemini
+ * Flash Image today): prepend a one-line directive so the model composes
+ * for the requested ratio. Idempotent: if the prompt already mentions the
+ * ratio verbatim, skip.
+ */
+export function injectAspectIntoPrompt(prompt: string, aspect: AspectRatio): string {
+  if (prompt.includes(aspect)) return prompt;
+  return `Aspect ratio: ${describeAspect(aspect)}. ${prompt}`;
+}

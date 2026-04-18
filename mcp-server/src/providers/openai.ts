@@ -1,4 +1,5 @@
 import OpenAI, { toFile } from "openai";
+import { aspectToOpenAISize } from "../util/aspect.js";
 import type {
   ImageGenRequest,
   ImageGenResult,
@@ -28,7 +29,9 @@ export class OpenAIProvider implements ImageProvider, TtsProvider {
   async generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
     const params = req.params ?? {};
     const quality = (params.quality as ImageQuality | undefined) ?? "auto";
-    const size = (params.size as ImageSize | undefined) ?? "auto";
+    const size: ImageSize = req.aspectRatio
+      ? aspectToOpenAISize(req.aspectRatio)
+      : ((params.size as ImageSize | undefined) ?? "auto");
 
     let item;
     if (req.referenceImage) {

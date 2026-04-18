@@ -1,3 +1,4 @@
+import { injectAspectIntoPrompt } from "../util/aspect.js";
 import type {
   ImageGenRequest,
   ImageGenResult,
@@ -36,9 +37,12 @@ export class OpenRouterProvider implements ImageProvider {
   }
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
+    const effectivePrompt = req.aspectRatio
+      ? injectAspectIntoPrompt(req.prompt, req.aspectRatio)
+      : req.prompt;
     const body = {
       model: req.model,
-      messages: [{ role: "user", content: req.prompt }],
+      messages: [{ role: "user", content: effectivePrompt }],
       modalities: ["image", "text"],
       ...(req.params ?? {}),
     };

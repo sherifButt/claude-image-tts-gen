@@ -66416,6 +66416,53 @@ function getApiKeyFromEnv() {
   return envGoogleApiKey || envGeminiApiKey || void 0;
 }
 
+// src/util/aspect.ts
+var ASPECT_RATIOS = [
+  "1:1",
+  "4:3",
+  "3:4",
+  "16:9",
+  "9:16",
+  "3:2",
+  "2:3",
+  "21:9"
+];
+function isAspectRatio(v) {
+  return typeof v === "string" && ASPECT_RATIOS.includes(v);
+}
+function aspectToOpenAISize(aspect) {
+  switch (aspect) {
+    case "1:1":
+      return "1024x1024";
+    case "4:3":
+    case "3:2":
+    case "16:9":
+    case "21:9":
+      return "1536x1024";
+    case "3:4":
+    case "2:3":
+    case "9:16":
+      return "1024x1536";
+  }
+}
+var LABELS = {
+  "1:1": "square",
+  "4:3": "classic landscape",
+  "3:4": "classic portrait",
+  "16:9": "widescreen landscape",
+  "9:16": "vertical / mobile portrait",
+  "3:2": "photo landscape",
+  "2:3": "photo portrait",
+  "21:9": "ultra-wide cinematic"
+};
+function describeAspect(aspect) {
+  return `${aspect} (${LABELS[aspect]})`;
+}
+function injectAspectIntoPrompt(prompt, aspect) {
+  if (prompt.includes(aspect)) return prompt;
+  return `Aspect ratio: ${describeAspect(aspect)}. ${prompt}`;
+}
+
 // src/providers/google.ts
 var GoogleProvider = class {
   id = "google";
@@ -66424,6 +66471,7 @@ var GoogleProvider = class {
     this.client = new GoogleGenAI({ apiKey: opts.apiKey });
   }
   async generateImage(req) {
+    const effectivePrompt = req.aspectRatio ? injectAspectIntoPrompt(req.prompt, req.aspectRatio) : req.prompt;
     const contents = req.referenceImage ? [
       {
         role: "user",
@@ -66434,13 +66482,15 @@ var GoogleProvider = class {
               data: req.referenceImage.data.toString("base64")
             }
           },
-          { text: req.prompt }
+          { text: effectivePrompt }
         ]
       }
-    ] : req.prompt;
+    ] : effectivePrompt;
+    const config3 = req.aspectRatio ? { imageConfig: { aspectRatio: req.aspectRatio } } : void 0;
     const response = await this.client.models.generateContent({
       model: req.model,
-      contents
+      contents,
+      ...config3 ? { config: config3 } : {}
     });
     const parts = response.candidates?.[0]?.content?.parts ?? [];
     for (const part of parts) {
@@ -73648,10 +73698,12 @@ var LMStudioProvider = class {
         providerUsed: this.id
       };
     }
+    const size = req.aspectRatio ? aspectToOpenAISize(req.aspectRatio) : void 0;
     const response = await this.client.images.generate({
       model: req.model,
       prompt: req.prompt,
-      n: 1
+      n: 1,
+      ...size ? { size } : {}
     });
     const item = response.data?.[0];
     if (!item?.b64_json) {
@@ -73724,7 +73776,7 @@ var OpenAIProvider = class {
   async generateImage(req) {
     const params = req.params ?? {};
     const quality = params.quality ?? "auto";
-    const size = params.size ?? "auto";
+    const size = req.aspectRatio ? aspectToOpenAISize(req.aspectRatio) : params.size ?? "auto";
     let item;
     if (req.referenceImage) {
       const ext = (req.referenceImage.mimeType.split("/")[1] ?? "png").replace(
@@ -73810,9 +73862,10 @@ var OpenRouterProvider = class {
     this.apiKey = opts.apiKey;
   }
   async generateImage(req) {
+    const effectivePrompt = req.aspectRatio ? injectAspectIntoPrompt(req.prompt, req.aspectRatio) : req.prompt;
     const body = {
       model: req.model,
-      messages: [{ role: "user", content: req.prompt }],
+      messages: [{ role: "user", content: effectivePrompt }],
       modalities: ["image", "text"],
       ...req.params ?? {}
     };
@@ -75536,6 +75589,14 @@ async function generateImage(args, config3, opts = {}) {
   if (!args.prompt || args.prompt.trim().length === 0) {
     throw new StructuredError("VALIDATION_ERROR", "prompt is required", "Pass a non-empty prompt.");
   }
+  if (args.aspectRatio !== void 0 && !isAspectRatio(args.aspectRatio)) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown aspectRatio: ${String(args.aspectRatio)}`,
+      `Use one of 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9.`
+    );
+  }
+  const aspectRatio = args.aspectRatio;
   let resolvedPrompt = args.prompt;
   let presetProvider;
   let presetTier;
@@ -75579,7 +75640,11 @@ async function generateImage(args, config3, opts = {}) {
     model: slot.model,
     modality: "image",
     text: resolvedPrompt,
-    params: { ...slot.params, ...referenceImage ? { ref: referenceImage.path ?? "buffer" } : {} }
+    params: {
+      ...slot.params,
+      ...aspectRatio ? { aspectRatio } : {},
+      ...referenceImage ? { ref: referenceImage.path ?? "buffer" } : {}
+    }
   });
   const cached2 = await lookupCache(cacheKey);
   let budgetWarning = null;
@@ -75620,7 +75685,8 @@ async function generateImage(args, config3, opts = {}) {
         prompt: resolvedPrompt,
         model: slot.model,
         params: slot.params,
-        referenceImage
+        referenceImage,
+        aspectRatio
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -75650,7 +75716,8 @@ async function generateImage(args, config3, opts = {}) {
           prompt: resolvedPrompt,
           model: resolvedSlot.model,
           params: resolvedSlot.params,
-          referenceImage
+          referenceImage,
+          aspectRatio
         });
       }
     });
@@ -75738,7 +75805,8 @@ async function generateImage(args, config3, opts = {}) {
     params: slot.params,
     input: {
       prompt: resolvedPrompt,
-      ...args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}
+      ...args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {},
+      ...aspectRatio ? { aspectRatio } : {}
     },
     output: { files: [filePath], mimeType },
     cost: { ...cost, total: chargedCost },
@@ -77352,6 +77420,11 @@ var imageInputSchema = {
     referenceImagePath: {
       type: "string",
       description: "Path to a reference image (image-to-image). Supports gpt-image-1 (edits) and Gemini multimodal."
+    },
+    aspectRatio: {
+      type: "string",
+      enum: ["1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "21:9"],
+      description: "Output aspect ratio. Defaults to 1:1 if omitted. OG / social-landscape \u2192 16:9 or 3:2; story/mobile portrait \u2192 9:16; Instagram square \u2192 1:1."
     }
   },
   required: ["prompt"]

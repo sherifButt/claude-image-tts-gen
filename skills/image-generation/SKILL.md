@@ -34,6 +34,25 @@ for X", "I need an OG card", "draw a diagram of Y".
 Default to `small` when in doubt. Surface the cost in your reply so the
 user can ask for `pro` if they want more.
 
+## Pick the aspect ratio
+
+Always pass `aspectRatio` when the user's intent implies a shape — don't rely
+on pixel dimensions in the prompt text (providers ignore them). Default `1:1`
+when nothing is implied.
+
+| Intent                                         | `aspectRatio` |
+|-----------------------------------------------|---------------|
+| Square post, avatar, icon, logo               | `1:1`         |
+| Open Graph card, blog hero, Twitter card, LinkedIn | `16:9`    |
+| Photo landscape, marketing banner             | `3:2`         |
+| Photo portrait, magazine cover                | `2:3`         |
+| Instagram story, TikTok, mobile hero, 9:16 video thumb | `9:16` |
+| Ultra-wide cinematic                          | `21:9`        |
+| Classic 4:3 (slides, older displays)          | `4:3`         |
+
+The 1200×630 OG preset maps to `16:9` (closest bucket on gpt-image-1) or `3:2`.
+For exact OG dimensions, generate at `16:9` then pipe through `post_process --presets og`.
+
 ## Pick the provider
 
 - **Default `google`** (Gemini Flash Image) — cheapest, supports batch,

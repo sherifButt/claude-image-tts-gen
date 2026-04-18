@@ -21,6 +21,7 @@ import { existsSync } from "node:fs";
 import { readStylePresets } from "../presets/store.js";
 import type { ReferenceImage } from "../providers/types.js";
 import { extensionForMime } from "../util/output.js";
+import { isAspectRatio, type AspectRatio } from "../util/aspect.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
@@ -35,6 +36,8 @@ export interface GenerateImageArgs {
   style?: string;
   /** Path to a reference image to use as input (image-to-image). */
   referenceImagePath?: string;
+  /** Output aspect ratio. Defaults to 1:1 when omitted. */
+  aspectRatio?: AspectRatio;
 }
 
 export interface GenerateImageOutput {
@@ -87,6 +90,15 @@ export async function generateImage(
   if (!args.prompt || args.prompt.trim().length === 0) {
     throw new StructuredError("VALIDATION_ERROR", "prompt is required", "Pass a non-empty prompt.");
   }
+
+  if (args.aspectRatio !== undefined && !isAspectRatio(args.aspectRatio)) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown aspectRatio: ${String(args.aspectRatio)}`,
+      `Use one of 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9.`,
+    );
+  }
+  const aspectRatio = args.aspectRatio;
 
   // Apply style preset if requested. Explicit args still win.
   let resolvedPrompt = args.prompt;
@@ -143,7 +155,11 @@ export async function generateImage(
     model: slot.model,
     modality: "image",
     text: resolvedPrompt,
-    params: { ...slot.params, ...(referenceImage ? { ref: referenceImage.path ?? "buffer" } : {}) },
+    params: {
+      ...slot.params,
+      ...(aspectRatio ? { aspectRatio } : {}),
+      ...(referenceImage ? { ref: referenceImage.path ?? "buffer" } : {}),
+    },
   });
   const cached = await lookupCache(cacheKey);
 
@@ -190,6 +206,7 @@ export async function generateImage(
         model: slot.model,
         params: slot.params,
         referenceImage,
+        aspectRatio,
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -220,6 +237,7 @@ export async function generateImage(
           model: resolvedSlot.model,
           params: resolvedSlot.params,
           referenceImage,
+          aspectRatio,
         });
       },
     });
@@ -314,6 +332,7 @@ export async function generateImage(
     input: {
       prompt: resolvedPrompt,
       ...(args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}),
+      ...(aspectRatio ? { aspectRatio } : {}),
     },
     output: { files: [filePath], mimeType },
     cost: { ...cost, total: chargedCost },

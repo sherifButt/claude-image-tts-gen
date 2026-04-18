@@ -11,7 +11,7 @@ import { checkLmStudio } from "./tools/check-lmstudio.js";
 import { createAssets, type CreateAssetsMode } from "./tools/create-assets.js";
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { exportSpend } from "./tools/export-spend.js";
-import { generateImage } from "./tools/generate-image.js";
+import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
 import { healthCheck } from "./tools/health-check.js";
 import { iterate } from "./tools/iterate.js";
@@ -30,7 +30,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.0.1";
+const VERSION = "0.1.0";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`
@@ -75,6 +75,7 @@ Options:
       --webp-quality <n>        Default 85
       --style <name>            Apply saved image style preset on generation
       --reference <path>        Reference image (image-to-image edit)
+  -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
       --save-style <name>       Save a style preset (use --provider/--tier/--prefix/--suffix)
       --save-voice <name>       Save a voice preset (use --provider/--tier/--voice)
@@ -156,6 +157,7 @@ async function main(): Promise<void> {
         "webp-quality": { type: "string", description: "1..100, default 85" },
         style: { type: "string", description: "Apply saved style preset on image gen" },
         reference: { type: "string", description: "Reference image path (image-to-image)" },
+        "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
         "save-style": { type: "string", description: "Save image style preset (name); --provider/--tier/--prefix/--suffix" },
         "save-voice": { type: "string", description: "Save voice preset (name); --provider/--tier/--voice" },
@@ -450,6 +452,7 @@ async function main(): Promise<void> {
             model: values.model,
             style: values.style,
             referenceImagePath: values.reference,
+            aspectRatio: values["aspect-ratio"] as GenerateImageArgs["aspectRatio"],
             outputPath: values.output,
           },
           config,

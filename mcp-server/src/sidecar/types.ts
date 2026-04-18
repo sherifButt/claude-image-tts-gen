@@ -10,6 +10,8 @@ export interface SidecarImageInput {
   prompt: string;
   /** Path to a reference image used as conditioning input (image-to-image). */
   referenceImagePath?: string;
+  /** Aspect ratio passed to the provider at generation time. */
+  aspectRatio?: import("../util/aspect.js").AspectRatio;
 }
 
 export interface SidecarSpeechInput {

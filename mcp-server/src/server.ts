@@ -134,6 +134,12 @@ const imageInputSchema = {
       type: "string",
       description: "Path to a reference image (image-to-image). Supports gpt-image-1 (edits) and Gemini multimodal.",
     },
+    aspectRatio: {
+      type: "string",
+      enum: ["1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "21:9"],
+      description:
+        "Output aspect ratio. Defaults to 1:1 if omitted. OG / social-landscape → 16:9 or 3:2; story/mobile portrait → 9:16; Instagram square → 1:1.",
+    },
   },
   required: ["prompt"],
 } as const;

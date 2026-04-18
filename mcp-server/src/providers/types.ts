@@ -13,6 +13,7 @@ export interface ImageGenRequest {
   model: string;
   params?: Record<string, unknown>;
   referenceImage?: ReferenceImage;
+  aspectRatio?: import("../util/aspect.js").AspectRatio;
 }
 
 export interface ImageGenResult {

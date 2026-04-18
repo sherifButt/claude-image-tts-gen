@@ -1,4 +1,5 @@
 import OpenAI, { toFile } from "openai";
+import { aspectToOpenAISize } from "../util/aspect.js";
 import type {
   ImageGenRequest,
   ImageGenResult,
@@ -59,10 +60,12 @@ export class LMStudioProvider implements ImageProvider, TtsProvider {
       };
     }
 
+    const size = req.aspectRatio ? aspectToOpenAISize(req.aspectRatio) : undefined;
     const response = await this.client.images.generate({
       model: req.model,
       prompt: req.prompt,
       n: 1,
+      ...(size ? { size } : {}),
     });
     const item = response.data?.[0];
     if (!item?.b64_json) {
