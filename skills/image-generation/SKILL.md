@@ -55,12 +55,25 @@ For exact OG dimensions, generate at `16:9` then pipe through `post_process --pr
 
 ## Pick the provider
 
+Before choosing anything other than the default, **call `list_providers` with
+`modality:"image"` once per session**. The response marks each slot with
+`implemented`, `keyConfigured`, and `usable`. Only pick rows where
+`usable: true`. If none of the usable rows match the intent (e.g. user asked
+for `pro` tier but only `small` is usable), tell the user which env var to
+set instead of thrashing through fallbacks.
+
 - **Default `google`** (Gemini Flash Image) — cheapest, supports batch,
-  good quality at small tier.
+  good quality at small tier. Only implemented tier: `small`.
 - Switch to `openai` (gpt-image-1) when the user wants better text
-  rendering inside the image, or photoreal portraits.
+  rendering inside the image or photoreal portraits. Tiers `small | mid | pro`
+  all implemented — but requires `OPENAI_API_KEY`.
 - `openrouter` is a passthrough — only use when the user explicitly
   asks for it (single-key billing across providers).
+
+If you call `generate_image` and get a `VALIDATION_ERROR` with `meta.availableTiers`
+or `meta.providersForTier`, use those lists instead of re-guessing. If you get a
+`CONFIG_ERROR` saying a provider's key isn't set, tell the user — don't retry
+the same provider or switch providers silently.
 
 ## When the user has multiple prompts
 

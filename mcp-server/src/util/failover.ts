@@ -32,9 +32,26 @@ export function getFailoverOrder(
   config: Config,
 ): ProviderId[] {
   const base = DEFAULT_ORDER[modality];
-  // Put preferred first, then the rest in default order, dedupe, drop those with no key.
   const ordered = [preferred, ...base.filter((p) => p !== preferred)];
-  return ordered.filter((p) => hasKeyFor(p, config));
+  // Drop keyless providers EXCEPT the preferred one — we want the preferred
+  // to surface a clear CONFIG_ERROR rather than silently swap to a different
+  // provider (which would look like "--provider is being ignored" to callers).
+  return ordered.filter((p, i) => i === 0 || hasKeyFor(p, config));
+}
+
+export function envVarNameFor(providerId: ProviderId): string {
+  switch (providerId) {
+    case "google":
+      return "GEMINI_API_KEY";
+    case "openai":
+      return "OPENAI_API_KEY";
+    case "openrouter":
+      return "OPENROUTER_API_KEY";
+    case "elevenlabs":
+      return "ELEVENLABS_API_KEY";
+    case "lmstudio":
+      return "LMSTUDIO_ENABLED (opt-in) / LMSTUDIO_BASE_URL";
+  }
 }
 
 export function isRetryable(err: unknown): boolean {
@@ -77,6 +94,23 @@ export async function withFailover<TResult>(
       "CONFIG_ERROR",
       `No provider with a configured API key for ${opts.modality}`,
       `Set at least one of GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, ELEVENLABS_API_KEY.`,
+    );
+  }
+
+  // The preferred provider sits at order[0] regardless of whether it has a
+  // key (see getFailoverOrder). If it lacks one, bail with a clear error
+  // rather than silently calling a different provider.
+  if (!hasKeyFor(opts.preferredProvider, opts.config)) {
+    throw new StructuredError(
+      "CONFIG_ERROR",
+      `${opts.preferredProvider} is not configured — ${envVarNameFor(opts.preferredProvider)} is not set`,
+      `Set ${envVarNameFor(opts.preferredProvider)}, or omit --provider to let the default provider handle it.`,
+      undefined,
+      {
+        requestedProvider: opts.preferredProvider,
+        availableProviders: (["google", "openai", "openrouter", "elevenlabs", "lmstudio"] as ProviderId[])
+          .filter((p) => hasKeyFor(p, opts.config)),
+      },
     );
   }
 

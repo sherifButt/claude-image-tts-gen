@@ -17,19 +17,29 @@ export interface StructuredErrorJson {
   error: string;
   suggestedFix: string;
   cause?: string;
+  /** Extra machine-readable hints (e.g. availableTiers, providersForTier). */
+  meta?: Record<string, unknown>;
 }
 
 export class StructuredError extends Error {
   readonly code: ErrorCode;
   readonly suggestedFix: string;
   readonly cause?: string;
+  readonly meta?: Record<string, unknown>;
 
-  constructor(code: ErrorCode, message: string, suggestedFix: string, cause?: string) {
+  constructor(
+    code: ErrorCode,
+    message: string,
+    suggestedFix: string,
+    cause?: string,
+    meta?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = "StructuredError";
     this.code = code;
     this.suggestedFix = suggestedFix;
     this.cause = cause;
+    this.meta = meta;
   }
 
   toJSON(): StructuredErrorJson {
@@ -39,6 +49,7 @@ export class StructuredError extends Error {
       error: this.message,
       suggestedFix: this.suggestedFix,
       ...(this.cause ? { cause: this.cause } : {}),
+      ...(this.meta ? { meta: this.meta } : {}),
     };
   }
 }

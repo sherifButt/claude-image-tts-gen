@@ -759,22 +759,53 @@ async function handleRegenerate(args: unknown) {
   };
 }
 
+function providerKeyConfigured(providerId: string): boolean {
+  switch (providerId) {
+    case "google":
+      return Boolean(config.geminiApiKey);
+    case "openai":
+      return Boolean(config.openaiApiKey);
+    case "openrouter":
+      return Boolean(config.openrouterApiKey);
+    case "elevenlabs":
+      return Boolean(config.elevenlabsApiKey);
+    case "lmstudio":
+      return config.lmstudioEnabled;
+    default:
+      return false;
+  }
+}
+
 function handleListProviders(args: unknown) {
   const { modality } = (args ?? {}) as { modality?: "image" | "tts" };
   if (modality !== "image" && modality !== "tts") {
     throw new Error("modality must be 'image' or 'tts'");
   }
-  const entries = listDeclared(modality);
+  const entries = listDeclared(modality).map((e) => ({
+    ...e,
+    keyConfigured: providerKeyConfigured(e.provider),
+    usable: e.implemented && providerKeyConfigured(e.provider),
+  }));
   const lines = entries.map(
     (e) =>
       `  ${e.provider}/${e.tier}: ${e.model}` +
       `${e.batchable ? " [batch]" : ""}` +
       `${e.voices.length > 0 ? ` voices=${e.voices.join("|")}` : ""}` +
-      `${e.implemented ? "" : " (not yet implemented)"}`,
+      `${e.implemented ? "" : " (not yet implemented)"}` +
+      `${e.keyConfigured ? "" : " (no API key — unusable now)"}`,
   );
+  const usableCount = entries.filter((e) => e.usable).length;
   return {
-    structuredContent: { modality, entries },
-    content: [{ type: "text", text: `Declared ${modality} providers:\n${lines.join("\n")}` }],
+    structuredContent: { modality, entries, usableCount },
+    content: [
+      {
+        type: "text",
+        text:
+          `Declared ${modality} providers (${usableCount} usable right now):\n` +
+          lines.join("\n") +
+          `\n\nPick from the rows without "(no API key…)" or "(not yet implemented)" for a guaranteed call.`,
+      },
+    ],
   };
 }
 

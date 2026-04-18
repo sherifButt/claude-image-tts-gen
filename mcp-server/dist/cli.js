@@ -136,12 +136,14 @@ var init_errors = __esm({
       code;
       suggestedFix;
       cause;
-      constructor(code, message, suggestedFix, cause) {
+      meta;
+      constructor(code, message, suggestedFix, cause, meta) {
         super(message);
         this.name = "StructuredError";
         this.code = code;
         this.suggestedFix = suggestedFix;
         this.cause = cause;
+        this.meta = meta;
       }
       toJSON() {
         return {
@@ -149,7 +151,8 @@ var init_errors = __esm({
           errorCode: this.code,
           error: this.message,
           suggestedFix: this.suggestedFix,
-          ...this.cause ? { cause: this.cause } : {}
+          ...this.cause ? { cause: this.cause } : {},
+          ...this.meta ? { meta: this.meta } : {}
         };
       }
     };
@@ -30438,6 +30441,9 @@ function requireElevenLabsKey(config) {
   return requireKey("ELEVENLABS_API_KEY", "elevenlabs", config.elevenlabsApiKey);
 }
 
+// src/providers/registry.ts
+init_errors();
+
 // src/providers/elevenlabs.ts
 var ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech";
 var VOICE_MAP = {
@@ -56164,20 +56170,49 @@ function getDefaultProvider(modality) {
 function getDefaultTier() {
   return DEFAULT_TIER;
 }
+function tiersImplementedBy(providerId, modality) {
+  const entry = MATRIX.find((e2) => e2.id === providerId);
+  if (!entry) return [];
+  return ["small", "mid", "pro"].filter(
+    (t2) => entry[modality][t2].model !== null && entry[modality][t2].implemented
+  );
+}
+function providersImplementingTier(modality, tier) {
+  return MATRIX.filter((e2) => {
+    const slot = e2[modality][tier];
+    return slot.model !== null && slot.implemented;
+  }).map((e2) => e2.id);
+}
 function resolveSlot(opts) {
   const entry = MATRIX.find((e2) => e2.id === opts.provider);
   if (!entry) {
-    throw new Error(`Unknown provider: ${opts.provider}`);
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown provider: ${opts.provider}`,
+      "Run list_providers to see valid provider ids."
+    );
   }
   const slot = entry[opts.modality][opts.tier];
   if (!slot.model) {
-    throw new Error(
-      `${opts.provider} does not offer ${opts.modality} at ${opts.tier} tier. Try a different tier or provider \u2014 see list_providers tool.`
+    const availableTiers = tiersImplementedBy(opts.provider, opts.modality);
+    const providersForTier = providersImplementingTier(opts.modality, opts.tier);
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `${opts.provider} does not offer ${opts.modality} at ${opts.tier} tier`,
+      availableTiers.length > 0 ? `Try ${opts.provider} at tier ${availableTiers.join(" or ")}, or switch provider to ${providersForTier.join(" / ") || "another"}.` : `${opts.provider} has no implemented ${opts.modality} slots. Try providers: ${providersForTier.join(", ") || "(none)"}.`,
+      void 0,
+      { availableTiers, providersForTier }
     );
   }
   if (!slot.implemented) {
-    throw new Error(
-      `${opts.provider} ${opts.modality} ${opts.tier} (${slot.model}) is declared but not yet implemented in this version.`
+    const availableTiers = tiersImplementedBy(opts.provider, opts.modality);
+    const providersForTier = providersImplementingTier(opts.modality, opts.tier);
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `${opts.provider} ${opts.modality} ${opts.tier} (${slot.model}) is declared but not yet implemented`,
+      `Use ${opts.provider}/${availableTiers.join("|") || "(none implemented)"} or switch provider to ${providersForTier.join(" / ") || "another"}.`,
+      void 0,
+      { availableTiers, providersForTier }
     );
   }
   return {
@@ -57597,7 +57632,21 @@ function hasKeyFor(providerId, config) {
 function getFailoverOrder(modality, preferred, config) {
   const base = DEFAULT_ORDER[modality];
   const ordered = [preferred, ...base.filter((p) => p !== preferred)];
-  return ordered.filter((p) => hasKeyFor(p, config));
+  return ordered.filter((p, i2) => i2 === 0 || hasKeyFor(p, config));
+}
+function envVarNameFor(providerId) {
+  switch (providerId) {
+    case "google":
+      return "GEMINI_API_KEY";
+    case "openai":
+      return "OPENAI_API_KEY";
+    case "openrouter":
+      return "OPENROUTER_API_KEY";
+    case "elevenlabs":
+      return "ELEVENLABS_API_KEY";
+    case "lmstudio":
+      return "LMSTUDIO_ENABLED (opt-in) / LMSTUDIO_BASE_URL";
+  }
 }
 function isRetryable(err) {
   if (!isStructuredError(err)) return false;
@@ -57610,6 +57659,18 @@ async function withFailover(opts) {
       "CONFIG_ERROR",
       `No provider with a configured API key for ${opts.modality}`,
       `Set at least one of GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, ELEVENLABS_API_KEY.`
+    );
+  }
+  if (!hasKeyFor(opts.preferredProvider, opts.config)) {
+    throw new StructuredError(
+      "CONFIG_ERROR",
+      `${opts.preferredProvider} is not configured \u2014 ${envVarNameFor(opts.preferredProvider)} is not set`,
+      `Set ${envVarNameFor(opts.preferredProvider)}, or omit --provider to let the default provider handle it.`,
+      void 0,
+      {
+        requestedProvider: opts.preferredProvider,
+        availableProviders: ["google", "openai", "openrouter", "elevenlabs", "lmstudio"].filter((p) => hasKeyFor(p, opts.config))
+      }
     );
   }
   let originalProvider = null;
@@ -59373,7 +59434,7 @@ Pick a keeper with pick_variant --keeper <path> --variants ${variantPaths.length
 
 // src/cli.ts
 init_errors();
-var VERSION3 = "0.1.0";
+var VERSION3 = "0.2.0";
 function printHelp(imageOutputDir, audioOutputDir) {
   process.stdout.write(`
 claude-image-tts-gen-cli v${VERSION3}

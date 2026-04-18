@@ -5,6 +5,7 @@ import {
   requireOpenAIKey,
   requireOpenRouterKey,
 } from "../config.js";
+import { StructuredError } from "../util/errors.js";
 import {
   ELEVENLABS_DEFAULT_VOICE,
   ELEVENLABS_FRIENDLY_VOICES,
@@ -186,6 +187,21 @@ export interface ResolvedSlot {
   maxCharsPerCall: number | undefined;
 }
 
+function tiersImplementedBy(providerId: ProviderId, modality: Modality): Tier[] {
+  const entry = MATRIX.find((e) => e.id === providerId);
+  if (!entry) return [];
+  return (["small", "mid", "pro"] as const).filter(
+    (t) => entry[modality][t].model !== null && entry[modality][t].implemented,
+  );
+}
+
+function providersImplementingTier(modality: Modality, tier: Tier): ProviderId[] {
+  return MATRIX.filter((e) => {
+    const slot = e[modality][tier];
+    return slot.model !== null && slot.implemented;
+  }).map((e) => e.id);
+}
+
 export function resolveSlot(opts: {
   provider: ProviderId;
   modality: Modality;
@@ -193,19 +209,35 @@ export function resolveSlot(opts: {
 }): ResolvedSlot {
   const entry = MATRIX.find((e) => e.id === opts.provider);
   if (!entry) {
-    throw new Error(`Unknown provider: ${opts.provider}`);
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown provider: ${opts.provider}`,
+      "Run list_providers to see valid provider ids.",
+    );
   }
   const slot = entry[opts.modality][opts.tier];
   if (!slot.model) {
-    throw new Error(
-      `${opts.provider} does not offer ${opts.modality} at ${opts.tier} tier. ` +
-        `Try a different tier or provider — see list_providers tool.`,
+    const availableTiers = tiersImplementedBy(opts.provider, opts.modality);
+    const providersForTier = providersImplementingTier(opts.modality, opts.tier);
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `${opts.provider} does not offer ${opts.modality} at ${opts.tier} tier`,
+      availableTiers.length > 0
+        ? `Try ${opts.provider} at tier ${availableTiers.join(" or ")}, or switch provider to ${providersForTier.join(" / ") || "another"}.`
+        : `${opts.provider} has no implemented ${opts.modality} slots. Try providers: ${providersForTier.join(", ") || "(none)"}.`,
+      undefined,
+      { availableTiers, providersForTier },
     );
   }
   if (!slot.implemented) {
-    throw new Error(
-      `${opts.provider} ${opts.modality} ${opts.tier} (${slot.model}) is declared but ` +
-        `not yet implemented in this version.`,
+    const availableTiers = tiersImplementedBy(opts.provider, opts.modality);
+    const providersForTier = providersImplementingTier(opts.modality, opts.tier);
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `${opts.provider} ${opts.modality} ${opts.tier} (${slot.model}) is declared but not yet implemented`,
+      `Use ${opts.provider}/${availableTiers.join("|") || "(none implemented)"} or switch provider to ${providersForTier.join(" / ") || "another"}.`,
+      undefined,
+      { availableTiers, providersForTier },
     );
   }
   return {
