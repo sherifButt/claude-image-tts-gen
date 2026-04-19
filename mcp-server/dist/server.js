@@ -2990,7 +2990,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve3.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a4 = root.localRefs) === null || _a4 === void 0 ? void 0 : _a4[ref];
         const { schemaId } = this.opts;
@@ -3017,7 +3017,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve3(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3592,7 +3592,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve3(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3819,7 +3819,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve3,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -7191,7 +7191,7 @@ var require_p_retry = __commonJS({
       return error2;
     };
     var isNetworkError = (errorMessage) => networkErrorMsgs.includes(errorMessage);
-    var pRetry2 = (input, options) => new Promise((resolve3, reject) => {
+    var pRetry2 = (input, options) => new Promise((resolve4, reject) => {
       options = {
         onFailedAttempt: () => {
         },
@@ -7201,7 +7201,7 @@ var require_p_retry = __commonJS({
       const operation = retry.operation(options);
       operation.attempt(async (attemptNumber) => {
         try {
-          resolve3(await input(attemptNumber));
+          resolve4(await input(attemptNumber));
         } catch (error2) {
           if (!(error2 instanceof Error)) {
             reject(new TypeError(`Non-error was thrown: "${error2}". You should only throw errors.`));
@@ -7737,8 +7737,8 @@ var require_retry3 = __commonJS({
       }
       const delay = getNextRetryDelay(config3);
       err.config.retryConfig.currentRetryAttempt += 1;
-      const backoff = config3.retryBackoff ? config3.retryBackoff(err, delay) : new Promise((resolve3) => {
-        setTimeout(resolve3, delay);
+      const backoff = config3.retryBackoff ? config3.retryBackoff(err, delay) : new Promise((resolve4) => {
+        setTimeout(resolve4, delay);
       });
       if (config3.onRetryAttempt) {
         await config3.onRetryAttempt(err);
@@ -8629,8 +8629,8 @@ var require_helpers = __commonJS({
     function req(url, opts = {}) {
       const href = typeof url === "string" ? url : url.href;
       const req2 = (href.startsWith("https:") ? https2 : http3).request(url, opts);
-      const promise = new Promise((resolve3, reject) => {
-        req2.once("response", resolve3).once("error", reject).end();
+      const promise = new Promise((resolve4, reject) => {
+        req2.once("response", resolve4).once("error", reject).end();
       });
       req2.then = promise.then.bind(promise);
       return req2;
@@ -8807,7 +8807,7 @@ var require_parse_proxy_response = __commonJS({
     var debug_1 = __importDefault(require_src());
     var debug = (0, debug_1.default)("https-proxy-agent:parse-proxy-response");
     function parseProxyResponse(socket) {
-      return new Promise((resolve3, reject) => {
+      return new Promise((resolve4, reject) => {
         let buffersLength = 0;
         const buffers = [];
         function read() {
@@ -8873,7 +8873,7 @@ var require_parse_proxy_response = __commonJS({
           }
           debug("got proxy server response: %o %o", firstLine, headers);
           cleanup();
-          resolve3({
+          resolve4({
             connect: {
               statusCode,
               statusText,
@@ -9115,7 +9115,7 @@ var require_ponyfill_es2018 = __commonJS({
         return new originalPromise(executor);
       }
       function promiseResolvedWith(value) {
-        return newPromise((resolve3) => resolve3(value));
+        return newPromise((resolve4) => resolve4(value));
       }
       function promiseRejectedWith(reason) {
         return originalPromiseReject(reason);
@@ -9285,8 +9285,8 @@ var require_ponyfill_es2018 = __commonJS({
         return new TypeError("Cannot " + name + " a stream using a released reader");
       }
       function defaultReaderClosedPromiseInitialize(reader) {
-        reader._closedPromise = newPromise((resolve3, reject) => {
-          reader._closedPromise_resolve = resolve3;
+        reader._closedPromise = newPromise((resolve4, reject) => {
+          reader._closedPromise_resolve = resolve4;
           reader._closedPromise_reject = reject;
         });
       }
@@ -9460,8 +9460,8 @@ var require_ponyfill_es2018 = __commonJS({
           }
           let resolvePromise;
           let rejectPromise;
-          const promise = newPromise((resolve3, reject) => {
-            resolvePromise = resolve3;
+          const promise = newPromise((resolve4, reject) => {
+            resolvePromise = resolve4;
             rejectPromise = reject;
           });
           const readRequest = {
@@ -9566,8 +9566,8 @@ var require_ponyfill_es2018 = __commonJS({
           const reader = this._reader;
           let resolvePromise;
           let rejectPromise;
-          const promise = newPromise((resolve3, reject) => {
-            resolvePromise = resolve3;
+          const promise = newPromise((resolve4, reject) => {
+            resolvePromise = resolve4;
             rejectPromise = reject;
           });
           const readRequest = {
@@ -10586,8 +10586,8 @@ var require_ponyfill_es2018 = __commonJS({
           }
           let resolvePromise;
           let rejectPromise;
-          const promise = newPromise((resolve3, reject) => {
-            resolvePromise = resolve3;
+          const promise = newPromise((resolve4, reject) => {
+            resolvePromise = resolve4;
             rejectPromise = reject;
           });
           const readIntoRequest = {
@@ -10899,10 +10899,10 @@ var require_ponyfill_es2018 = __commonJS({
           wasAlreadyErroring = true;
           reason = void 0;
         }
-        const promise = newPromise((resolve3, reject) => {
+        const promise = newPromise((resolve4, reject) => {
           stream._pendingAbortRequest = {
             _promise: void 0,
-            _resolve: resolve3,
+            _resolve: resolve4,
             _reject: reject,
             _reason: reason,
             _wasAlreadyErroring: wasAlreadyErroring
@@ -10919,9 +10919,9 @@ var require_ponyfill_es2018 = __commonJS({
         if (state === "closed" || state === "errored") {
           return promiseRejectedWith(new TypeError(`The stream (in ${state} state) is not in the writable state and cannot be closed`));
         }
-        const promise = newPromise((resolve3, reject) => {
+        const promise = newPromise((resolve4, reject) => {
           const closeRequest = {
-            _resolve: resolve3,
+            _resolve: resolve4,
             _reject: reject
           };
           stream._closeRequest = closeRequest;
@@ -10934,9 +10934,9 @@ var require_ponyfill_es2018 = __commonJS({
         return promise;
       }
       function WritableStreamAddWriteRequest(stream) {
-        const promise = newPromise((resolve3, reject) => {
+        const promise = newPromise((resolve4, reject) => {
           const writeRequest = {
-            _resolve: resolve3,
+            _resolve: resolve4,
             _reject: reject
           };
           stream._writeRequests.push(writeRequest);
@@ -11552,8 +11552,8 @@ var require_ponyfill_es2018 = __commonJS({
         return new TypeError("Cannot " + name + " a stream using a released writer");
       }
       function defaultWriterClosedPromiseInitialize(writer) {
-        writer._closedPromise = newPromise((resolve3, reject) => {
-          writer._closedPromise_resolve = resolve3;
+        writer._closedPromise = newPromise((resolve4, reject) => {
+          writer._closedPromise_resolve = resolve4;
           writer._closedPromise_reject = reject;
           writer._closedPromiseState = "pending";
         });
@@ -11589,8 +11589,8 @@ var require_ponyfill_es2018 = __commonJS({
         writer._closedPromiseState = "resolved";
       }
       function defaultWriterReadyPromiseInitialize(writer) {
-        writer._readyPromise = newPromise((resolve3, reject) => {
-          writer._readyPromise_resolve = resolve3;
+        writer._readyPromise = newPromise((resolve4, reject) => {
+          writer._readyPromise_resolve = resolve4;
           writer._readyPromise_reject = reject;
         });
         writer._readyPromiseState = "pending";
@@ -11677,7 +11677,7 @@ var require_ponyfill_es2018 = __commonJS({
         source._disturbed = true;
         let shuttingDown = false;
         let currentWrite = promiseResolvedWith(void 0);
-        return newPromise((resolve3, reject) => {
+        return newPromise((resolve4, reject) => {
           let abortAlgorithm;
           if (signal !== void 0) {
             abortAlgorithm = () => {
@@ -11822,7 +11822,7 @@ var require_ponyfill_es2018 = __commonJS({
             if (isError) {
               reject(error2);
             } else {
-              resolve3(void 0);
+              resolve4(void 0);
             }
             return null;
           }
@@ -12103,8 +12103,8 @@ var require_ponyfill_es2018 = __commonJS({
         let branch1;
         let branch2;
         let resolveCancelPromise;
-        const cancelPromise = newPromise((resolve3) => {
-          resolveCancelPromise = resolve3;
+        const cancelPromise = newPromise((resolve4) => {
+          resolveCancelPromise = resolve4;
         });
         function pullAlgorithm() {
           if (reading) {
@@ -12195,8 +12195,8 @@ var require_ponyfill_es2018 = __commonJS({
         let branch1;
         let branch2;
         let resolveCancelPromise;
-        const cancelPromise = newPromise((resolve3) => {
-          resolveCancelPromise = resolve3;
+        const cancelPromise = newPromise((resolve4) => {
+          resolveCancelPromise = resolve4;
         });
         function forwardReaderError(thisReader) {
           uponRejection(thisReader._closedPromise, (r2) => {
@@ -12976,8 +12976,8 @@ var require_ponyfill_es2018 = __commonJS({
           const writableHighWaterMark = ExtractHighWaterMark(writableStrategy, 1);
           const writableSizeAlgorithm = ExtractSizeAlgorithm(writableStrategy);
           let startPromise_resolve;
-          const startPromise = newPromise((resolve3) => {
-            startPromise_resolve = resolve3;
+          const startPromise = newPromise((resolve4) => {
+            startPromise_resolve = resolve4;
           });
           InitializeTransformStream(this, startPromise, writableHighWaterMark, writableSizeAlgorithm, readableHighWaterMark, readableSizeAlgorithm);
           SetUpTransformStreamDefaultControllerFromTransformer(this, transformer);
@@ -13070,8 +13070,8 @@ var require_ponyfill_es2018 = __commonJS({
         if (stream._backpressureChangePromise !== void 0) {
           stream._backpressureChangePromise_resolve();
         }
-        stream._backpressureChangePromise = newPromise((resolve3) => {
-          stream._backpressureChangePromise_resolve = resolve3;
+        stream._backpressureChangePromise = newPromise((resolve4) => {
+          stream._backpressureChangePromise_resolve = resolve4;
         });
         stream._backpressure = backpressure;
       }
@@ -13239,8 +13239,8 @@ var require_ponyfill_es2018 = __commonJS({
           return controller._finishPromise;
         }
         const readable = stream._readable;
-        controller._finishPromise = newPromise((resolve3, reject) => {
-          controller._finishPromise_resolve = resolve3;
+        controller._finishPromise = newPromise((resolve4, reject) => {
+          controller._finishPromise_resolve = resolve4;
           controller._finishPromise_reject = reject;
         });
         const cancelPromise = controller._cancelAlgorithm(reason);
@@ -13266,8 +13266,8 @@ var require_ponyfill_es2018 = __commonJS({
           return controller._finishPromise;
         }
         const readable = stream._readable;
-        controller._finishPromise = newPromise((resolve3, reject) => {
-          controller._finishPromise_resolve = resolve3;
+        controller._finishPromise = newPromise((resolve4, reject) => {
+          controller._finishPromise_resolve = resolve4;
           controller._finishPromise_reject = reject;
         });
         const flushPromise = controller._flushAlgorithm();
@@ -13297,8 +13297,8 @@ var require_ponyfill_es2018 = __commonJS({
           return controller._finishPromise;
         }
         const writable = stream._writable;
-        controller._finishPromise = newPromise((resolve3, reject) => {
-          controller._finishPromise_resolve = resolve3;
+        controller._finishPromise = newPromise((resolve4, reject) => {
+          controller._finishPromise_resolve = resolve4;
           controller._finishPromise_reject = reject;
         });
         const cancelPromise = controller._cancelAlgorithm(reason);
@@ -15249,7 +15249,7 @@ import zlib from "node:zlib";
 import Stream2, { PassThrough as PassThrough2, pipeline as pump } from "node:stream";
 import { Buffer as Buffer3 } from "node:buffer";
 async function fetch2(url, options_) {
-  return new Promise((resolve3, reject) => {
+  return new Promise((resolve4, reject) => {
     const request = new Request(url, options_);
     const { parsedURL, options } = getNodeRequestOptions(request);
     if (!supportedSchemas.has(parsedURL.protocol)) {
@@ -15258,7 +15258,7 @@ async function fetch2(url, options_) {
     if (parsedURL.protocol === "data:") {
       const data = dist_default(request.url);
       const response2 = new Response2(data, { headers: { "Content-Type": data.typeFull } });
-      resolve3(response2);
+      resolve4(response2);
       return;
     }
     const send = (parsedURL.protocol === "https:" ? https : http2).request;
@@ -15380,7 +15380,7 @@ async function fetch2(url, options_) {
             if (responseReferrerPolicy) {
               requestOptions.referrerPolicy = responseReferrerPolicy;
             }
-            resolve3(fetch2(new Request(locationURL, requestOptions)));
+            resolve4(fetch2(new Request(locationURL, requestOptions)));
             finalize();
             return;
           }
@@ -15413,7 +15413,7 @@ async function fetch2(url, options_) {
       const codings = headers.get("Content-Encoding");
       if (!request.compress || request.method === "HEAD" || codings === null || response_.statusCode === 204 || response_.statusCode === 304) {
         response = new Response2(body, responseOptions);
-        resolve3(response);
+        resolve4(response);
         return;
       }
       const zlibOptions = {
@@ -15427,7 +15427,7 @@ async function fetch2(url, options_) {
           }
         });
         response = new Response2(body, responseOptions);
-        resolve3(response);
+        resolve4(response);
         return;
       }
       if (codings === "deflate" || codings === "x-deflate") {
@@ -15451,12 +15451,12 @@ async function fetch2(url, options_) {
             });
           }
           response = new Response2(body, responseOptions);
-          resolve3(response);
+          resolve4(response);
         });
         raw.once("end", () => {
           if (!response) {
             response = new Response2(body, responseOptions);
-            resolve3(response);
+            resolve4(response);
           }
         });
         return;
@@ -15468,11 +15468,11 @@ async function fetch2(url, options_) {
           }
         });
         response = new Response2(body, responseOptions);
-        resolve3(response);
+        resolve4(response);
         return;
       }
       response = new Response2(body, responseOptions);
-      resolve3(response);
+      resolve4(response);
     });
     writeToStream(request_, request).catch(reject);
   });
@@ -21542,7 +21542,7 @@ var require_jwtaccess = __commonJS({
         }
       }
       fromStreamAsync(inputStream) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           if (!inputStream) {
             reject(new Error("Must pass in a stream containing the service account auth settings."));
           }
@@ -21551,7 +21551,7 @@ var require_jwtaccess = __commonJS({
             try {
               const data = JSON.parse(s2);
               this.fromJSON(data);
-              resolve3();
+              resolve4();
             } catch (err) {
               reject(err);
             }
@@ -21790,7 +21790,7 @@ var require_jwtclient = __commonJS({
         }
       }
       fromStreamAsync(inputStream) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           if (!inputStream) {
             throw new Error("Must pass in a stream containing the service account auth settings.");
           }
@@ -21799,7 +21799,7 @@ var require_jwtclient = __commonJS({
             try {
               const data = JSON.parse(s2);
               this.fromJSON(data);
-              resolve3();
+              resolve4();
             } catch (e2) {
               reject(e2);
             }
@@ -21932,7 +21932,7 @@ var require_refreshclient = __commonJS({
         }
       }
       async fromStreamAsync(inputStream) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           if (!inputStream) {
             return reject(new Error("Must pass in a stream containing the user refresh token."));
           }
@@ -21941,7 +21941,7 @@ var require_refreshclient = __commonJS({
             try {
               const data = JSON.parse(s2);
               this.fromJSON(data);
-              return resolve3();
+              return resolve4();
             } catch (err) {
               return reject(err);
             }
@@ -23774,7 +23774,7 @@ var require_pluggable_auth_handler = __commonJS({
        * @return A promise that resolves with the executable response.
        */
       retrieveResponseFromExecutable(envMap) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           const child = childProcess.spawn(this.commandComponents[0], this.commandComponents.slice(1), {
             env: { ...process.env, ...Object.fromEntries(envMap) }
           });
@@ -23796,7 +23796,7 @@ var require_pluggable_auth_handler = __commonJS({
               try {
                 const responseJson = JSON.parse(output);
                 const response = new executable_response_1.ExecutableResponse(responseJson);
-                return resolve3(response);
+                return resolve4(response);
               } catch (error2) {
                 if (error2 instanceof executable_response_1.ExecutableResponseError) {
                   return reject(error2);
@@ -24699,7 +24699,7 @@ var require_googleauth = __commonJS({
         }
       }
       fromStreamAsync(inputStream, options) {
-        return new Promise((resolve3, reject) => {
+        return new Promise((resolve4, reject) => {
           if (!inputStream) {
             throw new Error("Must pass in a stream containing the Google auth settings.");
           }
@@ -24709,7 +24709,7 @@ var require_googleauth = __commonJS({
               try {
                 const data = JSON.parse(chunks.join(""));
                 const r2 = this._cacheClientFromJSON(data, options);
-                return resolve3(r2);
+                return resolve4(r2);
               } catch (err) {
                 if (!this.keyFilename)
                   throw err;
@@ -24719,7 +24719,7 @@ var require_googleauth = __commonJS({
                 });
                 this.cachedCredential = client;
                 this.setGapicJWTValues(client);
-                return resolve3(client);
+                return resolve4(client);
               }
             } catch (err) {
               return reject(err);
@@ -24755,17 +24755,17 @@ var require_googleauth = __commonJS({
        * Run the Google Cloud SDK command that prints the default project ID
        */
       async getDefaultServiceProjectId() {
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           (0, child_process_1.exec)("gcloud config config-helper --format json", (err, stdout) => {
             if (!err && stdout) {
               try {
                 const projectId = JSON.parse(stdout).configuration.properties.core.project;
-                resolve3(projectId);
+                resolve4(projectId);
                 return;
               } catch (e2) {
               }
             }
-            resolve3(null);
+            resolve4(null);
           });
         });
       }
@@ -29576,8 +29576,8 @@ var require_graceful_fs = __commonJS({
       }
       var fs$copyFile = fs4.copyFile;
       if (fs$copyFile)
-        fs4.copyFile = copyFile2;
-      function copyFile2(src, dest, flags, cb) {
+        fs4.copyFile = copyFile3;
+      function copyFile3(src, dest, flags, cb) {
         if (typeof flags === "function") {
           cb = flags;
           flags = 0;
@@ -30530,12 +30530,12 @@ var require_adapter = __commonJS({
       return newFs;
     }
     function toPromise(method) {
-      return (...args) => new Promise((resolve3, reject) => {
+      return (...args) => new Promise((resolve4, reject) => {
         args.push((err, result) => {
           if (err) {
             reject(err);
           } else {
-            resolve3(result);
+            resolve4(result);
           }
         });
         method(...args);
@@ -30706,14 +30706,14 @@ var require_filesystem = __commonJS({
       });
       return buffer.subarray(0, bytesRead);
     };
-    var readFile9 = (path3) => new Promise((resolve3, reject) => {
+    var readFile9 = (path3) => new Promise((resolve4, reject) => {
       fs3.open(path3, "r", (err, fd) => {
         if (err) {
           reject(err);
         } else {
           const buffer = Buffer.alloc(MAX_LENGTH);
           fs3.read(fd, buffer, 0, MAX_LENGTH, 0, (_, bytesRead) => {
-            resolve3(buffer.subarray(0, bytesRead));
+            resolve4(buffer.subarray(0, bytesRead));
             fs3.close(fd, () => {
             });
           });
@@ -30781,10 +30781,10 @@ var require_detect_libc = __commonJS({
     var commandOut = "";
     var safeCommand = () => {
       if (!commandOut) {
-        return new Promise((resolve3) => {
+        return new Promise((resolve4) => {
           childProcess.exec(command, (err, out) => {
             commandOut = err ? " " : out;
-            resolve3(commandOut);
+            resolve4(commandOut);
           });
         });
       }
@@ -33460,14 +33460,14 @@ var require_input = __commonJS({
         return this;
       } else {
         if (this._isStreamInput()) {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve4, reject) => {
             const finished2 = () => {
               this._flattenBufferIn();
               sharp.metadata(this.options, (err, metadata2) => {
                 if (err) {
                   reject(is.nativeError(err, stack));
                 } else {
-                  resolve3(metadata2);
+                  resolve4(metadata2);
                 }
               });
             };
@@ -33478,12 +33478,12 @@ var require_input = __commonJS({
             }
           });
         } else {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve4, reject) => {
             sharp.metadata(this.options, (err, metadata2) => {
               if (err) {
                 reject(is.nativeError(err, stack));
               } else {
-                resolve3(metadata2);
+                resolve4(metadata2);
               }
             });
           });
@@ -33516,25 +33516,25 @@ var require_input = __commonJS({
         return this;
       } else {
         if (this._isStreamInput()) {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve4, reject) => {
             this.on("finish", function() {
               this._flattenBufferIn();
               sharp.stats(this.options, (err, stats2) => {
                 if (err) {
                   reject(is.nativeError(err, stack));
                 } else {
-                  resolve3(stats2);
+                  resolve4(stats2);
                 }
               });
             });
           });
         } else {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve4, reject) => {
             sharp.stats(this.options, (err, stats2) => {
               if (err) {
                 reject(is.nativeError(err, stack));
               } else {
-                resolve3(stats2);
+                resolve4(stats2);
               }
             });
           });
@@ -36950,7 +36950,7 @@ var require_output = __commonJS({
         return this;
       } else {
         if (this._isStreamInput()) {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve4, reject) => {
             this.once("finish", () => {
               this._flattenBufferIn();
               sharp.pipeline(this.options, (err, data, info) => {
@@ -36958,24 +36958,24 @@ var require_output = __commonJS({
                   reject(is.nativeError(err, stack));
                 } else {
                   if (this.options.resolveWithObject) {
-                    resolve3({ data, info });
+                    resolve4({ data, info });
                   } else {
-                    resolve3(data);
+                    resolve4(data);
                   }
                 }
               });
             });
           });
         } else {
-          return new Promise((resolve3, reject) => {
+          return new Promise((resolve4, reject) => {
             sharp.pipeline(this.options, (err, data, info) => {
               if (err) {
                 reject(is.nativeError(err, stack));
               } else {
                 if (this.options.resolveWithObject) {
-                  resolve3({ data, info });
+                  resolve4({ data, info });
                 } else {
-                  resolve3(data);
+                  resolve4(data);
                 }
               }
             });
@@ -47037,7 +47037,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -47054,7 +47054,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -47132,7 +47132,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve3(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -47393,12 +47393,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve3, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -48268,12 +48268,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve4) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve3();
+        resolve4();
       } else {
-        this._stdout.once("drain", resolve3);
+        this._stdout.once("drain", resolve4);
       }
     });
   }
@@ -53582,14 +53582,14 @@ function __asyncValues(o) {
   }, i2);
   function verb(n) {
     i2[n] = o[n] && function(v) {
-      return new Promise(function(resolve3, reject) {
-        v = o[n](v), settle(resolve3, reject, v.done, v.value);
+      return new Promise(function(resolve4, reject) {
+        v = o[n](v), settle(resolve4, reject, v.done, v.value);
       });
     };
   }
-  function settle(resolve3, reject, d, v) {
+  function settle(resolve4, reject, d, v) {
     Promise.resolve(v).then(function(v2) {
-      resolve3({ value: v2, done: d });
+      resolve4({ value: v2, done: d });
     }, reject);
   }
 }
@@ -60019,8 +60019,8 @@ var LiveMusic = class {
     const url = `${websocketBaseUrl}/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateMusic?key=${apiKey}`;
     let onopenResolve = () => {
     };
-    const onopenPromise = new Promise((resolve3) => {
-      onopenResolve = resolve3;
+    const onopenPromise = new Promise((resolve4) => {
+      onopenResolve = resolve4;
     });
     const callbacks = params.callbacks;
     const onopenAwaitedCallback = function() {
@@ -60260,8 +60260,8 @@ var Live = class {
     }
     let onopenResolve = () => {
     };
-    const onopenPromise = new Promise((resolve3) => {
-      onopenResolve = resolve3;
+    const onopenPromise = new Promise((resolve4) => {
+      onopenResolve = resolve4;
     });
     const callbacks = params.callbacks;
     const onopenAwaitedCallback = function() {
@@ -63287,7 +63287,7 @@ var safeJSON = (text) => {
     return void 0;
   }
 };
-var sleep$1 = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
+var sleep$1 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 function getDefaultFetch() {
   if (typeof fetch !== "undefined") {
     return fetch;
@@ -64135,8 +64135,8 @@ async function defaultParseResponse(client, props) {
 }
 var APIPromise = class _APIPromise extends Promise {
   constructor(client, responsePromise, parseResponse2 = defaultParseResponse) {
-    super((resolve3) => {
-      resolve3(null);
+    super((resolve4) => {
+      resolve4(null);
     });
     this.responsePromise = responsePromise;
     this.parseResponse = parseResponse2;
@@ -66912,7 +66912,7 @@ var safeJSON2 = (text) => {
 };
 
 // node_modules/openai/internal/utils/sleep.mjs
-var sleep2 = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
+var sleep2 = (ms) => new Promise((resolve4) => setTimeout(resolve4, ms));
 
 // node_modules/openai/version.mjs
 var VERSION2 = "6.34.0";
@@ -67991,8 +67991,8 @@ function addRequestID(value, response) {
 var _APIPromise_client;
 var APIPromise2 = class _APIPromise extends Promise {
   constructor(client, responsePromise, parseResponse2 = defaultParseResponse2) {
-    super((resolve3) => {
-      resolve3(null);
+    super((resolve4) => {
+      resolve4(null);
     });
     this.responsePromise = responsePromise;
     this.parseResponse = parseResponse2;
@@ -68640,12 +68640,12 @@ var EventStream = class {
     _EventStream_errored.set(this, false);
     _EventStream_aborted.set(this, false);
     _EventStream_catchingPromiseCreated.set(this, false);
-    __classPrivateFieldSet(this, _EventStream_connectedPromise, new Promise((resolve3, reject) => {
-      __classPrivateFieldSet(this, _EventStream_resolveConnectedPromise, resolve3, "f");
+    __classPrivateFieldSet(this, _EventStream_connectedPromise, new Promise((resolve4, reject) => {
+      __classPrivateFieldSet(this, _EventStream_resolveConnectedPromise, resolve4, "f");
       __classPrivateFieldSet(this, _EventStream_rejectConnectedPromise, reject, "f");
     }), "f");
-    __classPrivateFieldSet(this, _EventStream_endPromise, new Promise((resolve3, reject) => {
-      __classPrivateFieldSet(this, _EventStream_resolveEndPromise, resolve3, "f");
+    __classPrivateFieldSet(this, _EventStream_endPromise, new Promise((resolve4, reject) => {
+      __classPrivateFieldSet(this, _EventStream_resolveEndPromise, resolve4, "f");
       __classPrivateFieldSet(this, _EventStream_rejectEndPromise, reject, "f");
     }), "f");
     __classPrivateFieldGet(this, _EventStream_connectedPromise, "f").catch(() => {
@@ -68729,11 +68729,11 @@ var EventStream = class {
    *   const message = await stream.emitted('message') // rejects if the stream errors
    */
   emitted(event) {
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       __classPrivateFieldSet(this, _EventStream_catchingPromiseCreated, true, "f");
       if (event !== "error")
         this.once("error", reject);
-      this.once(event, resolve3);
+      this.once(event, resolve4);
     });
   }
   async done() {
@@ -69672,7 +69672,7 @@ var ChatCompletionStream = class _ChatCompletionStream extends AbstractChatCompl
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve3, reject) => readQueue.push({ resolve: resolve3, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -70504,7 +70504,7 @@ var AssistantStream = class extends EventStream {
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve3, reject) => readQueue.push({ resolve: resolve3, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((chunk2) => chunk2 ? { value: chunk2, done: false } : { value: void 0, done: true });
         }
         const chunk = pushQueue.shift();
         return { value: chunk, done: false };
@@ -72453,7 +72453,7 @@ var ResponseStream = class _ResponseStream extends EventStream {
           if (done) {
             return { value: void 0, done: true };
           }
-          return new Promise((resolve3, reject) => readQueue.push({ resolve: resolve3, reject })).then((event2) => event2 ? { value: event2, done: false } : { value: void 0, done: true });
+          return new Promise((resolve4, reject) => readQueue.push({ resolve: resolve4, reject })).then((event2) => event2 ? { value: event2, done: false } : { value: void 0, done: true });
         }
         const event = pushQueue.shift();
         return { value: event, done: false };
@@ -76139,7 +76139,7 @@ async function generateImage(args, config3, opts = {}) {
 
 // src/tools/generate-speech.ts
 import { mkdir as mkdir10, writeFile as writeFile11 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { join as join9, resolve as resolve3 } from "node:path";
 
 // src/chunker/tts.ts
 function chunkText(text, limit2) {
@@ -76293,18 +76293,52 @@ async function writeCaptionFiles(audioPath, words, formats, opts = {}) {
 // src/post/concat.ts
 init_errors();
 import { spawn } from "node:child_process";
-import { mkdir as mkdir9, mkdtemp, rm, writeFile as writeFile10 } from "node:fs/promises";
+import { copyFile as copyFile2, mkdir as mkdir9, mkdtemp, rm, writeFile as writeFile10 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname as dirname8, join as join8 } from "node:path";
+import { dirname as dirname8, extname, join as join8, resolve as resolvePath } from "node:path";
 var cachedFfmpegAvailable = null;
 async function ffmpegAvailable() {
   if (cachedFfmpegAvailable !== null) return cachedFfmpegAvailable;
-  cachedFfmpegAvailable = await new Promise((resolve3) => {
+  cachedFfmpegAvailable = await new Promise((resolve4) => {
     const proc = spawn("ffmpeg", ["-version"], { stdio: "ignore" });
-    proc.on("error", () => resolve3(false));
-    proc.on("exit", (code) => resolve3(code === 0));
+    proc.on("error", () => resolve4(false));
+    proc.on("exit", (code) => resolve4(code === 0));
   });
   return cachedFfmpegAvailable;
+}
+function codecArgsForOutput(outputPath) {
+  const ext = extname(outputPath).slice(1).toLowerCase();
+  switch (ext) {
+    case "mp3":
+      return ["-c:a", "libmp3lame", "-b:a", "128k"];
+    case "wav":
+      return ["-c:a", "pcm_s16le"];
+    case "ogg":
+      return ["-c:a", "libvorbis"];
+    case "opus":
+      return ["-c:a", "libopus"];
+    case "aac":
+    case "m4a":
+      return ["-c:a", "aac"];
+    case "flac":
+      return ["-c:a", "flac"];
+    default:
+      return ["-c:a", "copy"];
+  }
+}
+function runFfmpeg(args) {
+  return new Promise((resolve4, reject) => {
+    const proc = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    proc.stderr?.on("data", (d) => {
+      stderr += String(d);
+    });
+    proc.on("error", (err) => reject(err));
+    proc.on("exit", (code) => {
+      if (code === 0) resolve4();
+      else reject(new Error(`ffmpeg failed (exit ${code}): ${stderr.slice(-500)}`));
+    });
+  });
 }
 async function concatAudioFiles(inputs, outputPath) {
   if (inputs.length === 0) {
@@ -76314,10 +76348,17 @@ async function concatAudioFiles(inputs, outputPath) {
       "Pass an array of audio file paths."
     );
   }
-  if (inputs.length === 1) {
-    const { copyFile: copyFile2 } = await import("node:fs/promises");
-    await mkdir9(dirname8(outputPath), { recursive: true });
-    await copyFile2(inputs[0], outputPath);
+  const absInputs = inputs.map((p) => resolvePath(p));
+  const absOutput = resolvePath(outputPath);
+  if (absInputs.length === 1) {
+    const inputExt = extname(absInputs[0]).slice(1).toLowerCase();
+    const outputExt2 = extname(absOutput).slice(1).toLowerCase();
+    await mkdir9(dirname8(absOutput), { recursive: true });
+    if (inputExt === outputExt2) {
+      await copyFile2(absInputs[0], absOutput);
+      return;
+    }
+    await transcodeAudio(absInputs[0], absOutput);
     return;
   }
   if (!await ffmpegAvailable()) {
@@ -76329,26 +76370,91 @@ async function concatAudioFiles(inputs, outputPath) {
   }
   const work = await mkdtemp(join8(tmpdir(), "cits-concat-"));
   const listPath = join8(work, "list.txt");
-  const listBody = inputs.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n") + "\n";
+  const listBody = absInputs.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n") + "\n";
   await writeFile10(listPath, listBody, "utf8");
-  await mkdir9(dirname8(outputPath), { recursive: true });
-  await new Promise((resolve3, reject) => {
-    const proc = spawn(
-      "ffmpeg",
-      ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outputPath],
-      { stdio: ["ignore", "ignore", "pipe"] }
+  await mkdir9(dirname8(absOutput), { recursive: true });
+  const inputExts = new Set(absInputs.map((p) => extname(p).slice(1).toLowerCase()));
+  const outputExt = extname(absOutput).slice(1).toLowerCase();
+  const sameFormat = inputExts.size === 1 && inputExts.has(outputExt);
+  const codecArgs = sameFormat ? ["-c", "copy"] : codecArgsForOutput(absOutput);
+  try {
+    await runFfmpeg([
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      listPath,
+      ...codecArgs,
+      absOutput
+    ]);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+async function transcodeAudio(input, output) {
+  if (!await ffmpegAvailable()) {
+    throw new StructuredError(
+      "CONFIG_ERROR",
+      "ffmpeg is required for audio transcode but is not installed",
+      "Install ffmpeg (macOS: `brew install ffmpeg`; Debian: `apt install ffmpeg`)."
     );
-    let stderr = "";
-    proc.stderr?.on("data", (d) => {
-      stderr += String(d);
-    });
-    proc.on("error", (err) => reject(err));
-    proc.on("exit", (code) => {
-      if (code === 0) resolve3();
-      else reject(new Error(`ffmpeg concat failed (exit ${code}): ${stderr.slice(-500)}`));
-    });
-  });
-  await rm(work, { recursive: true, force: true });
+  }
+  const absInput = resolvePath(input);
+  const absOutput = resolvePath(output);
+  await mkdir9(dirname8(absOutput), { recursive: true });
+  await runFfmpeg(["-y", "-i", absInput, ...codecArgsForOutput(absOutput), absOutput]);
+}
+function audioMimeForPath(filePath) {
+  const ext = extname(filePath).slice(1).toLowerCase();
+  switch (ext) {
+    case "mp3":
+      return "audio/mpeg";
+    case "wav":
+      return "audio/wav";
+    case "ogg":
+      return "audio/ogg";
+    case "opus":
+      return "audio/opus";
+    case "aac":
+    case "m4a":
+      return "audio/aac";
+    case "flac":
+      return "audio/flac";
+    default:
+      return `audio/${ext || "bin"}`;
+  }
+}
+function needsTranscode(sourceMime, destPath) {
+  const destExt = extname(destPath).slice(1).toLowerCase();
+  if (!destExt) return false;
+  return destExt !== extensionForMime(sourceMime);
+}
+async function saveAudioRespectingPath(bytes, destPath, sourceMime) {
+  if (!needsTranscode(sourceMime, destPath)) {
+    await saveBinary(destPath, bytes);
+    return { mimeType: sourceMime };
+  }
+  const nativeExt = extensionForMime(sourceMime);
+  const work = await mkdtemp(join8(tmpdir(), "cits-transcode-"));
+  try {
+    const tempIn = join8(work, `in.${nativeExt}`);
+    await writeFile10(tempIn, bytes);
+    await transcodeAudio(tempIn, destPath);
+    return { mimeType: audioMimeForPath(destPath) };
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+async function copyAudioRespectingPath(sourcePath, destPath, sourceMime) {
+  if (!needsTranscode(sourceMime, destPath)) {
+    await mkdir9(dirname8(resolvePath(destPath)), { recursive: true });
+    await copyFile2(sourcePath, destPath);
+    return { mimeType: sourceMime };
+  }
+  await transcodeAudio(sourcePath, destPath);
+  return { mimeType: audioMimeForPath(destPath) };
 }
 
 // src/post/play.ts
@@ -76456,15 +76562,19 @@ async function generateSpeech(args, config3, opts = {}) {
   const limit2 = slot.maxCharsPerCall;
   const needsChunking = !cached2 && !explicitModel && limit2 !== void 0 && args.text.length > limit2;
   if (cached2) {
-    mimeType = cached2.meta.mimeType;
     modelUsed = slot.model;
     filePath = buildOutputPath({
       prompt: args.text,
-      mimeType,
+      mimeType: cached2.meta.mimeType,
       outputDir: args.outputDir ?? config3.audioOutputDir,
       explicitPath: args.outputPath
     });
-    await copyFromCache(cached2, filePath);
+    const placed = await copyAudioRespectingPath(
+      cached2.filePath,
+      filePath,
+      cached2.meta.mimeType
+    );
+    mimeType = placed.mimeType;
   } else if (needsChunking) {
     const chunks = chunkText(args.text, limit2);
     chunkCount = chunks.length;
@@ -76495,7 +76605,7 @@ async function generateSpeech(args, config3, opts = {}) {
     modelUsed = first.result.modelUsed;
     const baseStem = `${timestamp()}-${slugify(args.text)}`;
     const ext = mimeType.split("/")[1] === "mpeg" ? "mp3" : mimeType.split("/")[1] ?? "bin";
-    const chunksDir = join9(args.outputDir ?? config3.audioOutputDir, ".chunks");
+    const chunksDir = resolve3(args.outputDir ?? config3.audioOutputDir, ".chunks");
     await mkdir10(chunksDir, { recursive: true });
     chunkFiles = [];
     for (let i2 = 0; i2 < chunkResults.length; i2++) {
@@ -76510,6 +76620,7 @@ async function generateSpeech(args, config3, opts = {}) {
       explicitPath: args.outputPath
     });
     await concatAudioFiles(chunkFiles, filePath);
+    mimeType = audioMimeForPath(filePath);
     await storeInCache(cacheKey, filePath, {
       mimeType,
       modelKey: `${providerUsed}/${modelUsed}`
@@ -76528,16 +76639,16 @@ async function generateSpeech(args, config3, opts = {}) {
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
     }
-    mimeType = result.mimeType;
     modelUsed = result.modelUsed;
     alignment = result.alignment;
     filePath = buildOutputPath({
       prompt: args.text,
-      mimeType,
+      mimeType: result.mimeType,
       outputDir: args.outputDir ?? config3.audioOutputDir,
       explicitPath: args.outputPath
     });
-    await saveBinary(filePath, result.data);
+    const placed = await saveAudioRespectingPath(result.data, filePath, result.mimeType);
+    mimeType = placed.mimeType;
     await storeInCache(cacheKey, filePath, {
       mimeType,
       modelKey: `${requestedProvider}/${modelUsed}`
@@ -76563,16 +76674,20 @@ async function generateSpeech(args, config3, opts = {}) {
     providerUsed = fallbackResult.providerUsed;
     slot = fallbackResult.slot;
     voice = args.voice ?? slot.defaultVoice;
-    mimeType = fallbackResult.result.mimeType;
     modelUsed = fallbackResult.result.modelUsed;
     alignment = fallbackResult.result.alignment;
     filePath = buildOutputPath({
       prompt: args.text,
-      mimeType,
+      mimeType: fallbackResult.result.mimeType,
       outputDir: args.outputDir ?? config3.audioOutputDir,
       explicitPath: args.outputPath
     });
-    await saveBinary(filePath, fallbackResult.result.data);
+    const placed = await saveAudioRespectingPath(
+      fallbackResult.result.data,
+      filePath,
+      fallbackResult.result.mimeType
+    );
+    mimeType = placed.mimeType;
     await storeInCache(cacheKey, filePath, {
       mimeType,
       modelKey: `${providerUsed}/${modelUsed}`

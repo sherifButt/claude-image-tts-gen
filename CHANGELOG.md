@@ -4,6 +4,33 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-04-19
+
+### Fixed
+
+- **Chunked TTS concat** (`generate_speech` for long text): chunks were written
+  under a relative `./generated-audio/.chunks/` path while the ffmpeg concat
+  listfile lived in `/tmp/`. ffmpeg's concat demuxer resolves relative paths
+  against the listfile's directory, so it looked for the chunks under `/tmp/`
+  and failed with `Error opening input: No such file or directory`. Chunk
+  paths and the concat listfile are now absolute.
+- **WAV bytes saved at `.mp3` path** (`generate_speech` with explicit
+  `outputPath`): when the provider returned `audio/wav` but the user asked for
+  `foo.mp3`, raw WAV bytes were written to `foo.mp3`. The file on disk now
+  matches its extension — if the extensions differ, the file is transcoded via
+  ffmpeg (`libmp3lame` for `.mp3`, `pcm_s16le` for `.wav`, etc.), and the
+  response `mimeType` reflects what actually landed on disk. Missing ffmpeg
+  produces a structured `CONFIG_ERROR` instead of a misnamed file.
+- Applied uniformly across cached hits, chunked output, explicit-model, and
+  failover paths.
+
+### Added
+
+- `saveAudioRespectingPath`, `copyAudioRespectingPath`, `transcodeAudio`, and
+  `audioMimeForPath` helpers in `post/concat.ts`. `concatAudioFiles` now picks
+  codec from the output extension, so a mixed-format concat (e.g. wav chunks →
+  mp3 final) works in a single ffmpeg pass.
+
 ## [0.5.1] - 2026-04-19
 
 ### Fixed
@@ -73,6 +100,7 @@ All notable changes to this project are documented here. Format loosely follows
   sidecar-based regenerate, health check, and the plugin bundle (skills, slash
   commands, hooks).
 
+[0.5.2]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.2
 [0.5.1]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.1
 [0.5.0]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.0
 [0.4.0]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.4.0

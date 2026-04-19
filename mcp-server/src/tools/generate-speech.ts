@@ -1,11 +1,16 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { buildCacheKey } from "../cache/key.js";
-import { copyFromCache, lookupCache, storeInCache } from "../cache/store.js";
+import { lookupCache, storeInCache } from "../cache/store.js";
 import { chunkText, type TtsChunk } from "../chunker/tts.js";
 import type { Config } from "../config.js";
 import { writeCaptionFiles, type CaptionFiles, type CaptionFormat } from "../post/captions.js";
-import { concatAudioFiles } from "../post/concat.js";
+import {
+  audioMimeForPath,
+  concatAudioFiles,
+  copyAudioRespectingPath,
+  saveAudioRespectingPath,
+} from "../post/concat.js";
 import { autoPlay } from "../post/play.js";
 import { estimateCost, tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
 import type { CostEstimate } from "../pricing/types.js";
@@ -25,7 +30,7 @@ import type { BudgetWarning, CallEntry, PeriodTotal } from "../state/types.js";
 import { readVoicePresets } from "../presets/store.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
-import { buildOutputPath, saveBinary, slugify, timestamp } from "../util/output.js";
+import { buildOutputPath, slugify, timestamp } from "../util/output.js";
 
 export type CaptionsMode = "none" | "srt" | "vtt" | "both";
 
@@ -188,15 +193,19 @@ export async function generateSpeech(
     !cached && !explicitModel && limit !== undefined && args.text.length > limit;
 
   if (cached) {
-    mimeType = cached.meta.mimeType;
     modelUsed = slot.model;
     filePath = buildOutputPath({
       prompt: args.text,
-      mimeType,
+      mimeType: cached.meta.mimeType,
       outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
-    await copyFromCache(cached, filePath);
+    const placed = await copyAudioRespectingPath(
+      cached.filePath,
+      filePath,
+      cached.meta.mimeType,
+    );
+    mimeType = placed.mimeType;
   } else if (needsChunking) {
     const chunks = chunkText(args.text, limit!);
     chunkCount = chunks.length;
@@ -230,10 +239,12 @@ export async function generateSpeech(
     mimeType = first.result.mimeType;
     modelUsed = first.result.modelUsed;
 
-    // Save each chunk file.
+    // Save each chunk file. Resolve chunk dir to absolute so ffmpeg's concat
+    // demuxer (which resolves relative paths against the listfile's directory)
+    // can find them later.
     const baseStem = `${timestamp()}-${slugify(args.text)}`;
     const ext = mimeType.split("/")[1] === "mpeg" ? "mp3" : mimeType.split("/")[1] ?? "bin";
-    const chunksDir = join(args.outputDir ?? config.audioOutputDir, ".chunks");
+    const chunksDir = resolve(args.outputDir ?? config.audioOutputDir, ".chunks");
     await mkdir(chunksDir, { recursive: true });
     chunkFiles = [];
     for (let i = 0; i < chunkResults.length; i++) {
@@ -248,7 +259,12 @@ export async function generateSpeech(
       outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
+    // concatAudioFiles picks codec from the output extension, so a mixed-format
+    // concat (wav chunks → mp3 final) works in a single ffmpeg pass. If the
+    // user asked for a format different from the provider's native output, the
+    // final mime needs to reflect what's actually on disk.
     await concatAudioFiles(chunkFiles, filePath);
+    mimeType = audioMimeForPath(filePath);
     await storeInCache(cacheKey, filePath, {
       mimeType,
       modelKey: `${providerUsed}/${modelUsed}`,
@@ -267,16 +283,16 @@ export async function generateSpeech(
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
     }
-    mimeType = result.mimeType;
     modelUsed = result.modelUsed;
     alignment = result.alignment;
     filePath = buildOutputPath({
       prompt: args.text,
-      mimeType,
+      mimeType: result.mimeType,
       outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
-    await saveBinary(filePath, result.data);
+    const placed = await saveAudioRespectingPath(result.data, filePath, result.mimeType);
+    mimeType = placed.mimeType;
     await storeInCache(cacheKey, filePath, {
       mimeType,
       modelKey: `${requestedProvider}/${modelUsed}`,
@@ -302,16 +318,20 @@ export async function generateSpeech(
     providerUsed = fallbackResult.providerUsed;
     slot = fallbackResult.slot;
     voice = args.voice ?? slot.defaultVoice;
-    mimeType = fallbackResult.result.mimeType;
     modelUsed = fallbackResult.result.modelUsed;
     alignment = fallbackResult.result.alignment;
     filePath = buildOutputPath({
       prompt: args.text,
-      mimeType,
+      mimeType: fallbackResult.result.mimeType,
       outputDir: args.outputDir ?? config.audioOutputDir,
       explicitPath: args.outputPath,
     });
-    await saveBinary(filePath, fallbackResult.result.data);
+    const placed = await saveAudioRespectingPath(
+      fallbackResult.result.data,
+      filePath,
+      fallbackResult.result.mimeType,
+    );
+    mimeType = placed.mimeType;
     await storeInCache(cacheKey, filePath, {
       mimeType,
       modelKey: `${providerUsed}/${modelUsed}`,
