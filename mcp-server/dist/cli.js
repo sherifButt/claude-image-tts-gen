@@ -56006,7 +56006,11 @@ var LocalProvider = class {
       throw noSpeechEndpointError(this.baseUrl, data.length);
     }
     return {
-      mimeType: "audio/mpeg",
+      // Local servers often ignore response_format and return whatever they
+      // like (Chatterbox → WAV even when asked for mp3). Sniff the actual
+      // bytes so saveAudioRespectingPath can transcode if the caller's output
+      // extension disagrees.
+      mimeType: sniffAudioMime(data, "audio/mpeg"),
       data,
       modelUsed: req.model,
       providerUsed: this.id
@@ -56056,13 +56060,29 @@ var LocalProvider = class {
       throw noSpeechEndpointError(this.baseUrl, data.length);
     }
     return {
-      mimeType: "audio/mpeg",
+      mimeType: sniffAudioMime(data, "audio/mpeg"),
       data,
       modelUsed: req.model,
       providerUsed: this.id
     };
   }
 };
+function sniffAudioMime(bytes, fallback) {
+  if (bytes.length < 4) return fallback;
+  if (bytes[0] === 82 && bytes[1] === 73 && bytes[2] === 70 && bytes[3] === 70) {
+    return "audio/wav";
+  }
+  if (bytes[0] === 73 && bytes[1] === 68 && bytes[2] === 51 || bytes[0] === 255 && (bytes[1] & 224) === 224) {
+    return "audio/mpeg";
+  }
+  if (bytes[0] === 79 && bytes[1] === 103 && bytes[2] === 103 && bytes[3] === 83) {
+    return "audio/ogg";
+  }
+  if (bytes[0] === 102 && bytes[1] === 76 && bytes[2] === 97 && bytes[3] === 67) {
+    return "audio/flac";
+  }
+  return fallback;
+}
 var MIN_AUDIO_BYTES = 256;
 function decodeImageItem(item) {
   if (!item?.b64_json) return null;

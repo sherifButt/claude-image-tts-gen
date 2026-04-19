@@ -109,7 +109,11 @@ export class LocalProvider implements ImageProvider, TtsProvider {
       throw noSpeechEndpointError(this.baseUrl, data.length);
     }
     return {
-      mimeType: "audio/mpeg",
+      // Local servers often ignore response_format and return whatever they
+      // like (Chatterbox → WAV even when asked for mp3). Sniff the actual
+      // bytes so saveAudioRespectingPath can transcode if the caller's output
+      // extension disagrees.
+      mimeType: sniffAudioMime(data, "audio/mpeg"),
       data,
       modelUsed: req.model,
       providerUsed: this.id,
@@ -164,12 +168,53 @@ export class LocalProvider implements ImageProvider, TtsProvider {
       throw noSpeechEndpointError(this.baseUrl, data.length);
     }
     return {
-      mimeType: "audio/mpeg",
+      mimeType: sniffAudioMime(data, "audio/mpeg"),
       data,
       modelUsed: req.model,
       providerUsed: this.id,
     };
   }
+}
+
+/** Detect the audio container from the first few bytes. Covers the formats
+ *  local backends actually return; falls back when nothing matches. */
+function sniffAudioMime(bytes: Buffer, fallback: string): string {
+  if (bytes.length < 4) return fallback;
+  // RIFF....WAVE
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46
+  ) {
+    return "audio/wav";
+  }
+  // ID3 tag (common wrapper on MP3) or raw MPEG sync frame (0xFFEx / 0xFFFx)
+  if (
+    (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) ||
+    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+  ) {
+    return "audio/mpeg";
+  }
+  // OggS
+  if (
+    bytes[0] === 0x4f &&
+    bytes[1] === 0x67 &&
+    bytes[2] === 0x67 &&
+    bytes[3] === 0x53
+  ) {
+    return "audio/ogg";
+  }
+  // fLaC
+  if (
+    bytes[0] === 0x66 &&
+    bytes[1] === 0x4c &&
+    bytes[2] === 0x61 &&
+    bytes[3] === 0x43
+  ) {
+    return "audio/flac";
+  }
+  return fallback;
 }
 
 const MIN_AUDIO_BYTES = 256;

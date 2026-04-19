@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-04-19
+
+### Fixed
+
+- **Local provider lied about output mime.** `providers/local.ts` hard-coded
+  `mimeType: "audio/mpeg"` regardless of what the server actually returned,
+  even though local backends routinely ignore the `response_format: "mp3"`
+  hint (Chatterbox-TTS, for one, always returns WAV). The
+  `saveAudioRespectingPath` helper added in 0.5.2 saw the claimed mpeg mime
+  agreed with the `.mp3` output path and skipped the transcode — producing
+  WAV bytes saved at `.mp3`, same bug shape as 0.5.2 but one layer deeper.
+  The provider now sniffs the first bytes (RIFF / ID3 / MPEG sync / OggS /
+  fLaC) and reports the real mime. The existing save path then transcodes
+  when the caller's extension disagrees.
+- Affects both regular local TTS and voice-cloning calls.
+
 ## [0.6.0] - 2026-04-19
 
 ### Added
@@ -127,6 +143,7 @@ All notable changes to this project are documented here. Format loosely follows
   sidecar-based regenerate, health check, and the plugin bundle (skills, slash
   commands, hooks).
 
+[0.6.1]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.6.1
 [0.6.0]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.6.0
 [0.5.2]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.2
 [0.5.1]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.1
