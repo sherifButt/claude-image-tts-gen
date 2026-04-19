@@ -74404,7 +74404,7 @@ var GoogleImageBatchProvider = class {
     this.client = new GoogleGenAI({ apiKey: opts.apiKey });
   }
   async submit(prompts, model) {
-    const requests = prompts.map((p) => ({
+    const inlinedRequests = prompts.map((p) => ({
       contents: [{ parts: [{ text: p.text }] }]
     }));
     const batches = this.client.batches;
@@ -74415,9 +74415,9 @@ var GoogleImageBatchProvider = class {
     }
     const op = await batches.create({
       model,
-      requests
+      src: inlinedRequests
     });
-    const providerJobId = op?.name ?? op?.batchId;
+    const providerJobId = op?.name;
     if (!providerJobId || typeof providerJobId !== "string") {
       throw new Error(`Google batch submit returned no operation name: ${JSON.stringify(op)}`);
     }
@@ -74435,37 +74435,42 @@ var GoogleImageBatchProvider = class {
     if (status !== "completed" && status !== "partial_failure" && status !== "failed") {
       return { status };
     }
-    const responses = op?.response?.responses ?? op?.responses ?? [];
+    const inlined = op?.dest?.inlinedResponses ?? [];
     const results = [];
-    responses.forEach((resp, idx) => {
-      const parts = resp?.candidates?.[0]?.content?.parts ?? [];
+    let firstError;
+    inlined.forEach((entry, idx) => {
+      if (entry?.error?.message) {
+        if (!firstError) firstError = entry.error.message;
+        return;
+      }
+      const parts = entry?.response?.candidates?.[0]?.content?.parts ?? [];
       for (const part of parts) {
         const inline = part?.inlineData;
         if (inline?.data && typeof inline.mimeType === "string" && inline.mimeType.startsWith("image/")) {
           results.push({
-            customId: `${idx}`,
+            customId: `prompt-${idx}`,
             mimeType: inline.mimeType,
             data: Buffer.from(inline.data, "base64")
           });
-          break;
+          return;
         }
       }
     });
+    const finalStatus = status === "completed" && firstError && results.length === 0 ? "failed" : status === "completed" && firstError ? "partial_failure" : status;
     return {
-      status,
+      status: finalStatus,
       results,
-      errorMessage: status === "failed" ? op?.error?.message ?? "batch failed" : void 0
+      errorMessage: firstError ?? (status === "failed" ? op?.error?.message ?? "batch failed" : void 0)
     };
   }
 };
 function mapStatus(op) {
   if (!op) return "in_progress";
-  if (op.done === true || op.state === "BATCH_STATE_SUCCEEDED" || op.state === "SUCCEEDED") {
-    return "completed";
-  }
-  if (op.state === "BATCH_STATE_FAILED" || op.state === "FAILED") return "failed";
-  if (op.state === "BATCH_STATE_CANCELLED" || op.state === "CANCELLED") return "cancelled";
-  if (op.state === "BATCH_STATE_EXPIRED" || op.state === "EXPIRED") return "expired";
+  const state = op.state;
+  if (state === "JOB_STATE_SUCCEEDED") return "completed";
+  if (state === "JOB_STATE_FAILED") return "failed";
+  if (state === "JOB_STATE_CANCELLED") return "cancelled";
+  if (state === "JOB_STATE_EXPIRED") return "expired";
   return "in_progress";
 }
 

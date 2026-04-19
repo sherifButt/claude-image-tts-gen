@@ -18,12 +18,10 @@ export class GoogleImageBatchProvider implements BatchProvider {
   }
 
   async submit(prompts: BatchPrompt[], model: string): Promise<BatchSubmitResult> {
-    const requests = prompts.map((p) => ({
+    const inlinedRequests = prompts.map((p) => ({
       contents: [{ parts: [{ text: p.text }] }],
     }));
 
-    // The @google/genai SDK exposes batch operations under client.batches
-    // Returns an object with .name (the operation resource name)
     const batches = (this.client as unknown as { batches?: BatchesApi }).batches;
     if (!batches?.create) {
       throw new Error(
@@ -32,10 +30,10 @@ export class GoogleImageBatchProvider implements BatchProvider {
     }
     const op = await batches.create({
       model,
-      requests,
+      src: inlinedRequests,
     });
 
-    const providerJobId = op?.name ?? op?.batchId;
+    const providerJobId = op?.name;
     if (!providerJobId || typeof providerJobId !== "string") {
       throw new Error(`Google batch submit returned no operation name: ${JSON.stringify(op)}`);
     }
@@ -56,51 +54,52 @@ export class GoogleImageBatchProvider implements BatchProvider {
       return { status };
     }
 
-    const responses = op?.response?.responses ?? op?.responses ?? [];
+    const inlined = op?.dest?.inlinedResponses ?? [];
     const results: BatchPollResult["results"] = [];
+    let firstError: string | undefined;
 
-    responses.forEach((resp, idx) => {
-      const parts = resp?.candidates?.[0]?.content?.parts ?? [];
+    inlined.forEach((entry, idx) => {
+      if (entry?.error?.message) {
+        if (!firstError) firstError = entry.error.message;
+        return;
+      }
+      const parts = entry?.response?.candidates?.[0]?.content?.parts ?? [];
       for (const part of parts) {
         const inline = part?.inlineData;
         if (inline?.data && typeof inline.mimeType === "string" && inline.mimeType.startsWith("image/")) {
           results.push({
-            customId: `${idx}`,
+            customId: `prompt-${idx}`,
             mimeType: inline.mimeType,
             data: Buffer.from(inline.data, "base64"),
           });
-          break;
+          return;
         }
       }
     });
 
+    const finalStatus: BatchStatus =
+      status === "completed" && firstError && results.length === 0
+        ? "failed"
+        : status === "completed" && firstError
+          ? "partial_failure"
+          : status;
+
     return {
-      status,
+      status: finalStatus,
       results,
-      errorMessage: status === "failed" ? (op?.error?.message ?? "batch failed") : undefined,
+      errorMessage: firstError ?? (status === "failed" ? (op?.error?.message ?? "batch failed") : undefined),
     };
   }
 }
 
-function mapStatus(op: BatchesGetResponse | undefined): BatchStatus {
+function mapStatus(op: BatchJobResponse | undefined): BatchStatus {
   if (!op) return "in_progress";
-  if (op.done === true || op.state === "BATCH_STATE_SUCCEEDED" || op.state === "SUCCEEDED") {
-    return "completed";
-  }
-  if (op.state === "BATCH_STATE_FAILED" || op.state === "FAILED") return "failed";
-  if (op.state === "BATCH_STATE_CANCELLED" || op.state === "CANCELLED") return "cancelled";
-  if (op.state === "BATCH_STATE_EXPIRED" || op.state === "EXPIRED") return "expired";
+  const state = op.state;
+  if (state === "JOB_STATE_SUCCEEDED") return "completed";
+  if (state === "JOB_STATE_FAILED") return "failed";
+  if (state === "JOB_STATE_CANCELLED") return "cancelled";
+  if (state === "JOB_STATE_EXPIRED") return "expired";
   return "in_progress";
-}
-
-interface BatchesGetResponse {
-  done?: boolean;
-  state?: string;
-  name?: string;
-  batchId?: string;
-  error?: { message?: string };
-  response?: { responses?: GeminiResponse[] };
-  responses?: GeminiResponse[];
 }
 
 interface GeminiResponse {
@@ -114,7 +113,19 @@ interface GeminiResponse {
   }>;
 }
 
+interface InlinedResponseEntry {
+  response?: GeminiResponse;
+  error?: { message?: string };
+}
+
+interface BatchJobResponse {
+  name?: string;
+  state?: string;
+  error?: { message?: string };
+  dest?: { inlinedResponses?: InlinedResponseEntry[] };
+}
+
 interface BatchesApi {
-  create?: (req: { model: string; requests: unknown[] }) => Promise<BatchesGetResponse>;
-  get?: (req: { name: string }) => Promise<BatchesGetResponse>;
+  create?: (req: { model: string; src: unknown }) => Promise<BatchJobResponse>;
+  get?: (req: { name: string }) => Promise<BatchJobResponse>;
 }
