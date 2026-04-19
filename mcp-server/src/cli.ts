@@ -78,6 +78,9 @@ Options:
   -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
       --no-sidecar              Skip the hidden .<name>.regenerate.json sidecar
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
+      --reference-audio <path>  Reference audio (wav/mp3) for zero-shot voice cloning.
+                                Only --provider local + Chatterbox/XTTS backends. For
+                                ElevenLabs cloning, pass the voice ID via --voice.
       --save-style <name>       Save a style preset (use --provider/--tier/--prefix/--suffix)
       --save-voice <name>       Save a voice preset (use --provider/--tier/--voice)
       --prefix <text>           Style prompt prefix (with --save-style)
@@ -160,6 +163,7 @@ async function main(): Promise<void> {
         "webp-quality": { type: "string", description: "1..100, default 85" },
         style: { type: "string", description: "Apply saved style preset on image gen" },
         reference: { type: "string", description: "Reference image path (image-to-image)" },
+        "reference-audio": { type: "string", description: "Reference audio path for local voice cloning" },
         "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
         "no-sidecar": { type: "boolean", default: false, description: "Skip writing the .regenerate.json sidecar" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
@@ -446,6 +450,7 @@ async function main(): Promise<void> {
             voice: values.voice,
             captions,
             voicePreset: values["voice-preset"],
+            referenceAudioPath: values["reference-audio"],
             outputPath: values.output,
             outputDir,
             sidecar: emitSidecar,

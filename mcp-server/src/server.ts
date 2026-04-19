@@ -177,6 +177,11 @@ const speechInputSchema = {
       description: "Write caption files alongside audio. Requires provider with word-level timestamps (ElevenLabs).",
     },
     voicePreset: { type: "string", description: "Apply a saved voice preset by name." },
+    referenceAudioPath: {
+      type: "string",
+      description:
+        "Path to a reference audio file (wav/mp3) for zero-shot voice cloning. Only the `local` provider supports this — run Chatterbox-TTS or a Coqui-TTS / XTTS server. For ElevenLabs cloning, create the voice on elevenlabs.io/voice-lab and pass its ID via `voice`.",
+    },
     outputDir: {
       type: "string",
       description:

@@ -4,6 +4,33 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-19
+
+### Added
+
+- **Zero-shot voice cloning** via `generate_speech --referenceAudioPath <path>`
+  (CLI: `--reference-audio`). Pass a short `.wav`/`.mp3` sample and the
+  `local` provider forwards it to a cloning-capable backend. Accepted shapes
+  cover **Chatterbox-TTS** (`reference_audio` base64 + `audio_prompt_path`)
+  and **Coqui-TTS / XTTS**-style servers (`speaker_wav` path) — backends
+  ignore fields they don't recognize, so whichever key matches wins.
+- The reference file's sha256 fingerprint is mixed into the cache key so
+  identical text + voice with a different reference cache separately.
+- The reference path is recorded in the sidecar input so `regenerate` and
+  `iterate` reproduce the cloned voice without re-specifying it.
+- New `pinToPreferred` option on the failover helper — cloning calls skip
+  the fallback chain so we never silently swap to a provider that would
+  ignore the reference audio.
+- For ElevenLabs cloning, no plugin change is needed: create the voice on
+  elevenlabs.io/voice-lab and pass its voice ID via `--voice` (raw IDs were
+  already accepted by the ElevenLabs adapter).
+
+### Rejected
+
+- `referenceAudioPath` on providers other than `local` throws a
+  `VALIDATION_ERROR` pointing at ElevenLabs's voice lab for managed cloning,
+  instead of silently ignoring the reference.
+
 ## [0.5.2] - 2026-04-19
 
 ### Fixed
@@ -100,6 +127,7 @@ All notable changes to this project are documented here. Format loosely follows
   sidecar-based regenerate, health check, and the plugin bundle (skills, slash
   commands, hooks).
 
+[0.6.0]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.6.0
 [0.5.2]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.2
 [0.5.1]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.1
 [0.5.0]: https://github.com/sherifButt/claude-image-tts-gen/releases/tag/v0.5.0

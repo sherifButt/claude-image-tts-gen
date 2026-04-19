@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { dirname, extname, join, resolve } from "node:path";
 import { buildCacheKey } from "../cache/key.js";
 import { lookupCache, storeInCache } from "../cache/store.js";
 import { chunkText, type TtsChunk } from "../chunker/tts.js";
@@ -21,7 +22,7 @@ import {
   resolveSlot,
   type ResolvedSlot,
 } from "../providers/registry.js";
-import type { ProviderId, Tier, TtsGenResult, WordAlignment } from "../providers/types.js";
+import type { ProviderId, ReferenceAudio, Tier, TtsGenResult, WordAlignment } from "../providers/types.js";
 import { readLineageFromParent, writeSidecar } from "../sidecar/metadata.js";
 import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
@@ -47,6 +48,12 @@ export interface GenerateSpeechArgs {
   captions?: CaptionsMode;
   /** Apply a saved voice preset (provider/tier/model/voice defaults). */
   voicePreset?: string;
+  /** Path to a reference audio file (wav/mp3) for zero-shot voice cloning.
+   *  Only the `local` provider supports this — backends that implement it:
+   *  Chatterbox-TTS (devnen/Chatterbox-TTS-Server), XTTS-style servers
+   *  (Speaches, Coqui-TTS forks). For ElevenLabs cloning, create the voice on
+   *  elevenlabs.io/voice-lab and pass its voice ID via `voice`. */
+  referenceAudioPath?: string;
   /** Write a .regenerate.json sidecar next to the output. Default true (or EMIT_SIDECAR env). */
   sidecar?: boolean;
 }
@@ -150,13 +157,50 @@ export async function generateSpeech(
     );
   }
 
+  let referenceAudio: ReferenceAudio | undefined;
+  let referenceAudioHash: string | undefined;
+  if (args.referenceAudioPath) {
+    if (requestedProvider !== "local") {
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        `referenceAudio (voice cloning) is only supported on provider=local (Chatterbox-TTS / XTTS-style servers). Got provider=${requestedProvider}.`,
+        requestedProvider === "elevenlabs"
+          ? "For ElevenLabs cloning, create the voice at elevenlabs.io/voice-lab and pass its voice ID via --voice <id>."
+          : "Switch to --provider local and run a cloning-capable backend (Chatterbox-TTS or Coqui-TTS/XTTS).",
+      );
+    }
+    const absRefPath = resolve(args.referenceAudioPath);
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(absRefPath);
+    } catch (err) {
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        `Failed to read referenceAudio at ${absRefPath}: ${(err as Error).message}`,
+        "Pass an existing .wav/.mp3 path. Chatterbox-TTS prefers ~5s of clean speech.",
+      );
+    }
+    const ext = extname(absRefPath).slice(1).toLowerCase();
+    referenceAudio = {
+      data: bytes,
+      mimeType: ext === "mp3" ? "audio/mpeg" : `audio/${ext || "wav"}`,
+      path: absRefPath,
+    };
+    referenceAudioHash = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
+  }
+
+  // Include a fingerprint of the reference audio in params so cache correctly
+  // differentiates calls with the same text+voice but different reference.
+  const cacheParams = referenceAudioHash
+    ? { ...slot.params, referenceAudio: referenceAudioHash }
+    : slot.params;
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
     modality: "tts",
     text: args.text,
     voice,
-    params: slot.params,
+    params: cacheParams,
   });
   const cached = await lookupCache(cacheKey);
 
@@ -210,13 +254,16 @@ export async function generateSpeech(
     const chunks = chunkText(args.text, limit!);
     chunkCount = chunks.length;
 
-    // Generate each chunk via failover-aware path.
+    // Generate each chunk via failover-aware path. When cloning is requested,
+    // pin failover to the requested provider so fallback doesn't silently drop
+    // the reference audio (only `local` supports it).
     const chunkResults = await Promise.all(
       chunks.map((c) =>
         withFailover<TtsGenResult>({
           modality: "tts",
           tier,
           preferredProvider: requestedProvider,
+          pinToPreferred: !!referenceAudio,
           config,
           callProvider: async (resolvedSlot, attemptProviderId) => {
             const provider = createTtsProvider(attemptProviderId, config);
@@ -225,6 +272,7 @@ export async function generateSpeech(
               model: resolvedSlot.model,
               voice: args.voice ?? resolvedSlot.defaultVoice,
               params: resolvedSlot.params,
+              referenceAudio,
             });
           },
         }),
@@ -279,6 +327,7 @@ export async function generateSpeech(
         voice,
         params: slot.params,
         wantTimestamps: captionsMode !== "none",
+        referenceAudio,
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -302,6 +351,7 @@ export async function generateSpeech(
       modality: "tts",
       tier,
       preferredProvider: requestedProvider,
+      pinToPreferred: !!referenceAudio,
       config,
       callProvider: async (resolvedSlot, attemptProviderId) => {
         const provider = createTtsProvider(attemptProviderId, config);
@@ -312,6 +362,7 @@ export async function generateSpeech(
           voice: attemptVoice,
           params: resolvedSlot.params,
           wantTimestamps: captionsMode !== "none",
+          referenceAudio,
         });
       },
     });
@@ -413,7 +464,11 @@ export async function generateSpeech(
       model: modelUsed,
       tier,
       params: slot.params,
-      input: { text: args.text, voice },
+      input: {
+        text: args.text,
+        voice,
+        ...(referenceAudio?.path ? { referenceAudioPath: referenceAudio.path } : {}),
+      },
       output: { files: [filePath], mimeType },
       cost: { ...cost, total: chargedCost },
       lineage,

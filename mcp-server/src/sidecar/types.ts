@@ -17,6 +17,8 @@ export interface SidecarImageInput {
 export interface SidecarSpeechInput {
   text: string;
   voice?: string;
+  /** Path to a reference audio used for zero-shot voice cloning. */
+  referenceAudioPath?: string;
 }
 
 export type SidecarInput = SidecarImageInput | SidecarSpeechInput;

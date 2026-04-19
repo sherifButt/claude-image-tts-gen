@@ -23,6 +23,14 @@ export interface ImageGenResult {
   providerUsed: ProviderId;
 }
 
+export interface ReferenceAudio {
+  data: Buffer;
+  mimeType: string;
+  /** Absolute filesystem path, when available — some local backends prefer a
+   *  path over inlined base64. */
+  path?: string;
+}
+
 export interface TtsGenRequest {
   text: string;
   model: string;
@@ -30,6 +38,8 @@ export interface TtsGenRequest {
   params?: Record<string, unknown>;
   /** Request word-level alignment data when the provider supports it. */
   wantTimestamps?: boolean;
+  /** Reference audio for zero-shot voice cloning (local Chatterbox / XTTS). */
+  referenceAudio?: ReferenceAudio;
 }
 
 export interface WordAlignment {

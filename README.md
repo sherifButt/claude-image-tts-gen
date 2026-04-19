@@ -53,6 +53,7 @@ Inspired by [guinacio/claude-image-gen](https://github.com/guinacio/claude-image
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
+- **Zero-shot voice cloning** via `--reference-audio <path>` against `--provider local` + Chatterbox-TTS or a Coqui-TTS / XTTS server (for ElevenLabs cloning, create the voice on elevenlabs.io/voice-lab and pass its ID via `--voice`)
 
 ### Cost awareness
 - **13-model pricing table** with batch (50% off) rates and 30-day staleness warning
@@ -209,6 +210,13 @@ docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest  # in another t
 node mcp-server/dist/cli.js --check-local
 node mcp-server/dist/cli.js --speech -p "hello world" \
   --provider local --model kokoro
+
+# Zero-shot voice cloning via Chatterbox-TTS (or any XTTS-style server)
+# Start the backend on its own port, then:
+export LOCAL_BASE_URL=http://localhost:4123/v1
+node mcp-server/dist/cli.js --speech -p "read this in my voice" \
+  --provider local --model chatterbox \
+  --reference-audio ~/voice-samples/me.wav
 ```
 
 ## Status

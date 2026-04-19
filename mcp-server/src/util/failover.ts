@@ -73,6 +73,10 @@ export interface WithFailoverOpts<TResult> {
   tier: Tier;
   preferredProvider: ProviderId;
   config: Config;
+  /** Disable failover — when a feature (e.g. voice cloning reference audio) is
+   *  only supported by the preferred provider, falling back would silently
+   *  drop it. */
+  pinToPreferred?: boolean;
   /** Called per attempt with the resolved slot for that provider. */
   callProvider: (slot: ResolvedSlot, providerId: ProviderId) => Promise<TResult>;
 }
@@ -87,7 +91,9 @@ export interface WithFailoverResult<TResult> {
 export async function withFailover<TResult>(
   opts: WithFailoverOpts<TResult>,
 ): Promise<WithFailoverResult<TResult>> {
-  const order = getFailoverOrder(opts.modality, opts.preferredProvider, opts.config);
+  const order = opts.pinToPreferred
+    ? [opts.preferredProvider]
+    : getFailoverOrder(opts.modality, opts.preferredProvider, opts.config);
 
   if (order.length === 0) {
     throw new StructuredError(

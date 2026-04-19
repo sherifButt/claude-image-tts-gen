@@ -95,6 +95,9 @@ export class LocalProvider implements ImageProvider, TtsProvider {
   }
 
   async generateSpeech(req: TtsGenRequest): Promise<TtsGenResult> {
+    if (req.referenceAudio) {
+      return await this.callWithReferenceAudio(req);
+    }
     const response = await this.client.audio.speech.create({
       model: req.model,
       input: req.text,
@@ -102,6 +105,61 @@ export class LocalProvider implements ImageProvider, TtsProvider {
       response_format: "mp3",
     });
     const data = Buffer.from(await response.arrayBuffer());
+    if (data.length < MIN_AUDIO_BYTES) {
+      throw noSpeechEndpointError(this.baseUrl, data.length);
+    }
+    return {
+      mimeType: "audio/mpeg",
+      data,
+      modelUsed: req.model,
+      providerUsed: this.id,
+    };
+  }
+
+  /** Zero-shot voice cloning via an extended OpenAI-compatible body. There is
+   *  no single standard for cloning field names across local backends, so the
+   *  request carries both base64 data and a local path under the field names
+   *  that Chatterbox-TTS and XTTS-style servers actually look at. Servers
+   *  ignore fields they don't know; whichever name matches wins. */
+  private async callWithReferenceAudio(req: TtsGenRequest): Promise<TtsGenResult> {
+    const ref = req.referenceAudio!;
+    const refB64 = ref.data.toString("base64");
+    const refFormat = (ref.mimeType.split("/")[1] ?? "wav").toLowerCase();
+
+    const body = {
+      model: req.model,
+      input: req.text,
+      voice: req.voice ?? "clone",
+      response_format: "mp3",
+      // Chatterbox-TTS (devnen/Chatterbox-TTS-Server) — inline base64
+      reference_audio: refB64,
+      reference_audio_format: refFormat,
+      // Chatterbox-TTS — path variant
+      audio_prompt_path: ref.path,
+      // Coqui-TTS / XTTS-style servers (Speaches, Coqui fork)
+      speaker_wav: ref.path,
+    };
+
+    const url = this.baseUrl.endsWith("/")
+      ? `${this.baseUrl}audio/speech`
+      : `${this.baseUrl}/audio/speech`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer local-server",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errBody = (await res.text()).slice(0, 500);
+      throw new StructuredError(
+        "PROVIDER_ERROR",
+        `local server ${res.status} on /v1/audio/speech with reference_audio: ${errBody}`,
+        `Confirm the backend supports voice cloning — Chatterbox-TTS and XTTS-style servers do; Kokoro-FastAPI / Orpheus-FastAPI / LM Studio don't.`,
+      );
+    }
+    const data = Buffer.from(await res.arrayBuffer());
     if (data.length < MIN_AUDIO_BYTES) {
       throw noSpeechEndpointError(this.baseUrl, data.length);
     }

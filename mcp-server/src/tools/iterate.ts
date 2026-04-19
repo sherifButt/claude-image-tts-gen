@@ -75,6 +75,7 @@ export async function iterate(
       {
         text: newText,
         voice: input.voice,
+        referenceAudioPath: input.referenceAudioPath,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,

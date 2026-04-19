@@ -21087,7 +21087,7 @@ var require_getCredentials = __commonJS({
     var fs3 = __require("fs");
     var util_1 = __require("util");
     var errorWithCode_1 = require_errorWithCode();
-    var readFile9 = fs3.readFile ? (0, util_1.promisify)(fs3.readFile) : async () => {
+    var readFile10 = fs3.readFile ? (0, util_1.promisify)(fs3.readFile) : async () => {
       throw new errorWithCode_1.ErrorWithCode("use key rather than keyFile.", "MISSING_CREDENTIALS");
     };
     var ExtensionFiles;
@@ -21109,7 +21109,7 @@ var require_getCredentials = __commonJS({
        * @returns A promise that resolves with the credentials.
        */
       async getCredentials() {
-        const key = await readFile9(this.keyFilePath, "utf8");
+        const key = await readFile10(this.keyFilePath, "utf8");
         let body;
         try {
           body = JSON.parse(key);
@@ -21135,7 +21135,7 @@ var require_getCredentials = __commonJS({
        * @returns A promise that resolves with the private key.
        */
       async getCredentials() {
-        const privateKey = await readFile9(this.keyFilePath, "utf8");
+        const privateKey = await readFile10(this.keyFilePath, "utf8");
         return { privateKey };
       }
     };
@@ -22765,7 +22765,7 @@ var require_filesubjecttokensupplier = __commonJS({
     exports.FileSubjectTokenSupplier = void 0;
     var util_1 = __require("util");
     var fs3 = __require("fs");
-    var readFile9 = (0, util_1.promisify)(fs3.readFile ?? (() => {
+    var readFile10 = (0, util_1.promisify)(fs3.readFile ?? (() => {
     }));
     var realpath = (0, util_1.promisify)(fs3.realpath ?? (() => {
     }));
@@ -22805,7 +22805,7 @@ var require_filesubjecttokensupplier = __commonJS({
           throw err;
         }
         let subjectToken;
-        const rawText = await readFile9(parsedFilePath, { encoding: "utf8" });
+        const rawText = await readFile10(parsedFilePath, { encoding: "utf8" });
         if (this.formatType === "text") {
           subjectToken = rawText;
         } else if (this.formatType === "json" && this.subjectTokenFieldName) {
@@ -27618,7 +27618,7 @@ var require_websocket = __commonJS({
     var http3 = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes, createHash: createHash3 } = __require("crypto");
+    var { randomBytes, createHash: createHash4 } = __require("crypto");
     var { Duplex, Readable: Readable2 } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -28278,7 +28278,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash3("sha1").update(key + GUID).digest("base64");
+        const digest = createHash4("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -28645,7 +28645,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter = __require("events");
     var http3 = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash: createHash3 } = __require("crypto");
+    var { createHash: createHash4 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -28946,7 +28946,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash3("sha1").update(key + GUID).digest("base64");
+        const digest = createHash4("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -29523,8 +29523,8 @@ var require_graceful_fs = __commonJS({
       fs4.createReadStream = createReadStream2;
       fs4.createWriteStream = createWriteStream2;
       var fs$readFile = fs4.readFile;
-      fs4.readFile = readFile9;
-      function readFile9(path3, options, cb) {
+      fs4.readFile = readFile10;
+      function readFile10(path3, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
         return go$readFile(path3, options, cb);
@@ -30706,7 +30706,7 @@ var require_filesystem = __commonJS({
       });
       return buffer.subarray(0, bytesRead);
     };
-    var readFile9 = (path3) => new Promise((resolve4, reject) => {
+    var readFile10 = (path3) => new Promise((resolve4, reject) => {
       fs3.open(path3, "r", (err, fd) => {
         if (err) {
           reject(err);
@@ -30724,7 +30724,7 @@ var require_filesystem = __commonJS({
       LDD_PATH,
       SELF_PATH,
       readFileSync,
-      readFile: readFile9
+      readFile: readFile10
     };
   }
 });
@@ -30772,7 +30772,7 @@ var require_detect_libc = __commonJS({
     "use strict";
     var childProcess = __require("child_process");
     var { isLinux, getReport } = require_process();
-    var { LDD_PATH, SELF_PATH, readFile: readFile9, readFileSync } = require_filesystem();
+    var { LDD_PATH, SELF_PATH, readFile: readFile10, readFileSync } = require_filesystem();
     var { interpreterPath } = require_elf();
     var cachedFamilyInterpreter;
     var cachedFamilyFilesystem;
@@ -30852,7 +30852,7 @@ var require_detect_libc = __commonJS({
       }
       cachedFamilyFilesystem = null;
       try {
-        const lddContent = await readFile9(LDD_PATH);
+        const lddContent = await readFile10(LDD_PATH);
         cachedFamilyFilesystem = getFamilyFromLddContent(lddContent);
       } catch (e2) {
       }
@@ -30876,7 +30876,7 @@ var require_detect_libc = __commonJS({
       }
       cachedFamilyInterpreter = null;
       try {
-        const selfContent = await readFile9(SELF_PATH);
+        const selfContent = await readFile10(SELF_PATH);
         const path3 = interpreterPath(selfContent);
         cachedFamilyInterpreter = familyFromInterpreterPath(path3);
       } catch (e2) {
@@ -30938,7 +30938,7 @@ var require_detect_libc = __commonJS({
       }
       cachedVersionFilesystem = null;
       try {
-        const lddContent = await readFile9(LDD_PATH);
+        const lddContent = await readFile10(LDD_PATH);
         const versionMatch = lddContent.match(RE_GLIBC_VERSION);
         if (versionMatch) {
           cachedVersionFilesystem = versionMatch[1];
@@ -32419,7 +32419,7 @@ var require_package3 = __commonJS({
 var require_libvips = __commonJS({
   "node_modules/sharp/lib/libvips.js"(exports, module) {
     var { spawnSync } = __require("node:child_process");
-    var { createHash: createHash3 } = __require("node:crypto");
+    var { createHash: createHash4 } = __require("node:crypto");
     var semverCoerce = require_coerce();
     var semverGreaterThanOrEqualTo = require_gte();
     var semverSatisfies = require_satisfies();
@@ -32510,7 +32510,7 @@ var require_libvips = __commonJS({
       }
       return false;
     };
-    var sha512 = (s2) => createHash3("sha512").update(s2).digest("hex");
+    var sha512 = (s2) => createHash4("sha512").update(s2).digest("hex");
     var yarnLocator = () => {
       try {
         const identHash = sha512(`imgsharp-libvips-${buildPlatformArch()}`);
@@ -48281,7 +48281,7 @@ var StdioServerTransport = class {
 
 // src/server.ts
 import { existsSync as existsSync9 } from "node:fs";
-import { readFile as readFile8 } from "node:fs/promises";
+import { readFile as readFile9 } from "node:fs/promises";
 import { basename as basename6 } from "node:path";
 
 // src/config.ts
@@ -73885,6 +73885,9 @@ var LocalProvider = class {
     };
   }
   async generateSpeech(req) {
+    if (req.referenceAudio) {
+      return await this.callWithReferenceAudio(req);
+    }
     const response = await this.client.audio.speech.create({
       model: req.model,
       input: req.text,
@@ -73892,6 +73895,56 @@ var LocalProvider = class {
       response_format: "mp3"
     });
     const data = Buffer.from(await response.arrayBuffer());
+    if (data.length < MIN_AUDIO_BYTES) {
+      throw noSpeechEndpointError(this.baseUrl, data.length);
+    }
+    return {
+      mimeType: "audio/mpeg",
+      data,
+      modelUsed: req.model,
+      providerUsed: this.id
+    };
+  }
+  /** Zero-shot voice cloning via an extended OpenAI-compatible body. There is
+   *  no single standard for cloning field names across local backends, so the
+   *  request carries both base64 data and a local path under the field names
+   *  that Chatterbox-TTS and XTTS-style servers actually look at. Servers
+   *  ignore fields they don't know; whichever name matches wins. */
+  async callWithReferenceAudio(req) {
+    const ref = req.referenceAudio;
+    const refB64 = ref.data.toString("base64");
+    const refFormat = (ref.mimeType.split("/")[1] ?? "wav").toLowerCase();
+    const body = {
+      model: req.model,
+      input: req.text,
+      voice: req.voice ?? "clone",
+      response_format: "mp3",
+      // Chatterbox-TTS (devnen/Chatterbox-TTS-Server) — inline base64
+      reference_audio: refB64,
+      reference_audio_format: refFormat,
+      // Chatterbox-TTS — path variant
+      audio_prompt_path: ref.path,
+      // Coqui-TTS / XTTS-style servers (Speaches, Coqui fork)
+      speaker_wav: ref.path
+    };
+    const url = this.baseUrl.endsWith("/") ? `${this.baseUrl}audio/speech` : `${this.baseUrl}/audio/speech`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer local-server"
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const errBody = (await res.text()).slice(0, 500);
+      throw new StructuredError(
+        "PROVIDER_ERROR",
+        `local server ${res.status} on /v1/audio/speech with reference_audio: ${errBody}`,
+        `Confirm the backend supports voice cloning \u2014 Chatterbox-TTS and XTTS-style servers do; Kokoro-FastAPI / Orpheus-FastAPI / LM Studio don't.`
+      );
+    }
+    const data = Buffer.from(await res.arrayBuffer());
     if (data.length < MIN_AUDIO_BYTES) {
       throw noSpeechEndpointError(this.baseUrl, data.length);
     }
@@ -75797,7 +75850,7 @@ function isRetryable(err) {
   return RETRYABLE_CODES.has(err.code);
 }
 async function withFailover(opts) {
-  const order = getFailoverOrder(opts.modality, opts.preferredProvider, opts.config);
+  const order = opts.pinToPreferred ? [opts.preferredProvider] : getFailoverOrder(opts.modality, opts.preferredProvider, opts.config);
   if (order.length === 0) {
     throw new StructuredError(
       "CONFIG_ERROR",
@@ -76138,8 +76191,9 @@ async function generateImage(args, config3, opts = {}) {
 }
 
 // src/tools/generate-speech.ts
-import { mkdir as mkdir10, writeFile as writeFile11 } from "node:fs/promises";
-import { join as join9, resolve as resolve3 } from "node:path";
+import { readFile as readFile8, mkdir as mkdir10, writeFile as writeFile11 } from "node:fs/promises";
+import { createHash as createHash3 } from "node:crypto";
+import { extname as extname2, join as join9, resolve as resolve3 } from "node:path";
 
 // src/chunker/tts.ts
 function chunkText(text, limit2) {
@@ -76526,13 +76580,43 @@ async function generateSpeech(args, config3, opts = {}) {
       `Pick from the listed voices, or omit --voice to use ${slot.defaultVoice ?? "the default"}.`
     );
   }
+  let referenceAudio;
+  let referenceAudioHash;
+  if (args.referenceAudioPath) {
+    if (requestedProvider !== "local") {
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        `referenceAudio (voice cloning) is only supported on provider=local (Chatterbox-TTS / XTTS-style servers). Got provider=${requestedProvider}.`,
+        requestedProvider === "elevenlabs" ? "For ElevenLabs cloning, create the voice at elevenlabs.io/voice-lab and pass its voice ID via --voice <id>." : "Switch to --provider local and run a cloning-capable backend (Chatterbox-TTS or Coqui-TTS/XTTS)."
+      );
+    }
+    const absRefPath = resolve3(args.referenceAudioPath);
+    let bytes;
+    try {
+      bytes = await readFile8(absRefPath);
+    } catch (err) {
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        `Failed to read referenceAudio at ${absRefPath}: ${err.message}`,
+        "Pass an existing .wav/.mp3 path. Chatterbox-TTS prefers ~5s of clean speech."
+      );
+    }
+    const ext = extname2(absRefPath).slice(1).toLowerCase();
+    referenceAudio = {
+      data: bytes,
+      mimeType: ext === "mp3" ? "audio/mpeg" : `audio/${ext || "wav"}`,
+      path: absRefPath
+    };
+    referenceAudioHash = createHash3("sha256").update(bytes).digest("hex").slice(0, 16);
+  }
+  const cacheParams = referenceAudioHash ? { ...slot.params, referenceAudio: referenceAudioHash } : slot.params;
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
     modality: "tts",
     text: args.text,
     voice,
-    params: slot.params
+    params: cacheParams
   });
   const cached2 = await lookupCache(cacheKey);
   let budgetWarning = null;
@@ -76584,6 +76668,7 @@ async function generateSpeech(args, config3, opts = {}) {
           modality: "tts",
           tier,
           preferredProvider: requestedProvider,
+          pinToPreferred: !!referenceAudio,
           config: config3,
           callProvider: async (resolvedSlot, attemptProviderId) => {
             const provider = createTtsProvider(attemptProviderId, config3);
@@ -76591,7 +76676,8 @@ async function generateSpeech(args, config3, opts = {}) {
               text: c.text,
               model: resolvedSlot.model,
               voice: args.voice ?? resolvedSlot.defaultVoice,
-              params: resolvedSlot.params
+              params: resolvedSlot.params,
+              referenceAudio
             });
           }
         })
@@ -76634,7 +76720,8 @@ async function generateSpeech(args, config3, opts = {}) {
         model: slot.model,
         voice,
         params: slot.params,
-        wantTimestamps: captionsMode !== "none"
+        wantTimestamps: captionsMode !== "none",
+        referenceAudio
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -76658,6 +76745,7 @@ async function generateSpeech(args, config3, opts = {}) {
       modality: "tts",
       tier,
       preferredProvider: requestedProvider,
+      pinToPreferred: !!referenceAudio,
       config: config3,
       callProvider: async (resolvedSlot, attemptProviderId) => {
         const provider = createTtsProvider(attemptProviderId, config3);
@@ -76667,7 +76755,8 @@ async function generateSpeech(args, config3, opts = {}) {
           model: resolvedSlot.model,
           voice: attemptVoice,
           params: resolvedSlot.params,
-          wantTimestamps: captionsMode !== "none"
+          wantTimestamps: captionsMode !== "none",
+          referenceAudio
         });
       }
     });
@@ -76763,7 +76852,11 @@ async function generateSpeech(args, config3, opts = {}) {
       model: modelUsed,
       tier,
       params: slot.params,
-      input: { text: args.text, voice },
+      input: {
+        text: args.text,
+        voice,
+        ...referenceAudio?.path ? { referenceAudioPath: referenceAudio.path } : {}
+      },
       output: { files: [filePath], mimeType },
       cost: { ...cost, total: chargedCost },
       lineage,
@@ -77263,6 +77356,7 @@ async function iterate(args, config3) {
       {
         text: newText,
         voice: input.voice,
+        referenceAudioPath: input.referenceAudioPath,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
@@ -77571,6 +77665,7 @@ async function regenerate(args, config3) {
       {
         text: input.text,
         voice: input.voice,
+        referenceAudioPath: input.referenceAudioPath,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,
@@ -77839,7 +77934,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     throw new Error(`Resource file no longer exists: ${filePath}`);
   }
   const mimeType = fileExtToMime(filePath);
-  const data = await readFile8(filePath);
+  const data = await readFile9(filePath);
   if (mimeType.startsWith("text/")) {
     return {
       contents: [{ uri, mimeType, text: data.toString("utf8") }]
@@ -77909,6 +78004,10 @@ var speechInputSchema = {
       description: "Write caption files alongside audio. Requires provider with word-level timestamps (ElevenLabs)."
     },
     voicePreset: { type: "string", description: "Apply a saved voice preset by name." },
+    referenceAudioPath: {
+      type: "string",
+      description: "Path to a reference audio file (wav/mp3) for zero-shot voice cloning. Only the `local` provider supports this \u2014 run Chatterbox-TTS or a Coqui-TTS / XTTS server. For ElevenLabs cloning, create the voice on elevenlabs.io/voice-lab and pass its ID via `voice`."
+    },
     outputDir: {
       type: "string",
       description: "Directory for the auto-generated filename (ignored if outputPath is passed). Overrides the audio output dir from env."
