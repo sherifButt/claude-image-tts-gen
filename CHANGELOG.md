@@ -4,6 +4,33 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.10] - 2026-04-21
+
+### Added
+
+- **ElevenLabs `eleven_v3` registered as the `pro` tier.** Previously
+  usable only via explicit `--model eleven_v3` and reporting `(unknown
+  pricing)` / `$0` cost. Now `provider: elevenlabs, tier: pro`
+  resolves to `eleven_v3`, with accurate per-char pricing so session
+  ledgers and budget caps reflect real spend. Pricing set at
+  $180 / million chars, same as `eleven_multilingual_v2` —
+  [per the v3 launch blog](https://elevenlabs.io/blog/eleven-v3),
+  post-June-2025 rate is "Same as Multilingual V2." The 80% launch
+  promo ended before this version. If pricing has changed since, run
+  `pricing:refresh`.
+- Supports emotion and audio tags (`[giggle]`, `[sigh]`, `[whisper]`,
+  multi-speaker) — pass the text with tags inline.
+- `last_updated` field in `pricing.json` bumped to 2026-04-21.
+
+### Notes
+
+- `eleven_turbo_v2_5` (small) and `eleven_multilingual_v2` (mid) remain
+  unchanged; v3 slots in above them.
+- Conservative `maxCharsPerCall: 5000` retained even though v3
+  supports up to ~10k chars per call; the plugin's auto-chunk +
+  stitch path handles longer inputs transparently, and the
+  `INPUT_TOO_LONG` reactive-retry catches provider-side limits.
+
 ## [0.7.9] - 2026-04-21
 
 ### Fixed

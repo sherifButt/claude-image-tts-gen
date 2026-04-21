@@ -174,7 +174,18 @@ const MATRIX: ProviderEntry[] = [
         customVoicesAllowed: true,
         maxCharsPerCall: 5000,
       },
-      pro: NA,
+      pro: {
+        model: "eleven_v3",
+        batchable: false,
+        implemented: true,
+        voices: ELEVENLABS_FRIENDLY_VOICES,
+        defaultVoice: ELEVENLABS_DEFAULT_VOICE,
+        customVoicesAllowed: true,
+        // v3 supports up to 10k chars per call per ElevenLabs blog; keep
+        // conservative 5000 limit so the chunker still splits long inputs
+        // and the plugin's INPUT_TOO_LONG catch handles edge cases.
+        maxCharsPerCall: 5000,
+      },
     },
   },
 ];

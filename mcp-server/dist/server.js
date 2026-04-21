@@ -74339,7 +74339,18 @@ var MATRIX = [
         customVoicesAllowed: true,
         maxCharsPerCall: 5e3
       },
-      pro: NA
+      pro: {
+        model: "eleven_v3",
+        batchable: false,
+        implemented: true,
+        voices: ELEVENLABS_FRIENDLY_VOICES,
+        defaultVoice: ELEVENLABS_DEFAULT_VOICE,
+        customVoicesAllowed: true,
+        // v3 supports up to 10k chars per call per ElevenLabs blog; keep
+        // conservative 5000 limit so the chunker still splits long inputs
+        // and the plugin's INPUT_TOO_LONG catch handles edge cases.
+        maxCharsPerCall: 5e3
+      }
     }
   }
 ];
@@ -74919,7 +74930,7 @@ async function copyFromCache(hit, destPath) {
 
 // src/pricing/pricing.json
 var pricing_default = {
-  last_updated: "2026-04-18",
+  last_updated: "2026-04-21",
   currency: "USD",
   sources: [
     "https://ai.google.dev/gemini-api/docs/pricing",
@@ -75021,6 +75032,14 @@ var pricing_default = {
         standard: 180
       },
       notes: "Pay-As-You-Go effective rate (~$0.18/1K chars). Plans differ."
+    },
+    "elevenlabs/eleven_v3": {
+      modality: "tts",
+      pricing: {
+        type: "million_chars",
+        standard: 180
+      },
+      notes: "Priced the same as Multilingual V2 per ElevenLabs v3 launch blog (post-June-2025 rate). Supports emotion tags ([giggle], [sigh], ...) and multi-speaker via audio tags."
     },
     "openrouter/google/gemini-2.5-flash-image": {
       modality: "image",
