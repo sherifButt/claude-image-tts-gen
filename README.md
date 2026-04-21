@@ -4,6 +4,19 @@ Multi-provider AI image and text-to-speech generation, packaged as a Claude Code
 
 Inspired by [guinacio/claude-image-gen](https://github.com/guinacio/claude-image-gen) and extended with multi-provider support, tier abstraction, batch mode, end-to-end cost tracking, MCP elicitation/sampling/notifications/resources, and a reproducible sidecar workflow.
 
+## Why this MCP is different
+
+There are plenty of MCP servers that wrap one vendor. This one wraps **five** (Google Gemini, OpenAI, OpenRouter, ElevenLabs, and any OpenAI-compatible local server) behind a consistent interface, and adds the cross-cutting concerns that a thin wrapper leaves to you:
+
+- **One knob (`small | mid | pro`) spans every provider.** Code written for Gemini works unchanged against OpenAI or a local Kokoro model — swap `--provider` and the call still runs. No per-vendor quirks in your prompt code.
+- **Cost-aware from the first call.** Per-call + session + per-project ledgers, hard daily/weekly/monthly budget caps enforced *pre-call* (not after the charge), dry-run `estimate_cost` that ranks every provider/tier combo, and a $0 cache for identical repeats. You know what a generation costs before you spend, and after.
+- **Reproducibility built-in.** Every output gets a hidden `.regenerate.json` sidecar with the full recipe (prompt, model, tier, params, lineage). `regenerate` re-runs it; `iterate` adds a tweak and threads parent → child. Prompts never get lost in chat history.
+- **Cross-cutting work is handled once, not per provider.** Provider failover with logged cost delta. Batch mode (50% off) where the vendor supports it. Long-text TTS auto-chunked at sentence boundaries and stitched via ffmpeg — **including reactive chunking when a provider rejects a single-call input as too long** (v0.7.0). SRT/VTT captions from ElevenLabs timestamps. Image post-processing presets for OG / Twitter / favicon / etc.
+- **Free local escape hatch.** Same plugin, same skills, same sidecars, no API key, no network, no bill — route to Kokoro-FastAPI, Speaches, Orpheus-FastAPI, or Chatterbox-TTS. The local provider is a first-class citizen, not a bolt-on.
+- **Proactive skills.** Claude invokes the plugin automatically when a task needs an image or narration, without the user having to ask. Slash commands exist for explicit control (`/gen-image`, `/gen-speech`, `/gen-cost`, …), but the default path is ambient.
+- **MCP-native UX.** Elicitation (`create_assets` asks batch-vs-sync when ≥2 prompts queued), sampling (prompt rewriter), notifications (batch job completion), resources (recent outputs in the asset panel), and structured errors everywhere — no raw provider error blobs.
+- **Zero-shot voice cloning.** `--reference-audio my-voice.wav` + local Chatterbox-TTS or Coqui-TTS/XTTS. Reference fingerprint is mixed into the cache key so the same text with different references doesn't collide. For ElevenLabs cloning, pass the Voice Lab ID via `--voice`.
+
 > ## Run it 100% local — for $0/call
 >
 > Point this plugin at any **OpenAI-compatible local server** and generate images
@@ -50,10 +63,12 @@ Inspired by [guinacio/claude-image-gen](https://github.com/guinacio/claude-image
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
   - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
 - **Image-to-image edits** via reference image input (gpt-image-1, Gemini multimodal, local server if it supports `/v1/images/edits`)
-- **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg
+- **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg. Triggers both pre-emptively (text > provider's `maxCharsPerCall`) *and* reactively (provider rejects a shorter input as too long for output-duration / token reasons — a new `INPUT_TOO_LONG` code catches that and retries with chunking on the same provider, preserving voice)
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
 - **Zero-shot voice cloning** via `--reference-audio <path>` against `--provider local` + Chatterbox-TTS or a Coqui-TTS / XTTS server (for ElevenLabs cloning, create the voice on elevenlabs.io/voice-lab and pass its ID via `--voice`)
+- **Per-provider default voice env vars** (`GEMINI_DEFAULT_VOICE`, `OPENAI_DEFAULT_VOICE`, `ELEVENLABS_DEFAULT_VOICE`, `LOCAL_DEFAULT_VOICE`) so you don't have to pass `--voice` on every call. Only applied when the value is valid for the resolved slot, so a Gemini name won't leak into an ElevenLabs call.
+- **`voiceDefaulted` signal** on every TTS response — when you didn't spec a voice, the response says so, letting Claude catch mismatches before spending on a long run
 
 ### Cost awareness
 - **13-model pricing table** with batch (50% off) rates and 30-day staleness warning
@@ -132,13 +147,22 @@ Or point any MCP-aware client at `dist/server.js` directly — the `mcpServers` 
 
 ## Configuration
 
-Set at least one provider key — **or** run a local OpenAI-compatible server (no key required):
+**Installed via Claude Code:** the plugin declares a `userConfig` schema. On first install, Claude Code prompts for each field and stores API keys in the system keychain (preferences land in `settings.json`). You don't need to touch shell env vars.
+
+**Shell env vars still work** for direct CLI invocation, local development, and project-level overrides via `.claude/settings.json`:
 
 ```sh
+# Keys — set at least one, or run a local server (no key required)
 export GEMINI_API_KEY=...        # default image + TTS provider
 export OPENAI_API_KEY=...        # image (gpt-image-1) + TTS (tts-1, gpt-4o-mini-tts, tts-1-hd)
 export OPENROUTER_API_KEY=...    # image passthrough
 export ELEVENLABS_API_KEY=...    # TTS with timestamps
+
+# Per-provider default TTS voices (optional but recommended — saves passing --voice on every call)
+export GEMINI_DEFAULT_VOICE=Charon     # male baritone (Kore is the Gemini default; Charon, Puck, Fenrir, ... are male-leaning)
+export OPENAI_DEFAULT_VOICE=onyx       # male
+export ELEVENLABS_DEFAULT_VOICE=<id>   # from elevenlabs.io/voice-lab
+export LOCAL_DEFAULT_VOICE=am_adam     # depends on backend (am_* = male Kokoro voices)
 
 # Local server (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / ...)
 export LOCAL_BASE_URL=http://localhost:8880/v1   # default (Kokoro-FastAPI's port)
@@ -146,7 +170,7 @@ export LOCAL_ENABLED=true                         # opt-in to failover chain
 # Back-compat: LMSTUDIO_BASE_URL / LMSTUDIO_ENABLED are still read.
 ```
 
-Optional:
+Other optional:
 
 ```sh
 export GEMINI_IMAGE_MODEL=gemini-2.5-flash-image  # override default model
@@ -158,6 +182,8 @@ export AUTOPLAY=false                             # macOS afplay after TTS
 export EMIT_SIDECAR=false                         # skip .regenerate.json per output (see below)
 export LOG_LEVEL=info
 ```
+
+**Budget** isn't an env var — it's persisted in `~/.claude-image-tts-gen/budget.json` and managed via the `set_budget` MCP tool or `/gen-budget` slash command.
 
 ## Sidecars (`.regenerate.json`)
 
@@ -221,14 +247,21 @@ node mcp-server/dist/cli.js --speech -p "read this in my voice" \
 
 ## Status
 
-v0.4.0 — see commit log for the full feature timeline. Implemented since v0.2:
-- **Google image pro** (Imagen 4) — photoreal landscape/portrait without needing OPENAI_API_KEY.
-- **Google TTS sync** (Gemini 2.5 Flash TTS / Pro TTS) — 30 prebuilt voices, default `Kore`. Returns `.wav`.
+**v0.7.0** — the big architectural pump. See [CHANGELOG.md](./CHANGELOG.md) for the full feature timeline. Highlights since v0.6:
+
+- **Reactive chunk-on-length-error** (v0.7.0). Long-text TTS used to fail when a provider rejected the input on duration/token grounds, forcing callers to chunk externally and lose voice/cache/sidecar fidelity. A new `INPUT_TOO_LONG` error code catches those rejections and auto-retries with chunking on the same provider.
+- **Per-provider default voices** (v0.7.0). `GEMINI_DEFAULT_VOICE=Charon` etc., scoped per provider so voice names don't leak across incompatible namespaces. Applied at every slot resolution point.
+- **Plugin `userConfig` migration** (v0.7.0). Marketplace-ready — Claude Code prompts for keys at install, stores them in the system keychain.
+- **Zero-shot voice cloning** (v0.6.0). `--reference-audio` via Chatterbox-TTS or XTTS. Sidecar records the path so `regenerate`/`iterate` reproduces the cloned voice.
+- **Google image pro** (v0.4.0). Imagen 4 for photoreal landscape/portrait.
+- **Google TTS sync** (v0.4.0). Gemini 2.5 Flash TTS / Pro TTS with 30 prebuilt voices.
 
 Known deferred items:
-- **Gemini TTS batch** — sync implementation shipped in 0.4.0; batch uses the same SDK shape and will follow.
-- **Multi-chunk TTS captions** — single-chunk only in v1 (offset math deferred).
-- **Quality fallback** for low-tier text rendering — postponed (needs OCR heuristic).
+
+- **Gemini TTS batch** — sync shipped; batch uses the same SDK shape and will follow.
+- **Multi-chunk TTS captions** — single-chunk only (multi-chunk timestamp-offset math deferred).
+- **Quality fallback** for low-tier text rendering — needs an OCR heuristic.
+- **Video modality (HeyGen + Synthesia)** — coming in v0.8.0 as native provider adapters, not passthrough, so video inherits the same cost / sidecar / failover machinery.
 
 ## Credits
 
