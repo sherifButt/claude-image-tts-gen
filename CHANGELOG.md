@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-04-21
+
+### Fixed
+
+- **Install completed silently with no userConfig prompt.** 0.7.3 left
+  every userConfig field optional (no `required: true` flags), which
+  meant Claude Code skipped the configuration prompt entirely on
+  install — the plugin landed with no API key set, silently unusable.
+  `gemini_api_key` is now marked `required: true` so the install flow
+  actually asks for it. Every other field stays optional and can be
+  left blank to accept built-in defaults.
+
 ## [0.7.3] - 2026-04-21
 
 ### Fixed

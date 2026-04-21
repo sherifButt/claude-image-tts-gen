@@ -8,7 +8,7 @@
       "name": "claude-image-tts-gen",
       "source": "./",
       "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
-      "version": "0.7.3",
+      "version": "0.7.4",
       "author": {
         "name": "Sherif Butt"
       }
