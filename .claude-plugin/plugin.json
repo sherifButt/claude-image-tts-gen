@@ -1,7 +1,7 @@
 {
   "name": "claude-image-tts-gen",
   "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "author": {
     "name": "Sherif Butt"
   },
@@ -108,24 +108,24 @@
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"],
       "env": {
-        "GEMINI_API_KEY": "${user_config.gemini_api_key}",
-        "OPENAI_API_KEY": "${user_config.openai_api_key}",
-        "OPENROUTER_API_KEY": "${user_config.openrouter_api_key}",
-        "ELEVENLABS_API_KEY": "${user_config.elevenlabs_api_key}",
-        "GEMINI_DEFAULT_VOICE": "${user_config.gemini_default_voice}",
-        "OPENAI_DEFAULT_VOICE": "${user_config.openai_default_voice}",
-        "ELEVENLABS_DEFAULT_VOICE": "${user_config.elevenlabs_default_voice}",
-        "LOCAL_DEFAULT_VOICE": "${user_config.local_default_voice}",
-        "LOCAL_BASE_URL": "${user_config.local_base_url}",
-        "LOCAL_ENABLED": "${user_config.local_enabled}",
-        "GEMINI_IMAGE_MODEL": "${user_config.gemini_image_model}",
-        "IMAGE_OUTPUT_DIR": "${user_config.image_output_dir}",
-        "AUDIO_OUTPUT_DIR": "${user_config.audio_output_dir}",
-        "STATE_DIR": "${user_config.state_dir}",
-        "AUTOPLAY": "${user_config.autoplay}",
-        "REWRITE_PROMPTS": "${user_config.rewrite_prompts}",
-        "EMIT_SIDECAR": "${user_config.emit_sidecar}",
-        "LOG_LEVEL": "${user_config.log_level}"
+        "GEMINI_API_KEY": "${user_config.gemini_api_key:-}",
+        "OPENAI_API_KEY": "${user_config.openai_api_key:-}",
+        "OPENROUTER_API_KEY": "${user_config.openrouter_api_key:-}",
+        "ELEVENLABS_API_KEY": "${user_config.elevenlabs_api_key:-}",
+        "GEMINI_DEFAULT_VOICE": "${user_config.gemini_default_voice:-}",
+        "OPENAI_DEFAULT_VOICE": "${user_config.openai_default_voice:-}",
+        "ELEVENLABS_DEFAULT_VOICE": "${user_config.elevenlabs_default_voice:-}",
+        "LOCAL_DEFAULT_VOICE": "${user_config.local_default_voice:-}",
+        "LOCAL_BASE_URL": "${user_config.local_base_url:-}",
+        "LOCAL_ENABLED": "${user_config.local_enabled:-false}",
+        "GEMINI_IMAGE_MODEL": "${user_config.gemini_image_model:-}",
+        "IMAGE_OUTPUT_DIR": "${user_config.image_output_dir:-}",
+        "AUDIO_OUTPUT_DIR": "${user_config.audio_output_dir:-}",
+        "STATE_DIR": "${user_config.state_dir:-}",
+        "AUTOPLAY": "${user_config.autoplay:-false}",
+        "REWRITE_PROMPTS": "${user_config.rewrite_prompts:-true}",
+        "EMIT_SIDECAR": "${user_config.emit_sidecar:-true}",
+        "LOG_LEVEL": "${user_config.log_level:-info}"
       }
     }
   }

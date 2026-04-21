@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-04-21
+
+### Fixed
+
+- **Plugin failed to enable when userConfig fields were left empty.**
+  0.7.1's manifest referenced user_config values in `mcpServers.env` with
+  bare `${user_config.foo}` syntax. The Claude Code runtime treats every
+  such reference as a *required* input and refused to enable the plugin
+  with "Missing required user configuration value: gemini_api_key" any
+  time a field wasn't filled in. Every env reference now uses the
+  shell-style fallback form `${user_config.foo:-<default>}`, matching
+  how the original 0.6.x plugin.json read shell env vars:
+  - String fields default to empty; config.ts applies its own defaults.
+  - `local_enabled` / `autoplay` default to `false`; `rewrite_prompts`
+    / `emit_sidecar` default to `true`; `log_level` defaults to `info`
+    — matching the existing config.ts fallbacks.
+
 ## [0.7.1] - 2026-04-21
 
 ### Fixed
