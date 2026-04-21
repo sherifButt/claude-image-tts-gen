@@ -1,6 +1,6 @@
 {
   "name": "claude-image-tts-gen-mcp",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "MCP server for multi-provider image and TTS generation",
   "type": "module",
   "main": "dist/server.js",

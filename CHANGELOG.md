@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.7] - 2026-04-21
+
+### Fixed
+
+- **Plugin MCP server silently failed to spawn with external
+  `plugin-mcp.json`.** The `mcpServers` pointer in plugin.json
+  (`"mcpServers": "./plugin-mcp.json"`) loaded the config correctly
+  per `claude plugin list --json` but the MCP server never appeared
+  in `/mcp` — at session start, Claude Code didn't resolve
+  `${CLAUDE_PLUGIN_ROOT}` for externally-referenced mcp configs,
+  leading to a silent spawn failure. Confirmed by v0.6.0 (inline
+  mcpServers, still running in older sessions per `ps`) working
+  fine with the exact same `${CLAUDE_PLUGIN_ROOT}` pattern. Moved
+  mcpServers back inline in `plugin.json`, matching the pattern
+  chrome-devtools-mcp and other working plugins use. Removed
+  `plugin-mcp.json`.
+
 ## [0.7.6] - 2026-04-21
 
 ### Fixed
