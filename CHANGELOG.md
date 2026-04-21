@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-04-21
+
+### Fixed
+
+- **Plugin manifest validation failure on install.** `userConfig` fields in
+  0.7.0 were missing the required `type` and `title` keys, causing Claude
+  Code to reject the manifest with "expected one of string|number|boolean
+  |directory|file" on every field. All 18 fields now declare the correct
+  `type` (string / boolean / directory) and a human-readable `title`.
+  Boolean fields (`local_enabled`, `autoplay`, `rewrite_prompts`,
+  `emit_sidecar`) render as toggles in the install prompt; directory
+  fields (`image_output_dir`, `audio_output_dir`, `state_dir`) render as
+  path pickers.
+
 ## [0.7.0] - 2026-04-21
 
 ### Fixed

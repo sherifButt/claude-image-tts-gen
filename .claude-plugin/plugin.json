@@ -1,7 +1,7 @@
 {
   "name": "claude-image-tts-gen",
   "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "author": {
     "name": "Sherif Butt"
   },
@@ -9,76 +9,98 @@
   "license": "MIT",
   "userConfig": {
     "gemini_api_key": {
-      "description": "Google Gemini API key. Recommended — Gemini is the default provider for both image and TTS. Get one at aistudio.google.com.",
+      "type": "string",
+      "title": "Google Gemini API Key",
+      "description": "Recommended — Gemini is the default provider for both image and TTS. Get one at aistudio.google.com.",
       "sensitive": true
     },
     "openai_api_key": {
-      "description": "OpenAI API key (optional). Enables gpt-image-1 and OpenAI TTS tiers. platform.openai.com/api-keys.",
+      "type": "string",
+      "title": "OpenAI API Key",
+      "description": "Enables gpt-image-1 and OpenAI TTS tiers (tts-1, gpt-4o-mini-tts, tts-1-hd). platform.openai.com/api-keys.",
       "sensitive": true
     },
     "openrouter_api_key": {
-      "description": "OpenRouter API key (optional). Enables image passthrough to OpenRouter-hosted models. openrouter.ai/keys.",
+      "type": "string",
+      "title": "OpenRouter API Key",
+      "description": "Enables image passthrough to OpenRouter-hosted models. openrouter.ai/keys.",
       "sensitive": true
     },
     "elevenlabs_api_key": {
-      "description": "ElevenLabs API key (optional). Enables high-quality TTS and voice cloning via saved voice IDs. elevenlabs.io.",
+      "type": "string",
+      "title": "ElevenLabs API Key",
+      "description": "Enables high-quality TTS and voice cloning via saved voice IDs. elevenlabs.io.",
       "sensitive": true
     },
     "gemini_default_voice": {
-      "description": "Preferred default Gemini TTS voice when no --voice is passed (e.g. Charon for male baritone, Kore for female). See list_providers for the full list.",
-      "sensitive": false
+      "type": "string",
+      "title": "Default Gemini TTS Voice",
+      "description": "Preferred default Gemini voice when no --voice is passed (e.g. Charon for male baritone, Kore for female). See list_providers for the full list."
     },
     "openai_default_voice": {
-      "description": "Preferred default OpenAI TTS voice (e.g. onyx for male, nova for female). Accepts alloy, echo, fable, onyx, nova, shimmer.",
-      "sensitive": false
+      "type": "string",
+      "title": "Default OpenAI TTS Voice",
+      "description": "Preferred default OpenAI voice (e.g. onyx for male, nova for female). Accepts alloy, echo, fable, onyx, nova, shimmer."
     },
     "elevenlabs_default_voice": {
-      "description": "Preferred default ElevenLabs voice ID (from Voice Lab). Paste the voice ID as-is, not the display name.",
-      "sensitive": false
+      "type": "string",
+      "title": "Default ElevenLabs Voice ID",
+      "description": "Preferred default ElevenLabs voice ID (from Voice Lab). Paste the voice ID as-is, not the display name."
     },
     "local_default_voice": {
-      "description": "Preferred default voice for the local provider (e.g. am_adam for Kokoro-FastAPI). Depends on your local backend.",
-      "sensitive": false
+      "type": "string",
+      "title": "Default Local TTS Voice",
+      "description": "Preferred default voice for the local provider (e.g. am_adam for Kokoro-FastAPI). Depends on your local backend."
     },
     "local_base_url": {
-      "description": "OpenAI-compatible local server base URL. Defaults to http://localhost:8880/v1 (Kokoro-FastAPI). Override for Orpheus-FastAPI :5005, Speaches :8000, LM Studio :1234, etc.",
-      "sensitive": false
+      "type": "string",
+      "title": "Local Server Base URL",
+      "description": "OpenAI-compatible local server base URL. Defaults to http://localhost:8880/v1 (Kokoro-FastAPI). Override for Orpheus-FastAPI :5005, Speaches :8000, LM Studio :1234, etc."
     },
     "local_enabled": {
-      "description": "Include the local provider in the failover chain. true/false. Default false. Always usable directly via --provider local regardless of this setting.",
-      "sensitive": false
+      "type": "boolean",
+      "title": "Include Local Provider in Failover",
+      "description": "When true, the local provider is part of the failover chain. Default false. Local is always usable directly via --provider local regardless of this setting."
     },
     "gemini_image_model": {
-      "description": "Override the Gemini image model. Leave empty for the default (gemini-2.5-flash-image).",
-      "sensitive": false
+      "type": "string",
+      "title": "Gemini Image Model Override",
+      "description": "Override the default Gemini image model. Leave empty for gemini-2.5-flash-image."
     },
     "image_output_dir": {
-      "description": "Default directory for generated images. Defaults to ./generated-images in the current working directory.",
-      "sensitive": false
+      "type": "directory",
+      "title": "Image Output Directory",
+      "description": "Default directory for generated images. Defaults to ./generated-images in the current working directory."
     },
     "audio_output_dir": {
-      "description": "Default directory for generated audio. Defaults to ./generated-audio in the current working directory.",
-      "sensitive": false
+      "type": "directory",
+      "title": "Audio Output Directory",
+      "description": "Default directory for generated audio. Defaults to ./generated-audio in the current working directory."
     },
     "state_dir": {
-      "description": "Override the state directory (session spend, cache, budget, batch jobs). Leave empty to use ~/.claude-image-tts-gen.",
-      "sensitive": false
+      "type": "directory",
+      "title": "State Directory",
+      "description": "Override the state directory (session spend, cache, budget, batch jobs). Defaults to ~/.claude-image-tts-gen."
     },
     "autoplay": {
-      "description": "Auto-play TTS output after generation. true/false. Default false.",
-      "sensitive": false
+      "type": "boolean",
+      "title": "Auto-Play TTS Output",
+      "description": "Auto-play TTS output via afplay on macOS after each generation. Default false."
     },
     "rewrite_prompts": {
-      "description": "Enable the built-in prompt rewriter for images before sending to the provider. true/false. Default true.",
-      "sensitive": false
+      "type": "boolean",
+      "title": "Enable Prompt Rewriter",
+      "description": "Run generated image prompts through the built-in MCP-sampling rewriter before sending to the provider. Default true."
     },
     "emit_sidecar": {
-      "description": "Write a hidden .regenerate.json sidecar next to each generated file for reproducibility. true/false. Default true.",
-      "sensitive": false
+      "type": "boolean",
+      "title": "Write Regenerate Sidecars",
+      "description": "Write a hidden .regenerate.json sidecar next to each generated file for reproducibility. Default true."
     },
     "log_level": {
-      "description": "Log verbosity: error, warn, info, or debug. Default info.",
-      "sensitive": false
+      "type": "string",
+      "title": "Log Level",
+      "description": "Log verbosity: error, warn, info, or debug. Default info."
     }
   },
   "mcpServers": {
