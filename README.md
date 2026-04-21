@@ -119,7 +119,11 @@ Two commands inside a Claude Code session — no clone, no build:
 /plugin install claude-image-tts-gen@claude-image-tts-gen-marketplace
 ```
 
-The install prompts once for your **Google Gemini API key** (the only required field — grab a free one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Every other provider key and preference is optional and falls through to sensible defaults — see [Configuration](#configuration) for how to set those later. The plugin registers its slash commands (`/gen-image`, `/gen-speech`, …) and MCP tools automatically on enable.
+Before starting Claude Code (or in a fresh terminal before relaunching), export at least your Gemini API key — grab a free one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey):
+```sh
+export GEMINI_API_KEY='your-key'
+```
+See [Configuration](#configuration) for the full env var list and per-provider voice defaults. The plugin registers its slash commands (`/gen-image`, `/gen-speech`, …) and MCP tools automatically on enable.
 
 **Update:**
 ```prompt
@@ -151,32 +155,11 @@ claude mcp add --transport stdio claude-image-tts-gen \
   -- node /absolute/path/to/claude-image-tts-gen/mcp-server/dist/server.js
 ```
 
-Or point any MCP-aware client at `dist/server.js` directly — the `mcpServers` block in `.mcp.json` at the repo root shows the env the server reads. (`userConfig` lives in `.claude-plugin/plugin.json`; the server spawn config is intentionally split into `.mcp.json` — this matches the pattern Claude Code requires when `userConfig` values are referenced in the env block.)
+Or point any MCP-aware client at `dist/server.js` directly — the `mcpServers` block in `.claude-plugin/plugin.json` shows the env the server reads.
 
 ## Configuration
 
-**Installed via Claude Code:** the plugin declares an 18-field `userConfig` schema. On install, Claude Code prompts for the **one required field** (`gemini_api_key`) and stores it in the system keychain. The other 17 fields are optional.
-
-**Setting optional fields after install** (voice defaults, output dirs, enabling the local provider, additional provider keys):
-
-- **Preferred:** `/plugin` → Installed → `claude-image-tts-gen` → **Configure**. Opens the full 18-field form. *(Blocked by an upstream UI bug in Claude Code v2.1.112 where Tab/Enter don't advance between fields — tracked at [anthropics/claude-code#51538](https://github.com/anthropics/claude-code/issues/51538). Until that's fixed, use the workaround below.)*
-- **Workaround for non-sensitive fields:** edit `~/.claude/settings.json` directly:
-  ```json
-  {
-    "pluginConfigs": {
-      "claude-image-tts-gen@claude-image-tts-gen-marketplace": {
-        "options": {
-          "gemini_default_voice": "Charon",
-          "local_enabled": "true",
-          "audio_output_dir": "./generated-audio"
-        }
-      }
-    }
-  }
-  ```
-  Additional sensitive API keys (`openai_api_key`, `elevenlabs_api_key`, etc.) can't be set this way — they go into the keychain. Until the Configure UI works, use shell env vars instead (below), or temporarily `/plugin uninstall` + reinstall to re-trigger the install prompt.
-
-**Shell env vars still work** for direct CLI invocation, local development, and project-level overrides via `.claude/settings.json`:
+Configure via **shell env vars** — set before starting Claude Code (typically in `~/.zshrc` / `~/.bashrc`) or export in the shell you launch Claude Code from. The plugin's `mcpServers.env` in `plugin.json` uses `${VAR:-default}` interpolation, so unset vars fall through to sensible defaults:
 
 ```sh
 # Keys — set at least one, or run a local server (no key required)
@@ -274,11 +257,13 @@ node mcp-server/dist/cli.js --speech -p "read this in my voice" \
 
 ## Status
 
-**v0.7.4** — install-flow stabilized on top of the v0.7.0 architectural pump. See [CHANGELOG.md](./CHANGELOG.md) for the full feature timeline. Highlights since v0.6:
+**v0.7.8** — v0.7.0 architectural pump retained; plugin manifest reverted to the working 0.6.x shell-env pattern. See [CHANGELOG.md](./CHANGELOG.md) for the full timeline. Highlights since v0.6:
 
 - **Reactive chunk-on-length-error** (v0.7.0). Long-text TTS used to fail when a provider rejected the input on duration/token grounds, forcing callers to chunk externally and lose voice/cache/sidecar fidelity. A new `INPUT_TOO_LONG` error code catches those rejections and auto-retries with chunking on the same provider.
 - **Per-provider default voices** (v0.7.0). `GEMINI_DEFAULT_VOICE=Charon` etc., scoped per provider so voice names don't leak across incompatible namespaces. Applied at every slot resolution point.
-- **Plugin `userConfig` migration** (v0.7.0 → v0.7.4). Marketplace-ready install flow: Claude Code prompts for `gemini_api_key` at install, stores it in the system keychain. `mcpServers` now lives in `.mcp.json` (not inline in `plugin.json`) because inline + `${user_config.*}` references break Claude Code's optional-field validator — working plugins like `housecallpro-mcp` follow the same split. The 18-field schema declares `type` + `title` on every field (required by the runtime, though undocumented as of 2026-04).
+- **`voiceDefaulted` signal** (v0.7.0). Every TTS response now indicates whether the voice came from an explicit argument or a fallback default — lets agents catch mismatches before spending on a long run.
+- **`debug: true` flag** (v0.7.0). Opt-in exposure of per-chunk file paths for troubleshooting; `files[0]` is always the stitched deliverable.
+- **Plugin manifest reverted** (v0.7.8). v0.7.0-0.7.7 tried seven approaches to wire `${user_config.foo}` references through Claude Code's plugin-MCP substitution; every variant silently failed to spawn the server. v0.7.8 restores the 0.6.x `${SHELL_VAR:-default}` pattern (no `userConfig`) — the engineering above is all kept, only the install-time-prompt UX is sacrificed. Configure via shell env vars.
 - **Zero-shot voice cloning** (v0.6.0). `--reference-audio` via Chatterbox-TTS or XTTS. Sidecar records the path so `regenerate`/`iterate` reproduces the cloned voice.
 - **Google image pro** (v0.4.0). Imagen 4 for photoreal landscape/portrait.
 - **Google TTS sync** (v0.4.0). Gemini 2.5 Flash TTS / Pro TTS with 30 prebuilt voices.
@@ -288,5 +273,5 @@ Known deferred items:
 - **Gemini TTS batch** — sync shipped; batch uses the same SDK shape and will follow.
 - **Multi-chunk TTS captions** — single-chunk only (multi-chunk timestamp-offset math deferred).
 - **Quality fallback** for low-tier text rendering — needs an OCR heuristic.
-- **Post-install Configure UI** — blocked upstream on [anthropics/claude-code#51538](https://github.com/anthropics/claude-code/issues/51538); workaround documented above.
+- **`userConfig` install prompt** — will re-introduce once Claude Code fixes the `${user_config.*}` → MCP-server spawn silent failure.
 - **Video modality (HeyGen + Synthesia)** — coming in v0.8.0 as native provider adapters, not passthrough, so video inherits the same cost / sidecar / failover machinery.
