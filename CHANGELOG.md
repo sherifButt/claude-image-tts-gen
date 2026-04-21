@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-04-21
+
+### Fixed
+
+- **Plugin still failed to enable after 0.7.2's fallback-syntax fix.**
+  The `${user_config.foo:-<default>}` shell-style default didn't get
+  evaluated by Claude Code's inline-manifest substitution path — the
+  runtime kept rejecting the plugin with "Missing required user
+  configuration value." Turns out the bare `${user_config.foo}` syntax
+  works fine when the `mcpServers` block lives in a separate `.mcp.json`
+  file at the plugin root, but not when inlined in `plugin.json`. The
+  `mcpServers` block has been moved to `.mcp.json` (the pattern used by
+  working plugins like `housecallpro-mcp`), and fallback syntax dropped
+  since it's no longer needed.
+
 ## [0.7.2] - 2026-04-21
 
 ### Fixed
