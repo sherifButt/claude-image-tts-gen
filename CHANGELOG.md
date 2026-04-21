@@ -4,6 +4,41 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.8] - 2026-04-21
+
+### Changed
+
+- **Reverted `plugin.json` to 0.6.x-style shell env var pattern.**
+  After 0.7.0-0.7.7 (seven hotfix releases, six different approaches),
+  `${user_config.foo}` substitution in the `mcpServers.env` block was
+  conclusively the blocker that stopped Claude Code from spawning the
+  plugin's MCP server (silent failure, no error surfaced). 0.6.0 —
+  still running cleanly in older sessions per `ps` — uses
+  `${SHELL_VAR:-default}` shell-style interpolation with no
+  `userConfig`. That pattern is now restored.
+- **`userConfig` schema removed from `plugin.json`.** Keeping it while
+  env refers to shell env vars would be misleading: userConfig values
+  would collect in the install prompt but never reach the MCP server.
+  Users configure API keys and preferences via shell env vars
+  (see `README.md` → Configuration). Keychain-stored secrets and the
+  install-time prompt UX are trade-offs accepted to get a working
+  plugin back.
+- **All of today's v0.7.0 code improvements are retained** — auto-chunk
+  on length errors (`INPUT_TOO_LONG`), `voiceDefaulted` signal,
+  per-provider default voice env vars (`GEMINI_DEFAULT_VOICE`,
+  `OPENAI_DEFAULT_VOICE`, `ELEVENLABS_DEFAULT_VOICE`,
+  `LOCAL_DEFAULT_VOICE`), `debug: true` flag for chunk debugging.
+  Only the plugin manifest surface reverted.
+
+### Migration note
+
+Users installing for the first time on 0.7.8+ need to set at least
+`GEMINI_API_KEY` as a shell env var before starting Claude Code. If
+you had values stored via the (now-removed) `userConfig` prompt in
+0.7.0-0.7.7, copy them out of `~/.claude/settings.json` under
+`pluginConfigs[<plugin-id>].options` and from the keychain, and
+set them as shell env vars.
+
 ## [0.7.7] - 2026-04-21
 
 ### Fixed
