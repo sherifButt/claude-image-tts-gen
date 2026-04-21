@@ -76625,7 +76625,7 @@ async function generateSpeech(args, config3, opts = {}) {
   };
   const resolveVoice = (forSlot) => {
     const envCandidate = providerDefaultVoice(forSlot.provider);
-    const envMatch = envCandidate && forSlot.voices.includes(envCandidate) ? envCandidate : void 0;
+    const envMatch = envCandidate && (forSlot.voices.includes(envCandidate) || forSlot.customVoicesAllowed) ? envCandidate : void 0;
     return args.voice ?? presetVoice ?? envMatch ?? forSlot.defaultVoice;
   };
   let voice = resolveVoice(slot);

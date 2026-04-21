@@ -179,8 +179,16 @@ export async function generateSpeech(
   };
   const resolveVoice = (forSlot: ResolvedSlot): string | undefined => {
     const envCandidate = providerDefaultVoice(forSlot.provider);
+    // Accept env default when either: (a) the name is in the slot's known
+    // voice list (prevents cross-provider leaks — Gemini's "Charon" can't
+    // accidentally go to OpenAI), or (b) the slot allows custom voices
+    // (ElevenLabs voice IDs, local backend voices — no known list to
+    // validate against, so trust the caller's env value).
     const envMatch =
-      envCandidate && forSlot.voices.includes(envCandidate) ? envCandidate : undefined;
+      envCandidate &&
+      (forSlot.voices.includes(envCandidate) || forSlot.customVoicesAllowed)
+        ? envCandidate
+        : undefined;
     return args.voice ?? presetVoice ?? envMatch ?? forSlot.defaultVoice;
   };
   let voice = resolveVoice(slot);

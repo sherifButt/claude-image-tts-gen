@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.9] - 2026-04-21
+
+### Fixed
+
+- **`ELEVENLABS_DEFAULT_VOICE` and `LOCAL_DEFAULT_VOICE` env vars were
+  silently ignored for voice IDs not in the slot's known-voice list.**
+  `resolveVoice` only honored an env default when the name appeared in
+  `slot.voices` — a deliberate check to prevent a Gemini voice name
+  (e.g. `Charon`) from leaking into an ElevenLabs call. But for
+  providers where `slot.customVoicesAllowed` is `true` (ElevenLabs
+  with raw voice IDs from Voice Lab, local backends where voice names
+  depend on the running server), the env default should be trusted
+  — there's no list to validate against. `resolveVoice` now accepts
+  env defaults for slots with `customVoicesAllowed: true`, restoring
+  the ability to set a persistent `ELEVENLABS_DEFAULT_VOICE=<id>` or
+  `LOCAL_DEFAULT_VOICE=<backend-voice>` without having to pass
+  `--voice` on every call.
+- Gemini and OpenAI behavior unchanged — their fixed voice lists are
+  still enforced, cross-provider leak protection preserved.
+
 ## [0.7.8] - 2026-04-21
 
 ### Changed
