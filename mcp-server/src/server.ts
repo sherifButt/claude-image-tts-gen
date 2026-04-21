@@ -192,6 +192,11 @@ const speechInputSchema = {
       description:
         "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true. Set false for one-shot throwaway renders.",
     },
+    debug: {
+      type: "boolean",
+      description:
+        "Include per-chunk file paths (chunkFiles) in the response for troubleshooting. Default false. files[0] is always the stitched deliverable — do not re-concat chunks yourself.",
+    },
   },
   required: ["text"],
 } as const;
@@ -205,7 +210,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "generate_speech",
-      description: `Generate speech audio. Default ${getDefaultProvider("tts")}/${getDefaultTier()}. Output dir: ${config.audioOutputDir}.`,
+      description: `Generate speech audio. Default ${getDefaultProvider("tts")}/${getDefaultTier()}. Output dir: ${config.audioOutputDir}. Pass the full text in one call — this tool chunks long text at sentence boundaries and stitches the result into a single file via ffmpeg; pre-chunking externally loses voice/cache/sidecar fidelity. files[0] is always the final stitched deliverable.`,
       inputSchema: speechInputSchema,
     },
     {

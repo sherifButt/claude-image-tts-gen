@@ -3,6 +3,7 @@ export type ErrorCode =
   | "RATE_LIMIT"
   | "CONTENT_POLICY"
   | "VALIDATION_ERROR"
+  | "INPUT_TOO_LONG"
   | "PROVIDER_ERROR"
   | "PROVIDER_TIMEOUT"
   | "BUDGET_EXCEEDED"
@@ -112,6 +113,15 @@ export function mapProviderError(rawError: unknown, providerId: string): Structu
     );
   }
 
+  if (isLengthError(message)) {
+    return new StructuredError(
+      "INPUT_TOO_LONG",
+      `${providerId} rejected the request as too long: ${message}`,
+      `Shorten the input, or let generate_speech chunk automatically.`,
+      message,
+    );
+  }
+
   if (status === 400 || /invalid|bad request|validation/i.test(message)) {
     return new StructuredError(
       "VALIDATION_ERROR",
@@ -150,4 +160,10 @@ export function mapProviderError(rawError: unknown, providerId: string): Structu
 function matchHttpStatus(message: string): number | null {
   const m = message.match(/\b([45]\d\d)\b/);
   return m ? Number(m[1]) : null;
+}
+
+function isLengthError(message: string): boolean {
+  return /\b(input|text|prompt|request|payload|audio|output)\b[^.]{0,80}\b(too long|too large|exceeds?|exceeded|over (?:the )?(?:max|limit)|maximum|length limit|character limit|token limit)\b|\b(too long|exceeds?|exceeded)\b[^.]{0,80}\b(input|text|prompt|length|characters|tokens|duration|seconds|minutes)\b|\bmax_tokens\b|\bmaximum (?:input|output|context) (?:length|tokens|characters)\b/i.test(
+    message,
+  );
 }

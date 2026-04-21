@@ -15,6 +15,15 @@ export interface Config {
   rewritePrompts: boolean;
   /** Write .regenerate.json sidecars next to outputs. Default true. */
   emitSidecar: boolean;
+  /** Per-provider preferred default TTS voices. Each wins over the slot's
+   *  default voice when the caller passes no explicit `voice` / `voicePreset`,
+   *  but only when the name is valid for the resolved slot (otherwise we fall
+   *  through to slot.defaultVoice silently — prevents a Gemini voice name
+   *  from being sent to ElevenLabs and erroring). */
+  geminiDefaultVoice: string | undefined;
+  openaiDefaultVoice: string | undefined;
+  elevenlabsDefaultVoice: string | undefined;
+  localDefaultVoice: string | undefined;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -53,6 +62,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     emitSidecar: !["false", "0", "no", "off"].includes(
       (env.EMIT_SIDECAR ?? "true").toLowerCase(),
     ),
+    geminiDefaultVoice: env.GEMINI_DEFAULT_VOICE?.trim() || undefined,
+    openaiDefaultVoice: env.OPENAI_DEFAULT_VOICE?.trim() || undefined,
+    elevenlabsDefaultVoice: env.ELEVENLABS_DEFAULT_VOICE?.trim() || undefined,
+    localDefaultVoice: env.LOCAL_DEFAULT_VOICE?.trim() || undefined,
   };
 }
 

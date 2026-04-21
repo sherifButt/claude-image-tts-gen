@@ -4,6 +4,65 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-21
+
+### Fixed
+
+- **Long-text TTS no longer fails on provider length errors.** Single-call
+  TTS that exceeded a provider's output duration or input token limit
+  previously threw `VALIDATION_ERROR`, leaving callers to chunk the text
+  externally. That escape hatch was the root cause of several downstream
+  bugs: lost voice parameters across N separate calls, manual ffmpeg
+  concat, cache misses, sidecar fragmentation. `mapProviderError` now
+  detects length-related rejections and returns a new `INPUT_TOO_LONG`
+  code; `generate_speech` catches it and auto-retries on the same provider
+  via the built-in chunker, producing one stitched output file. Chunking
+  triggers both pre-emptively (when text exceeds `maxCharsPerCall`) and
+  reactively (when the provider rejects a shorter input for
+  output-duration / token-limit reasons).
+- **`chunkFiles` no longer appears in the default response.** The
+  per-chunk file paths were only meant for debugging but showed up in
+  every chunked call's JSON, inviting callers to stitch a second time.
+  Gated behind a new `debug: true` argument; `files[0]` is always the
+  sole deliverable.
+
+### Added
+
+- **`voiceDefaulted` flag** on the `generate_speech` response. `true` when
+  neither `voice` nor `voicePreset` was passed and the slot default was
+  used — surfaces the "you didn't spec a voice" case so callers catch
+  voice mismatches before spending on a long run.
+- **Per-provider default voice env vars**: `GEMINI_DEFAULT_VOICE`,
+  `OPENAI_DEFAULT_VOICE`, `ELEVENLABS_DEFAULT_VOICE`,
+  `LOCAL_DEFAULT_VOICE`. Each wins over the slot default when no
+  explicit `--voice` or preset is passed, but only when the value is
+  valid for the resolved slot's voice list — a Gemini name like
+  `Charon` will be silently skipped on ElevenLabs instead of producing
+  a cryptic provider 400. Applied at every slot resolution point
+  (initial, per-chunk, per-failover-attempt), so defaults survive
+  provider swaps and chunked retries.
+- **Plugin `userConfig` schema** in `.claude-plugin/plugin.json`. Claude
+  Code now prompts for API keys and preferences at install time; keys
+  flagged `sensitive: true` are stored in the system keychain. Covers
+  all 18 env vars the MCP server reads. Shell env vars still work for
+  direct CLI invocation.
+
+### Changed
+
+- **`generate_speech` tool description** updated to tell callers: pass
+  the full text in one call; the tool chunks and stitches automatically;
+  pre-chunking externally loses voice/cache/sidecar fidelity.
+
+### Removed
+
+- **`BUDGET_USD_PER_DAY` env var** dropped from `plugin.json`. It was
+  declared there but never read anywhere in the MCP server — budget
+  lives in `~/.claude-image-tts-gen/budget.json` and is managed via the
+  `set_budget` tool.
+- **`LMSTUDIO_BASE_URL` / `LMSTUDIO_ENABLED`** removed from the install
+  prompt surface. `config.ts` still reads them for backward compat if
+  set via shell env, but new users configure `LOCAL_*` via `userConfig`.
+
 ## [0.6.1] - 2026-04-19
 
 ### Fixed

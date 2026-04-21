@@ -6861,6 +6861,14 @@ function mapProviderError(rawError, providerId) {
       message
     );
   }
+  if (isLengthError(message)) {
+    return new StructuredError(
+      "INPUT_TOO_LONG",
+      `${providerId} rejected the request as too long: ${message}`,
+      `Shorten the input, or let generate_speech chunk automatically.`,
+      message
+    );
+  }
   if (status === 400 || /invalid|bad request|validation/i.test(message)) {
     return new StructuredError(
       "VALIDATION_ERROR",
@@ -6895,6 +6903,11 @@ function mapProviderError(rawError, providerId) {
 function matchHttpStatus(message) {
   const m2 = message.match(/\b([45]\d\d)\b/);
   return m2 ? Number(m2[1]) : null;
+}
+function isLengthError(message) {
+  return /\b(input|text|prompt|request|payload|audio|output)\b[^.]{0,80}\b(too long|too large|exceeds?|exceeded|over (?:the )?(?:max|limit)|maximum|length limit|character limit|token limit)\b|\b(too long|exceeds?|exceeded)\b[^.]{0,80}\b(input|text|prompt|length|characters|tokens|duration|seconds|minutes)\b|\bmax_tokens\b|\bmaximum (?:input|output|context) (?:length|tokens|characters)\b/i.test(
+    message
+  );
 }
 var StructuredError;
 var init_errors = __esm({
@@ -48315,7 +48328,11 @@ function loadConfig(env = process.env) {
     ),
     emitSidecar: !["false", "0", "no", "off"].includes(
       (env.EMIT_SIDECAR ?? "true").toLowerCase()
-    )
+    ),
+    geminiDefaultVoice: env.GEMINI_DEFAULT_VOICE?.trim() || void 0,
+    openaiDefaultVoice: env.OPENAI_DEFAULT_VOICE?.trim() || void 0,
+    elevenlabsDefaultVoice: env.ELEVENLABS_DEFAULT_VOICE?.trim() || void 0,
+    localDefaultVoice: env.LOCAL_DEFAULT_VOICE?.trim() || void 0
   };
 }
 function requireKey(envName, providerLabel, value) {
@@ -76592,7 +76609,26 @@ async function generateSpeech(args, config3, opts = {}) {
   const explicitModel = args.model ?? presetModel;
   let providerUsed = requestedProvider;
   let slot = explicitModel ? inlineSlot2(requestedProvider, tier, explicitModel) : resolveSlot({ provider: requestedProvider, modality: "tts", tier });
-  let voice = args.voice ?? presetVoice ?? slot.defaultVoice;
+  const providerDefaultVoice = (forProvider) => {
+    switch (forProvider) {
+      case "google":
+        return config3.geminiDefaultVoice;
+      case "openai":
+        return config3.openaiDefaultVoice;
+      case "elevenlabs":
+        return config3.elevenlabsDefaultVoice;
+      case "local":
+        return config3.localDefaultVoice;
+      case "openrouter":
+        return void 0;
+    }
+  };
+  const resolveVoice = (forSlot) => {
+    const envCandidate = providerDefaultVoice(forSlot.provider);
+    const envMatch = envCandidate && forSlot.voices.includes(envCandidate) ? envCandidate : void 0;
+    return args.voice ?? presetVoice ?? envMatch ?? forSlot.defaultVoice;
+  };
+  let voice = resolveVoice(slot);
   if (voice && slot.voices.length > 0 && !slot.customVoicesAllowed && !slot.voices.includes(voice)) {
     throw new StructuredError(
       "VALIDATION_ERROR",
@@ -76665,22 +76701,8 @@ async function generateSpeech(args, config3, opts = {}) {
   const captionsMode = args.captions ?? "none";
   const limit2 = slot.maxCharsPerCall;
   const needsChunking = !cached2 && !explicitModel && limit2 !== void 0 && args.text.length > limit2;
-  if (cached2) {
-    modelUsed = slot.model;
-    filePath = buildOutputPath({
-      prompt: args.text,
-      mimeType: cached2.meta.mimeType,
-      outputDir: args.outputDir ?? config3.audioOutputDir,
-      explicitPath: args.outputPath
-    });
-    const placed = await copyAudioRespectingPath(
-      cached2.filePath,
-      filePath,
-      cached2.meta.mimeType
-    );
-    mimeType = placed.mimeType;
-  } else if (needsChunking) {
-    const chunks = chunkText(args.text, limit2);
+  const runChunked = async (chunkLimit) => {
+    const chunks = chunkText(args.text, chunkLimit);
     chunkCount = chunks.length;
     const chunkResults = await Promise.all(
       chunks.map(
@@ -76695,7 +76717,7 @@ async function generateSpeech(args, config3, opts = {}) {
             return await provider.generateSpeech({
               text: c.text,
               model: resolvedSlot.model,
-              voice: args.voice ?? resolvedSlot.defaultVoice,
+              voice: resolveVoice(resolvedSlot),
               params: resolvedSlot.params,
               referenceAudio
             });
@@ -76706,7 +76728,7 @@ async function generateSpeech(args, config3, opts = {}) {
     const first = chunkResults[0];
     providerUsed = first.providerUsed;
     slot = first.slot;
-    voice = args.voice ?? slot.defaultVoice;
+    voice = resolveVoice(slot);
     mimeType = first.result.mimeType;
     modelUsed = first.result.modelUsed;
     const baseStem = `${timestamp()}-${slugify(args.text)}`;
@@ -76731,11 +76753,28 @@ async function generateSpeech(args, config3, opts = {}) {
       mimeType,
       modelKey: `${providerUsed}/${modelUsed}`
     });
+  };
+  const fallbackChunkLimit = () => limit2 ?? Math.max(1e3, Math.floor(args.text.length / 2));
+  if (cached2) {
+    modelUsed = slot.model;
+    filePath = buildOutputPath({
+      prompt: args.text,
+      mimeType: cached2.meta.mimeType,
+      outputDir: args.outputDir ?? config3.audioOutputDir,
+      explicitPath: args.outputPath
+    });
+    const placed = await copyAudioRespectingPath(
+      cached2.filePath,
+      filePath,
+      cached2.meta.mimeType
+    );
+    mimeType = placed.mimeType;
+  } else if (needsChunking) {
+    await runChunked(limit2);
   } else if (explicitModel) {
     const provider = createTtsProvider(requestedProvider, config3);
-    let result;
     try {
-      result = await provider.generateSpeech({
+      const result = await provider.generateSpeech({
         text: args.text,
         model: slot.model,
         voice,
@@ -76743,93 +76782,106 @@ async function generateSpeech(args, config3, opts = {}) {
         wantTimestamps: captionsMode !== "none",
         referenceAudio
       });
+      modelUsed = result.modelUsed;
+      alignment = result.alignment;
+      filePath = buildOutputPath({
+        prompt: args.text,
+        mimeType: result.mimeType,
+        outputDir: args.outputDir ?? config3.audioOutputDir,
+        explicitPath: args.outputPath
+      });
+      const placed = await saveAudioRespectingPath(result.data, filePath, result.mimeType);
+      mimeType = placed.mimeType;
+      await storeInCache(cacheKey, filePath, {
+        mimeType,
+        modelKey: `${requestedProvider}/${modelUsed}`
+      });
     } catch (err) {
-      throw mapProviderError(err, requestedProvider);
-    }
-    modelUsed = result.modelUsed;
-    alignment = result.alignment;
-    filePath = buildOutputPath({
-      prompt: args.text,
-      mimeType: result.mimeType,
-      outputDir: args.outputDir ?? config3.audioOutputDir,
-      explicitPath: args.outputPath
-    });
-    const placed = await saveAudioRespectingPath(result.data, filePath, result.mimeType);
-    mimeType = placed.mimeType;
-    await storeInCache(cacheKey, filePath, {
-      mimeType,
-      modelKey: `${requestedProvider}/${modelUsed}`
-    });
-  } else {
-    const fallbackResult = await withFailover({
-      modality: "tts",
-      tier,
-      preferredProvider: requestedProvider,
-      pinToPreferred: !!referenceAudio,
-      config: config3,
-      callProvider: async (resolvedSlot, attemptProviderId) => {
-        const provider = createTtsProvider(attemptProviderId, config3);
-        const attemptVoice = args.voice ?? resolvedSlot.defaultVoice;
-        return await provider.generateSpeech({
-          text: args.text,
-          model: resolvedSlot.model,
-          voice: attemptVoice,
-          params: resolvedSlot.params,
-          wantTimestamps: captionsMode !== "none",
-          referenceAudio
-        });
+      const mapped = isStructuredError(err) ? err : mapProviderError(err, requestedProvider);
+      if (mapped.code === "INPUT_TOO_LONG") {
+        await runChunked(fallbackChunkLimit());
+      } else {
+        throw mapped;
       }
-    });
-    providerUsed = fallbackResult.providerUsed;
-    slot = fallbackResult.slot;
-    voice = args.voice ?? slot.defaultVoice;
-    modelUsed = fallbackResult.result.modelUsed;
-    alignment = fallbackResult.result.alignment;
-    filePath = buildOutputPath({
-      prompt: args.text,
-      mimeType: fallbackResult.result.mimeType,
-      outputDir: args.outputDir ?? config3.audioOutputDir,
-      explicitPath: args.outputPath
-    });
-    const placed = await saveAudioRespectingPath(
-      fallbackResult.result.data,
-      filePath,
-      fallbackResult.result.mimeType
-    );
-    mimeType = placed.mimeType;
-    await storeInCache(cacheKey, filePath, {
-      mimeType,
-      modelKey: `${providerUsed}/${modelUsed}`
-    });
-    if (fallbackResult.failover) {
-      const originalCost = (() => {
-        try {
-          return estimateCost(
-            {
-              provider: fallbackResult.failover.originalProvider,
-              model: fallbackResult.failover.originalModel,
-              modality: "tts",
-              params: {}
-            },
-            args.text.length
-          ).total;
-        } catch {
-          return 0;
+    }
+  } else {
+    try {
+      const fallbackResult = await withFailover({
+        modality: "tts",
+        tier,
+        preferredProvider: requestedProvider,
+        pinToPreferred: !!referenceAudio,
+        config: config3,
+        callProvider: async (resolvedSlot, attemptProviderId) => {
+          const provider = createTtsProvider(attemptProviderId, config3);
+          const attemptVoice = resolveVoice(resolvedSlot);
+          return await provider.generateSpeech({
+            text: args.text,
+            model: resolvedSlot.model,
+            voice: attemptVoice,
+            params: resolvedSlot.params,
+            wantTimestamps: captionsMode !== "none",
+            referenceAudio
+          });
         }
-      })();
-      const newCost = estimateCost(
-        { provider: providerUsed, model: modelUsed, modality: "tts", params: slot.params },
-        args.text.length
+      });
+      providerUsed = fallbackResult.providerUsed;
+      slot = fallbackResult.slot;
+      voice = resolveVoice(slot);
+      modelUsed = fallbackResult.result.modelUsed;
+      alignment = fallbackResult.result.alignment;
+      filePath = buildOutputPath({
+        prompt: args.text,
+        mimeType: fallbackResult.result.mimeType,
+        outputDir: args.outputDir ?? config3.audioOutputDir,
+        explicitPath: args.outputPath
+      });
+      const placed = await saveAudioRespectingPath(
+        fallbackResult.result.data,
+        filePath,
+        fallbackResult.result.mimeType
       );
-      failover = {
-        originalProvider: fallbackResult.failover.originalProvider,
-        originalModel: fallbackResult.failover.originalModel,
-        originalError: fallbackResult.failover.originalError,
-        fallbackProvider: providerUsed,
-        fallbackModel: modelUsed,
-        costDelta: roundUsd7(newCost.total - originalCost),
-        currency: newCost.currency
-      };
+      mimeType = placed.mimeType;
+      await storeInCache(cacheKey, filePath, {
+        mimeType,
+        modelKey: `${providerUsed}/${modelUsed}`
+      });
+      if (fallbackResult.failover) {
+        const originalCost = (() => {
+          try {
+            return estimateCost(
+              {
+                provider: fallbackResult.failover.originalProvider,
+                model: fallbackResult.failover.originalModel,
+                modality: "tts",
+                params: {}
+              },
+              args.text.length
+            ).total;
+          } catch {
+            return 0;
+          }
+        })();
+        const newCost = estimateCost(
+          { provider: providerUsed, model: modelUsed, modality: "tts", params: slot.params },
+          args.text.length
+        );
+        failover = {
+          originalProvider: fallbackResult.failover.originalProvider,
+          originalModel: fallbackResult.failover.originalModel,
+          originalError: fallbackResult.failover.originalError,
+          fallbackProvider: providerUsed,
+          fallbackModel: modelUsed,
+          costDelta: roundUsd7(newCost.total - originalCost),
+          currency: newCost.currency
+        };
+      }
+    } catch (err) {
+      if (isStructuredError(err) && err.code === "INPUT_TOO_LONG") {
+        await runChunked(fallbackChunkLimit());
+      } else {
+        throw err;
+      }
     }
   }
   const charCount = args.text.length;
@@ -76905,6 +76957,7 @@ async function generateSpeech(args, config3, opts = {}) {
     modelUsed,
     tier,
     voiceUsed: voice,
+    voiceDefaulted: !args.voice && !presetVoice,
     mimeType,
     cost: { ...cost, total: chargedCost },
     sessionTotal: {
@@ -76917,7 +76970,7 @@ async function generateSpeech(args, config3, opts = {}) {
     budgetWarning,
     failover,
     chunkCount,
-    chunkFiles,
+    ...args.debug && chunkFiles ? { chunkFiles } : {},
     captions,
     captionsSkipped
   };
@@ -78035,6 +78088,10 @@ var speechInputSchema = {
     sidecar: {
       type: "boolean",
       description: "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true. Set false for one-shot throwaway renders."
+    },
+    debug: {
+      type: "boolean",
+      description: "Include per-chunk file paths (chunkFiles) in the response for troubleshooting. Default false. files[0] is always the stitched deliverable \u2014 do not re-concat chunks yourself."
     }
   },
   required: ["text"]
@@ -78048,7 +78105,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "generate_speech",
-      description: `Generate speech audio. Default ${getDefaultProvider("tts")}/${getDefaultTier()}. Output dir: ${config2.audioOutputDir}.`,
+      description: `Generate speech audio. Default ${getDefaultProvider("tts")}/${getDefaultTier()}. Output dir: ${config2.audioOutputDir}. Pass the full text in one call \u2014 this tool chunks long text at sentence boundaries and stitches the result into a single file via ffmpeg; pre-chunking externally loses voice/cache/sidecar fidelity. files[0] is always the final stitched deliverable.`,
       inputSchema: speechInputSchema
     },
     {

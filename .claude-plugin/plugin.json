@@ -1,31 +1,109 @@
 {
   "name": "claude-image-tts-gen",
   "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "author": {
     "name": "Sherif Butt"
   },
   "repository": "https://github.com/sherifButt/claude-image-tts-gen",
   "license": "MIT",
+  "userConfig": {
+    "gemini_api_key": {
+      "description": "Google Gemini API key. Recommended — Gemini is the default provider for both image and TTS. Get one at aistudio.google.com.",
+      "sensitive": true
+    },
+    "openai_api_key": {
+      "description": "OpenAI API key (optional). Enables gpt-image-1 and OpenAI TTS tiers. platform.openai.com/api-keys.",
+      "sensitive": true
+    },
+    "openrouter_api_key": {
+      "description": "OpenRouter API key (optional). Enables image passthrough to OpenRouter-hosted models. openrouter.ai/keys.",
+      "sensitive": true
+    },
+    "elevenlabs_api_key": {
+      "description": "ElevenLabs API key (optional). Enables high-quality TTS and voice cloning via saved voice IDs. elevenlabs.io.",
+      "sensitive": true
+    },
+    "gemini_default_voice": {
+      "description": "Preferred default Gemini TTS voice when no --voice is passed (e.g. Charon for male baritone, Kore for female). See list_providers for the full list.",
+      "sensitive": false
+    },
+    "openai_default_voice": {
+      "description": "Preferred default OpenAI TTS voice (e.g. onyx for male, nova for female). Accepts alloy, echo, fable, onyx, nova, shimmer.",
+      "sensitive": false
+    },
+    "elevenlabs_default_voice": {
+      "description": "Preferred default ElevenLabs voice ID (from Voice Lab). Paste the voice ID as-is, not the display name.",
+      "sensitive": false
+    },
+    "local_default_voice": {
+      "description": "Preferred default voice for the local provider (e.g. am_adam for Kokoro-FastAPI). Depends on your local backend.",
+      "sensitive": false
+    },
+    "local_base_url": {
+      "description": "OpenAI-compatible local server base URL. Defaults to http://localhost:8880/v1 (Kokoro-FastAPI). Override for Orpheus-FastAPI :5005, Speaches :8000, LM Studio :1234, etc.",
+      "sensitive": false
+    },
+    "local_enabled": {
+      "description": "Include the local provider in the failover chain. true/false. Default false. Always usable directly via --provider local regardless of this setting.",
+      "sensitive": false
+    },
+    "gemini_image_model": {
+      "description": "Override the Gemini image model. Leave empty for the default (gemini-2.5-flash-image).",
+      "sensitive": false
+    },
+    "image_output_dir": {
+      "description": "Default directory for generated images. Defaults to ./generated-images in the current working directory.",
+      "sensitive": false
+    },
+    "audio_output_dir": {
+      "description": "Default directory for generated audio. Defaults to ./generated-audio in the current working directory.",
+      "sensitive": false
+    },
+    "state_dir": {
+      "description": "Override the state directory (session spend, cache, budget, batch jobs). Leave empty to use ~/.claude-image-tts-gen.",
+      "sensitive": false
+    },
+    "autoplay": {
+      "description": "Auto-play TTS output after generation. true/false. Default false.",
+      "sensitive": false
+    },
+    "rewrite_prompts": {
+      "description": "Enable the built-in prompt rewriter for images before sending to the provider. true/false. Default true.",
+      "sensitive": false
+    },
+    "emit_sidecar": {
+      "description": "Write a hidden .regenerate.json sidecar next to each generated file for reproducibility. true/false. Default true.",
+      "sensitive": false
+    },
+    "log_level": {
+      "description": "Log verbosity: error, warn, info, or debug. Default info.",
+      "sensitive": false
+    }
+  },
   "mcpServers": {
     "claude-image-tts-gen": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"],
       "env": {
-        "GEMINI_API_KEY": "${GEMINI_API_KEY:-}",
-        "OPENAI_API_KEY": "${OPENAI_API_KEY:-}",
-        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY:-}",
-        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY:-}",
-        "GEMINI_IMAGE_MODEL": "${GEMINI_IMAGE_MODEL:-}",
-        "LMSTUDIO_BASE_URL": "${LMSTUDIO_BASE_URL:-http://localhost:1234/v1}",
-        "LMSTUDIO_ENABLED": "${LMSTUDIO_ENABLED:-false}",
-        "IMAGE_OUTPUT_DIR": "${IMAGE_OUTPUT_DIR:-./generated-images}",
-        "AUDIO_OUTPUT_DIR": "${AUDIO_OUTPUT_DIR:-./generated-audio}",
-        "STATE_DIR": "${STATE_DIR:-}",
-        "BUDGET_USD_PER_DAY": "${BUDGET_USD_PER_DAY:-5}",
-        "REWRITE_PROMPTS": "${REWRITE_PROMPTS:-true}",
-        "AUTOPLAY": "${AUTOPLAY:-false}",
-        "LOG_LEVEL": "${LOG_LEVEL:-info}"
+        "GEMINI_API_KEY": "${user_config.gemini_api_key}",
+        "OPENAI_API_KEY": "${user_config.openai_api_key}",
+        "OPENROUTER_API_KEY": "${user_config.openrouter_api_key}",
+        "ELEVENLABS_API_KEY": "${user_config.elevenlabs_api_key}",
+        "GEMINI_DEFAULT_VOICE": "${user_config.gemini_default_voice}",
+        "OPENAI_DEFAULT_VOICE": "${user_config.openai_default_voice}",
+        "ELEVENLABS_DEFAULT_VOICE": "${user_config.elevenlabs_default_voice}",
+        "LOCAL_DEFAULT_VOICE": "${user_config.local_default_voice}",
+        "LOCAL_BASE_URL": "${user_config.local_base_url}",
+        "LOCAL_ENABLED": "${user_config.local_enabled}",
+        "GEMINI_IMAGE_MODEL": "${user_config.gemini_image_model}",
+        "IMAGE_OUTPUT_DIR": "${user_config.image_output_dir}",
+        "AUDIO_OUTPUT_DIR": "${user_config.audio_output_dir}",
+        "STATE_DIR": "${user_config.state_dir}",
+        "AUTOPLAY": "${user_config.autoplay}",
+        "REWRITE_PROMPTS": "${user_config.rewrite_prompts}",
+        "EMIT_SIDECAR": "${user_config.emit_sidecar}",
+        "LOG_LEVEL": "${user_config.log_level}"
       }
     }
   }

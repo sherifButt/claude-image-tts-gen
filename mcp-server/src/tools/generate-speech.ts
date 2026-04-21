@@ -29,7 +29,7 @@ import { appendCall } from "../state/store.js";
 import { summarize } from "../state/spend.js";
 import type { BudgetWarning, CallEntry, PeriodTotal } from "../state/types.js";
 import { readVoicePresets } from "../presets/store.js";
-import { mapProviderError, StructuredError } from "../util/errors.js";
+import { isStructuredError, mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
 import { buildOutputPath, slugify, timestamp } from "../util/output.js";
 
@@ -56,6 +56,10 @@ export interface GenerateSpeechArgs {
   referenceAudioPath?: string;
   /** Write a .regenerate.json sidecar next to the output. Default true (or EMIT_SIDECAR env). */
   sidecar?: boolean;
+  /** Include per-chunk file paths in the response (for debugging). Off by
+   *  default — callers should treat `files[0]` as the sole deliverable so they
+   *  don't stitch chunks a second time. */
+  debug?: boolean;
 }
 
 export interface GenerateSpeechOutput {
@@ -65,6 +69,11 @@ export interface GenerateSpeechOutput {
   modelUsed: string;
   tier: Tier;
   voiceUsed: string | undefined;
+  /** True when neither `voice` nor `voicePreset` was passed and the slot's
+   *  default voice was used. Surfaced so callers notice they're getting the
+   *  default rather than a spec'd voice (e.g. before spending on a long
+   *  run that'll have to be regenerated). */
+  voiceDefaulted: boolean;
   mimeType: string;
   cost: CostEstimate;
   sessionTotal: {
@@ -77,6 +86,9 @@ export interface GenerateSpeechOutput {
   budgetWarning: BudgetWarning | null;
   failover: FailoverDetails | null;
   chunkCount: number;
+  /** Per-chunk file paths, only included when `debug: true`. `files[0]` is the
+   *  stitched final deliverable; chunks are kept on disk but shouldn't be
+   *  stitched again by callers. */
   chunkFiles?: string[];
   captions?: CaptionFiles;
   captionsSkipped?: string;
@@ -143,7 +155,35 @@ export async function generateSpeech(
     ? inlineSlot(requestedProvider, tier, explicitModel)
     : resolveSlot({ provider: requestedProvider, modality: "tts", tier });
 
-  let voice = args.voice ?? presetVoice ?? slot.defaultVoice;
+  // Resolve voice with this precedence: explicit args.voice → voicePreset →
+  // <PROVIDER>_DEFAULT_VOICE env for the resolved slot's provider (only if
+  // valid for that slot's voice list) → slot.defaultVoice. Applied at every
+  // slot-resolution point (initial, per-chunk, per-failover-attempt) so the
+  // per-provider env default flows through provider swaps and chunked
+  // retries. Each provider's env var is scoped so names don't collide across
+  // naming conventions (Gemini's "Charon" ≠ OpenAI's "onyx" ≠ ElevenLabs IDs).
+  const providerDefaultVoice = (forProvider: ProviderId): string | undefined => {
+    switch (forProvider) {
+      case "google":
+        return config.geminiDefaultVoice;
+      case "openai":
+        return config.openaiDefaultVoice;
+      case "elevenlabs":
+        return config.elevenlabsDefaultVoice;
+      case "local":
+        return config.localDefaultVoice;
+      case "openrouter":
+        // OpenRouter doesn't implement TTS — no default voice axis needed.
+        return undefined;
+    }
+  };
+  const resolveVoice = (forSlot: ResolvedSlot): string | undefined => {
+    const envCandidate = providerDefaultVoice(forSlot.provider);
+    const envMatch =
+      envCandidate && forSlot.voices.includes(envCandidate) ? envCandidate : undefined;
+    return args.voice ?? presetVoice ?? envMatch ?? forSlot.defaultVoice;
+  };
+  let voice = resolveVoice(slot);
   if (
     voice &&
     slot.voices.length > 0 &&
@@ -222,9 +262,12 @@ export async function generateSpeech(
     budgetWarning = check.warning;
   }
 
-  let mimeType: string;
-  let modelUsed: string;
-  let filePath: string;
+  // Definite-assignment assertions: these are always written on every branch
+  // (including the INPUT_TOO_LONG → runChunked recovery path), but TS's
+  // definite-assignment analysis doesn't follow closure calls.
+  let mimeType!: string;
+  let modelUsed!: string;
+  let filePath!: string;
   let failover: FailoverDetails | null = null;
   let chunkFiles: string[] | undefined;
   let chunkCount = 1;
@@ -236,22 +279,13 @@ export async function generateSpeech(
   const needsChunking =
     !cached && !explicitModel && limit !== undefined && args.text.length > limit;
 
-  if (cached) {
-    modelUsed = slot.model;
-    filePath = buildOutputPath({
-      prompt: args.text,
-      mimeType: cached.meta.mimeType,
-      outputDir: args.outputDir ?? config.audioOutputDir,
-      explicitPath: args.outputPath,
-    });
-    const placed = await copyAudioRespectingPath(
-      cached.filePath,
-      filePath,
-      cached.meta.mimeType,
-    );
-    mimeType = placed.mimeType;
-  } else if (needsChunking) {
-    const chunks = chunkText(args.text, limit!);
+  // Chunked path — invoked pre-emptively when text > maxCharsPerCall, OR as
+  // recovery when the single-call path throws INPUT_TOO_LONG. Mutates the
+  // outer let vars (providerUsed, slot, voice, mimeType, modelUsed, filePath,
+  // chunkFiles, chunkCount). Alignment is intentionally not set: captions for
+  // multi-chunk TTS aren't supported yet (see captionsSkipped below).
+  const runChunked = async (chunkLimit: number): Promise<void> => {
+    const chunks = chunkText(args.text, chunkLimit);
     chunkCount = chunks.length;
 
     // Generate each chunk via failover-aware path. When cloning is requested,
@@ -270,7 +304,7 @@ export async function generateSpeech(
             return await provider.generateSpeech({
               text: c.text,
               model: resolvedSlot.model,
-              voice: args.voice ?? resolvedSlot.defaultVoice,
+              voice: resolveVoice(resolvedSlot),
               params: resolvedSlot.params,
               referenceAudio,
             });
@@ -283,7 +317,7 @@ export async function generateSpeech(
     const first = chunkResults[0];
     providerUsed = first.providerUsed;
     slot = first.slot;
-    voice = args.voice ?? slot.defaultVoice;
+    voice = resolveVoice(slot);
     mimeType = first.result.mimeType;
     modelUsed = first.result.modelUsed;
 
@@ -317,11 +351,33 @@ export async function generateSpeech(
       mimeType,
       modelKey: `${providerUsed}/${modelUsed}`,
     });
+  };
+
+  // Fallback chunk limit when a single-call path hits INPUT_TOO_LONG but the
+  // slot didn't declare maxCharsPerCall (e.g. explicit --model, or a new slot).
+  const fallbackChunkLimit = (): number =>
+    limit ?? Math.max(1000, Math.floor(args.text.length / 2));
+
+  if (cached) {
+    modelUsed = slot.model;
+    filePath = buildOutputPath({
+      prompt: args.text,
+      mimeType: cached.meta.mimeType,
+      outputDir: args.outputDir ?? config.audioOutputDir,
+      explicitPath: args.outputPath,
+    });
+    const placed = await copyAudioRespectingPath(
+      cached.filePath,
+      filePath,
+      cached.meta.mimeType,
+    );
+    mimeType = placed.mimeType;
+  } else if (needsChunking) {
+    await runChunked(limit!);
   } else if (explicitModel) {
     const provider = createTtsProvider(requestedProvider, config);
-    let result;
     try {
-      result = await provider.generateSpeech({
+      const result = await provider.generateSpeech({
         text: args.text,
         model: slot.model,
         voice,
@@ -329,94 +385,107 @@ export async function generateSpeech(
         wantTimestamps: captionsMode !== "none",
         referenceAudio,
       });
+      modelUsed = result.modelUsed;
+      alignment = result.alignment;
+      filePath = buildOutputPath({
+        prompt: args.text,
+        mimeType: result.mimeType,
+        outputDir: args.outputDir ?? config.audioOutputDir,
+        explicitPath: args.outputPath,
+      });
+      const placed = await saveAudioRespectingPath(result.data, filePath, result.mimeType);
+      mimeType = placed.mimeType;
+      await storeInCache(cacheKey, filePath, {
+        mimeType,
+        modelKey: `${requestedProvider}/${modelUsed}`,
+      });
     } catch (err) {
-      throw mapProviderError(err, requestedProvider);
+      const mapped = isStructuredError(err) ? err : mapProviderError(err, requestedProvider);
+      if (mapped.code === "INPUT_TOO_LONG") {
+        await runChunked(fallbackChunkLimit());
+      } else {
+        throw mapped;
+      }
     }
-    modelUsed = result.modelUsed;
-    alignment = result.alignment;
-    filePath = buildOutputPath({
-      prompt: args.text,
-      mimeType: result.mimeType,
-      outputDir: args.outputDir ?? config.audioOutputDir,
-      explicitPath: args.outputPath,
-    });
-    const placed = await saveAudioRespectingPath(result.data, filePath, result.mimeType);
-    mimeType = placed.mimeType;
-    await storeInCache(cacheKey, filePath, {
-      mimeType,
-      modelKey: `${requestedProvider}/${modelUsed}`,
-    });
   } else {
-    const fallbackResult = await withFailover({
-      modality: "tts",
-      tier,
-      preferredProvider: requestedProvider,
-      pinToPreferred: !!referenceAudio,
-      config,
-      callProvider: async (resolvedSlot, attemptProviderId) => {
-        const provider = createTtsProvider(attemptProviderId, config);
-        const attemptVoice = args.voice ?? resolvedSlot.defaultVoice;
-        return await provider.generateSpeech({
-          text: args.text,
-          model: resolvedSlot.model,
-          voice: attemptVoice,
-          params: resolvedSlot.params,
-          wantTimestamps: captionsMode !== "none",
-          referenceAudio,
-        });
-      },
-    });
-    providerUsed = fallbackResult.providerUsed;
-    slot = fallbackResult.slot;
-    voice = args.voice ?? slot.defaultVoice;
-    modelUsed = fallbackResult.result.modelUsed;
-    alignment = fallbackResult.result.alignment;
-    filePath = buildOutputPath({
-      prompt: args.text,
-      mimeType: fallbackResult.result.mimeType,
-      outputDir: args.outputDir ?? config.audioOutputDir,
-      explicitPath: args.outputPath,
-    });
-    const placed = await saveAudioRespectingPath(
-      fallbackResult.result.data,
-      filePath,
-      fallbackResult.result.mimeType,
-    );
-    mimeType = placed.mimeType;
-    await storeInCache(cacheKey, filePath, {
-      mimeType,
-      modelKey: `${providerUsed}/${modelUsed}`,
-    });
-
-    if (fallbackResult.failover) {
-      const originalCost = (() => {
-        try {
-          return estimateCost(
-            {
-              provider: fallbackResult.failover.originalProvider,
-              model: fallbackResult.failover.originalModel,
-              modality: "tts",
-              params: {},
-            },
-            args.text.length,
-          ).total;
-        } catch {
-          return 0;
-        }
-      })();
-      const newCost = estimateCost(
-        { provider: providerUsed, model: modelUsed, modality: "tts", params: slot.params },
-        args.text.length,
+    try {
+      const fallbackResult = await withFailover({
+        modality: "tts",
+        tier,
+        preferredProvider: requestedProvider,
+        pinToPreferred: !!referenceAudio,
+        config,
+        callProvider: async (resolvedSlot, attemptProviderId) => {
+          const provider = createTtsProvider(attemptProviderId, config);
+          const attemptVoice = resolveVoice(resolvedSlot);
+          return await provider.generateSpeech({
+            text: args.text,
+            model: resolvedSlot.model,
+            voice: attemptVoice,
+            params: resolvedSlot.params,
+            wantTimestamps: captionsMode !== "none",
+            referenceAudio,
+          });
+        },
+      });
+      providerUsed = fallbackResult.providerUsed;
+      slot = fallbackResult.slot;
+      voice = resolveVoice(slot);
+      modelUsed = fallbackResult.result.modelUsed;
+      alignment = fallbackResult.result.alignment;
+      filePath = buildOutputPath({
+        prompt: args.text,
+        mimeType: fallbackResult.result.mimeType,
+        outputDir: args.outputDir ?? config.audioOutputDir,
+        explicitPath: args.outputPath,
+      });
+      const placed = await saveAudioRespectingPath(
+        fallbackResult.result.data,
+        filePath,
+        fallbackResult.result.mimeType,
       );
-      failover = {
-        originalProvider: fallbackResult.failover.originalProvider,
-        originalModel: fallbackResult.failover.originalModel,
-        originalError: fallbackResult.failover.originalError,
-        fallbackProvider: providerUsed,
-        fallbackModel: modelUsed,
-        costDelta: roundUsd(newCost.total - originalCost),
-        currency: newCost.currency,
-      };
+      mimeType = placed.mimeType;
+      await storeInCache(cacheKey, filePath, {
+        mimeType,
+        modelKey: `${providerUsed}/${modelUsed}`,
+      });
+
+      if (fallbackResult.failover) {
+        const originalCost = (() => {
+          try {
+            return estimateCost(
+              {
+                provider: fallbackResult.failover.originalProvider,
+                model: fallbackResult.failover.originalModel,
+                modality: "tts",
+                params: {},
+              },
+              args.text.length,
+            ).total;
+          } catch {
+            return 0;
+          }
+        })();
+        const newCost = estimateCost(
+          { provider: providerUsed, model: modelUsed, modality: "tts", params: slot.params },
+          args.text.length,
+        );
+        failover = {
+          originalProvider: fallbackResult.failover.originalProvider,
+          originalModel: fallbackResult.failover.originalModel,
+          originalError: fallbackResult.failover.originalError,
+          fallbackProvider: providerUsed,
+          fallbackModel: modelUsed,
+          costDelta: roundUsd(newCost.total - originalCost),
+          currency: newCost.currency,
+        };
+      }
+    } catch (err) {
+      if (isStructuredError(err) && err.code === "INPUT_TOO_LONG") {
+        await runChunked(fallbackChunkLimit());
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -502,6 +571,7 @@ export async function generateSpeech(
     modelUsed,
     tier,
     voiceUsed: voice,
+    voiceDefaulted: !args.voice && !presetVoice,
     mimeType,
     cost: { ...cost, total: chargedCost },
     sessionTotal: {
@@ -514,7 +584,7 @@ export async function generateSpeech(
     budgetWarning,
     failover,
     chunkCount,
-    chunkFiles,
+    ...(args.debug && chunkFiles ? { chunkFiles } : {}),
     captions,
     captionsSkipped,
   };
