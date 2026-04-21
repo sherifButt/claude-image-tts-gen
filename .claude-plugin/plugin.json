@@ -1,12 +1,13 @@
 {
   "name": "claude-image-tts-gen",
   "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "author": {
     "name": "Sherif Butt"
   },
   "repository": "https://github.com/sherifButt/claude-image-tts-gen",
   "license": "MIT",
+  "mcpServers": "./.mcp.json",
   "userConfig": {
     "gemini_api_key": {
       "type": "string",

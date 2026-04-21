@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-04-21
+
+### Fixed
+
+- **MCP server not auto-discovered from `.mcp.json`.** Under Claude Code
+  2.1.112, the plugin installed and enabled cleanly but its MCP server
+  never appeared in `/mcp` — the `.mcp.json` at the plugin root wasn't
+  being picked up by auto-discovery (unlike `housecallpro-mcp` and
+  other reference plugins). Added an explicit `"mcpServers": "./.mcp.json"`
+  pointer in `plugin.json` to force the plugin loader to find it. Likely
+  a 2.1.112 regression; the explicit path works across versions.
+
 ## [0.7.4] - 2026-04-21
 
 ### Fixed
