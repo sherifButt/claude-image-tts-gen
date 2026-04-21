@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6] - 2026-04-21
+
+### Fixed
+
+- **MCP server "✗ Failed to connect" caused by filename collision with
+  Claude Code's project-MCP discovery.** `.mcp.json` at the plugin root
+  doubles as a valid Claude Code *project*-level MCP config. When a
+  user runs Claude Code inside the plugin's source repo (or any repo
+  that has a `.mcp.json`), Claude Code picks it up as a project MCP
+  config, where `${CLAUDE_PLUGIN_ROOT}` doesn't resolve — causing a
+  failed-to-connect spawn. Renamed `.mcp.json` → `plugin-mcp.json`
+  and updated the `mcpServers` pointer in `plugin.json` accordingly.
+  Non-discovery name avoids the collision.
+
+  To clean up the stale project-scope entry Claude Code may have
+  registered while this was broken, run:
+  ```
+  claude mcp remove claude-image-tts-gen -s project
+  ```
+
 ## [0.7.5] - 2026-04-21
 
 ### Fixed
