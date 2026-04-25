@@ -195,6 +195,31 @@ export LOG_LEVEL=info
 
 **Budget** isn't an env var — it's persisted in `~/.claude-image-tts-gen/budget.json` and managed via the `set_budget` MCP tool or `/gen-budget` slash command.
 
+### Persist across sessions
+
+`export` on the command line only lasts for that terminal. Append once to `~/.zshrc` and every new terminal — and every Claude Code session — inherits the values automatically:
+
+```sh
+cat >> ~/.zshrc <<'EOF'
+
+# claude-image-tts-gen
+export GEMINI_API_KEY='paste-your-gemini-key'
+export OPENAI_API_KEY=''                                  # optional, leave empty if unused
+export OPENROUTER_API_KEY=''                              # optional
+export ELEVENLABS_API_KEY=''                              # optional
+export GEMINI_DEFAULT_VOICE='Charon'                      # male baritone on Gemini
+export OPENAI_DEFAULT_VOICE='onyx'                        # male on OpenAI
+export ELEVENLABS_DEFAULT_VOICE='<voice-id-from-voicelab>' # raw voice ID
+export LOCAL_DEFAULT_VOICE='am_adam'                      # male on Kokoro-FastAPI
+export LOCAL_BASE_URL='http://localhost:8880/v1'
+export LOCAL_ENABLED='false'                              # set to 'true' to include in failover
+EOF
+
+source ~/.zshrc   # load in the current terminal; new terminals inherit automatically
+```
+
+Kill + relaunch Claude Code to pick up the new values. Keys are plaintext in `~/.zshrc` — fine for a personal machine; avoid if the file syncs via GitHub dotfiles or is shared.
+
 ## Sidecars (`.regenerate.json`)
 
 Every generation writes a hidden sidecar file next to the output — e.g. for
