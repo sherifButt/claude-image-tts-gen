@@ -197,6 +197,12 @@ const speechInputSchema = {
       description:
         "Include per-chunk file paths (chunkFiles) in the response for troubleshooting. Default false. files[0] is always the stitched deliverable — do not re-concat chunks yourself.",
     },
+    maxCharsPerChunk: {
+      type: "number",
+      minimum: 1,
+      description:
+        "Override the per-chunk character ceiling. Lower this when a neural TTS engine degrades on long inputs (Voicebox Qwen3-TTS / Chatterbox / Kokoro typically peak at ~300 chars per call). Chunker stays sentence-aware. Defaults to the provider slot's value (Voicebox: 300, Gemini: 4000, OpenAI: 4096, ElevenLabs: 5000).",
+    },
   },
   required: ["text"],
 } as const;

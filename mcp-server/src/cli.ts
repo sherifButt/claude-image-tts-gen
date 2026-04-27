@@ -79,6 +79,9 @@ Options:
   -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
       --no-sidecar              Skip the hidden .<name>.regenerate.json sidecar
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
+      --max-chars-per-chunk <n> Override per-chunk char ceiling (e.g. 300 for
+                                neural local TTS — Voicebox / Chatterbox / Kokoro
+                                — that degrade on long inputs)
       --reference-audio <path>  Reference audio (wav/mp3) for zero-shot voice cloning.
                                 Only --provider local + Chatterbox/XTTS backends. For
                                 ElevenLabs cloning, pass the voice ID via --voice.
@@ -170,6 +173,7 @@ async function main(): Promise<void> {
         "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
         "no-sidecar": { type: "boolean", default: false, description: "Skip writing the .regenerate.json sidecar" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
+        "max-chars-per-chunk": { type: "string", description: "Override per-chunk char ceiling (defaults to provider slot's value)" },
         "save-style": { type: "string", description: "Save image style preset (name); --provider/--tier/--prefix/--suffix" },
         "save-voice": { type: "string", description: "Save voice preset (name); --provider/--tier/--voice" },
         prefix: { type: "string", description: "Style prefix" },
@@ -458,6 +462,9 @@ async function main(): Promise<void> {
             outputPath: values.output,
             outputDir,
             sidecar: emitSidecar,
+            maxCharsPerChunk: values["max-chars-per-chunk"]
+              ? Number(values["max-chars-per-chunk"])
+              : undefined,
           },
           config,
         )

@@ -74449,10 +74449,14 @@ var MATRIX = [
         voices: [],
         defaultVoice: void 0,
         customVoicesAllowed: true,
-        // Voicebox auto-chunks internally up to 50k chars per request,
-        // but we keep our chunker engaged at 5000 for parity with other
-        // local providers and so partial failures still recover cleanly.
-        maxCharsPerCall: 5e3
+        // Voicebox accepts up to 50k chars per request, but the neural
+        // engines (Qwen3-TTS, Chatterbox, ...) degrade in prosody and
+        // pacing past ~300 chars per call. Chunk small + stitch via the
+        // existing sentence-aware splitter. Voicebox is $0/call so the
+        // extra round-trips have no cost; only quality matters here.
+        // Override per-call with maxCharsPerChunk if your engine handles
+        // longer inputs cleanly.
+        maxCharsPerCall: 300
       },
       mid: NA,
       pro: NA
@@ -76869,7 +76873,11 @@ async function generateSpeech(args, config3, opts = {}) {
     };
     referenceAudioHash = createHash3("sha256").update(bytes).digest("hex").slice(0, 16);
   }
-  const cacheParams = referenceAudioHash ? { ...slot.params, referenceAudio: referenceAudioHash } : slot.params;
+  const cacheParams = { ...slot.params };
+  if (referenceAudioHash) cacheParams.referenceAudio = referenceAudioHash;
+  if (args.maxCharsPerChunk !== void 0) {
+    cacheParams.maxCharsPerChunk = args.maxCharsPerChunk;
+  }
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
@@ -76903,7 +76911,14 @@ async function generateSpeech(args, config3, opts = {}) {
   let chunkCount = 1;
   let alignment;
   const captionsMode = args.captions ?? "none";
-  const limit2 = slot.maxCharsPerCall;
+  if (args.maxCharsPerChunk !== void 0 && args.maxCharsPerChunk <= 0) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      "maxCharsPerChunk must be > 0",
+      "Pass a positive integer (e.g. 300 for high-quality neural TTS, or omit to use the provider default)."
+    );
+  }
+  const limit2 = args.maxCharsPerChunk ?? slot.maxCharsPerCall;
   const needsChunking = !cached2 && !explicitModel && limit2 !== void 0 && args.text.length > limit2;
   const runChunked = async (chunkLimit) => {
     const chunks = chunkText(args.text, chunkLimit);
@@ -78346,6 +78361,11 @@ var speechInputSchema = {
     debug: {
       type: "boolean",
       description: "Include per-chunk file paths (chunkFiles) in the response for troubleshooting. Default false. files[0] is always the stitched deliverable \u2014 do not re-concat chunks yourself."
+    },
+    maxCharsPerChunk: {
+      type: "number",
+      minimum: 1,
+      description: "Override the per-chunk character ceiling. Lower this when a neural TTS engine degrades on long inputs (Voicebox Qwen3-TTS / Chatterbox / Kokoro typically peak at ~300 chars per call). Chunker stays sentence-aware. Defaults to the provider slot's value (Voicebox: 300, Gemini: 4000, OpenAI: 4096, ElevenLabs: 5000)."
     }
   },
   required: ["text"]

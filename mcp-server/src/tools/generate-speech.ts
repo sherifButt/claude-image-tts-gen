@@ -60,6 +60,12 @@ export interface GenerateSpeechArgs {
    *  default — callers should treat `files[0]` as the sole deliverable so they
    *  don't stitch chunks a second time. */
   debug?: boolean;
+  /** Override the per-chunk character limit. Wins over the slot's
+   *  `maxCharsPerCall`. Useful when a TTS engine produces low-quality
+   *  prosody on long inputs (typical for neural local models — Voicebox
+   *  Qwen3-TTS, Chatterbox, Kokoro at >300 chars). The chunker remains
+   *  sentence-aware; you're just lowering the ceiling. */
+  maxCharsPerChunk?: number;
 }
 
 export interface GenerateSpeechOutput {
@@ -241,9 +247,14 @@ export async function generateSpeech(
 
   // Include a fingerprint of the reference audio in params so cache correctly
   // differentiates calls with the same text+voice but different reference.
-  const cacheParams = referenceAudioHash
-    ? { ...slot.params, referenceAudio: referenceAudioHash }
-    : slot.params;
+  // Also include the per-chunk limit when explicitly overridden, since
+  // different chunk boundaries produce subtly different prosody at the seams
+  // (the stitched output is not byte-identical across chunk sizes).
+  const cacheParams: Record<string, unknown> = { ...slot.params };
+  if (referenceAudioHash) cacheParams.referenceAudio = referenceAudioHash;
+  if (args.maxCharsPerChunk !== undefined) {
+    cacheParams.maxCharsPerChunk = args.maxCharsPerChunk;
+  }
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
@@ -284,8 +295,18 @@ export async function generateSpeech(
   let alignment: WordAlignment[] | undefined;
   const captionsMode: CaptionsMode = args.captions ?? "none";
 
-  // Decide whether to chunk: only when not cached, not explicit-model, and slot.maxCharsPerCall is set + exceeded.
-  const limit = slot.maxCharsPerCall;
+  // Decide whether to chunk: only when not cached, not explicit-model, and a
+  // per-chunk limit is set + exceeded. Caller's args.maxCharsPerChunk wins
+  // over the slot's default — useful when a TTS engine produces poor prosody
+  // on long inputs (typical for neural local models past ~300 chars).
+  if (args.maxCharsPerChunk !== undefined && args.maxCharsPerChunk <= 0) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      "maxCharsPerChunk must be > 0",
+      "Pass a positive integer (e.g. 300 for high-quality neural TTS, or omit to use the provider default).",
+    );
+  }
+  const limit = args.maxCharsPerChunk ?? slot.maxCharsPerCall;
   const needsChunking =
     !cached && !explicitModel && limit !== undefined && args.text.length > limit;
 

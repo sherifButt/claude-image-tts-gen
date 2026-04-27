@@ -4,6 +4,29 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-04-27
+
+### Changed
+
+- **Voicebox default `maxCharsPerCall` lowered from 5000 to 300.** Neural
+  TTS engines (Qwen3-TTS, Chatterbox, Kokoro) produce noticeably better
+  prosody and pacing on short inputs; quality drifts past ~300 chars
+  per call. The chunker is already sentence-aware (with clause/word
+  fallback), so long text still produces a single stitched deliverable
+  — just with more, smaller chunks. Voicebox is $0/call so the extra
+  round-trips have no cost. Cloud providers (Gemini, OpenAI,
+  ElevenLabs) keep their existing larger limits since they handle long
+  inputs cleanly.
+
+### Added
+
+- **`maxCharsPerChunk` arg on `generate_speech`** (CLI:
+  `--max-chars-per-chunk <n>`). Overrides the slot's
+  `maxCharsPerCall` for a single call. Useful for dialing in any
+  provider that you observe degrading on long inputs. Cache key
+  includes the override so different chunk sizes correctly invalidate
+  (different boundaries → different prosody at the seams).
+
 ## [0.8.0] - 2026-04-27 — Visual + voice asset suite
 
 ### Added

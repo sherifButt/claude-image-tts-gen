@@ -171,10 +171,14 @@ const MATRIX: ProviderEntry[] = [
         voices: [],
         defaultVoice: undefined,
         customVoicesAllowed: true,
-        // Voicebox auto-chunks internally up to 50k chars per request,
-        // but we keep our chunker engaged at 5000 for parity with other
-        // local providers and so partial failures still recover cleanly.
-        maxCharsPerCall: 5000,
+        // Voicebox accepts up to 50k chars per request, but the neural
+        // engines (Qwen3-TTS, Chatterbox, ...) degrade in prosody and
+        // pacing past ~300 chars per call. Chunk small + stitch via the
+        // existing sentence-aware splitter. Voicebox is $0/call so the
+        // extra round-trips have no cost; only quality matters here.
+        // Override per-call with maxCharsPerChunk if your engine handles
+        // longer inputs cleanly.
+        maxCharsPerCall: 300,
       },
       mid: NA,
       pro: NA,

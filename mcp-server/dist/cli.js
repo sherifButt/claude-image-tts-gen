@@ -56556,10 +56556,14 @@ var MATRIX = [
         voices: [],
         defaultVoice: void 0,
         customVoicesAllowed: true,
-        // Voicebox auto-chunks internally up to 50k chars per request,
-        // but we keep our chunker engaged at 5000 for parity with other
-        // local providers and so partial failures still recover cleanly.
-        maxCharsPerCall: 5e3
+        // Voicebox accepts up to 50k chars per request, but the neural
+        // engines (Qwen3-TTS, Chatterbox, ...) degrade in prosody and
+        // pacing past ~300 chars per call. Chunk small + stitch via the
+        // existing sentence-aware splitter. Voicebox is $0/call so the
+        // extra round-trips have no cost; only quality matters here.
+        // Override per-call with maxCharsPerChunk if your engine handles
+        // longer inputs cleanly.
+        maxCharsPerCall: 300
       },
       mid: NA,
       pro: NA
@@ -58964,7 +58968,11 @@ async function generateSpeech(args, config, opts = {}) {
     };
     referenceAudioHash = createHash3("sha256").update(bytes).digest("hex").slice(0, 16);
   }
-  const cacheParams = referenceAudioHash ? { ...slot.params, referenceAudio: referenceAudioHash } : slot.params;
+  const cacheParams = { ...slot.params };
+  if (referenceAudioHash) cacheParams.referenceAudio = referenceAudioHash;
+  if (args.maxCharsPerChunk !== void 0) {
+    cacheParams.maxCharsPerChunk = args.maxCharsPerChunk;
+  }
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
@@ -58998,7 +59006,14 @@ async function generateSpeech(args, config, opts = {}) {
   let chunkCount = 1;
   let alignment;
   const captionsMode = args.captions ?? "none";
-  const limit2 = slot.maxCharsPerCall;
+  if (args.maxCharsPerChunk !== void 0 && args.maxCharsPerChunk <= 0) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      "maxCharsPerChunk must be > 0",
+      "Pass a positive integer (e.g. 300 for high-quality neural TTS, or omit to use the provider default)."
+    );
+  }
+  const limit2 = args.maxCharsPerChunk ?? slot.maxCharsPerCall;
   const needsChunking = !cached && !explicitModel && limit2 !== void 0 && args.text.length > limit2;
   const runChunked = async (chunkLimit) => {
     const chunks = chunkText(args.text, chunkLimit);
@@ -60291,6 +60306,9 @@ Options:
   -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
       --no-sidecar              Skip the hidden .<name>.regenerate.json sidecar
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
+      --max-chars-per-chunk <n> Override per-chunk char ceiling (e.g. 300 for
+                                neural local TTS \u2014 Voicebox / Chatterbox / Kokoro
+                                \u2014 that degrade on long inputs)
       --reference-audio <path>  Reference audio (wav/mp3) for zero-shot voice cloning.
                                 Only --provider local + Chatterbox/XTTS backends. For
                                 ElevenLabs cloning, pass the voice ID via --voice.
@@ -60373,6 +60391,7 @@ async function main() {
         "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
         "no-sidecar": { type: "boolean", default: false, description: "Skip writing the .regenerate.json sidecar" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
+        "max-chars-per-chunk": { type: "string", description: "Override per-chunk char ceiling (defaults to provider slot's value)" },
         "save-style": { type: "string", description: "Save image style preset (name); --provider/--tier/--prefix/--suffix" },
         "save-voice": { type: "string", description: "Save voice preset (name); --provider/--tier/--voice" },
         prefix: { type: "string", description: "Style prefix" },
@@ -60603,7 +60622,8 @@ async function main() {
         referenceAudioPath: values["reference-audio"],
         outputPath: values.output,
         outputDir,
-        sidecar: emitSidecar
+        sidecar: emitSidecar,
+        maxCharsPerChunk: values["max-chars-per-chunk"] ? Number(values["max-chars-per-chunk"]) : void 0
       },
       config
     ) : await generateImage(
