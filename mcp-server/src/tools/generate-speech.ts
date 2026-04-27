@@ -172,6 +172,8 @@ export async function generateSpeech(
         return config.elevenlabsDefaultVoice;
       case "local":
         return config.localDefaultVoice;
+      case "voicebox":
+        return config.voiceboxDefaultVoice;
       case "openrouter":
         // OpenRouter doesn't implement TTS — no default voice axis needed.
         return undefined;

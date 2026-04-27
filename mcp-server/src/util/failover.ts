@@ -23,6 +23,9 @@ function hasKeyFor(providerId: ProviderId, config: Config): boolean {
     case "local":
       // No API key required (local server). Opt-in via LOCAL_ENABLED to include in failover.
       return config.localEnabled;
+    case "voicebox":
+      // No API key required (local Voicebox server). Opt-in via VOICEBOX_ENABLED.
+      return config.voiceboxEnabled;
   }
 }
 
@@ -51,6 +54,8 @@ export function envVarNameFor(providerId: ProviderId): string {
       return "ELEVENLABS_API_KEY";
     case "local":
       return "LOCAL_ENABLED (opt-in) / LOCAL_BASE_URL";
+    case "voicebox":
+      return "VOICEBOX_ENABLED (opt-in) / VOICEBOX_BASE_URL";
   }
 }
 
@@ -114,7 +119,7 @@ export async function withFailover<TResult>(
       undefined,
       {
         requestedProvider: opts.preferredProvider,
-        availableProviders: (["google", "openai", "openrouter", "elevenlabs", "local"] as ProviderId[])
+        availableProviders: (["google", "openai", "openrouter", "elevenlabs", "local", "voicebox"] as ProviderId[])
           .filter((p) => hasKeyFor(p, opts.config)),
       },
     );

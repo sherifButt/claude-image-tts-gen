@@ -4,6 +4,51 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-27 — Visual + voice asset suite
+
+### Added
+
+- **Voicebox provider** ([voicebox.sh](https://voicebox.sh) / [jamiepine/voicebox](https://github.com/jamiepine/voicebox)).
+  Local-first voice studio with 7 TTS engines (Qwen3-TTS, Chatterbox,
+  Kokoro, LuxTTS, TADA, ...), zero-shot voice cloning, and 23-language
+  support. $0/call, no API key, runs on Mac/Windows/Linux with GPU
+  acceleration. Selected via `--provider voicebox --tier small --voice <profile_id>`.
+  Profiles are listed at `GET /profiles` on the running Voicebox server
+  (default port `17493`).
+- Env vars: `VOICEBOX_BASE_URL` (default `http://localhost:17493`),
+  `VOICEBOX_ENABLED` (opt-in to failover; off by default), and
+  `VOICEBOX_DEFAULT_VOICE` (a profile_id used when `--voice` is omitted).
+- Pricing entry `voicebox/voicebox` at $0/M chars. The actual engine and
+  model_size live in sidecar params (selected by the profile or via
+  `params.engine` / `params.model_size`), so the cost ledger stays clean
+  while reproducibility is preserved.
+- **Background remover** in `post_process` via `bgRemove: true` (CLI:
+  `--bg-remove`). Uses `@imgly/background-removal-node` (local ONNX,
+  ~80MB model auto-downloaded on first call). $0/call, offline after
+  first use. When combined with `presets`, the cutout becomes the
+  source for downstream resizes — `--bg-remove --presets og,instagram-square`
+  produces transparent-background variants in one pass.
+- Health check now pings Voicebox's `/health` endpoint when
+  `VOICEBOX_ENABLED=true`, alongside the other configured providers.
+
+### Notes
+
+- This is the visual + voice asset suite release: image generation
+  (gpt-image-2, Imagen 4, Gemini Flash Image), TTS across 4 cloud +
+  2 local providers (now including Voicebox), and post-processing
+  (resize, webp, **bg-remove**) all share the same cost ledger,
+  budget guard, sidecar/regenerate, and failover. One install, one
+  budget, one history across modalities.
+- The Voicebox integration uses the server's custom REST API (not
+  OpenAI-compatible) — POST `/generate` → poll `GET /history/{id}`
+  → fetch `GET /audio/{id}`. Generation is async on the server side;
+  the provider polls every 500ms with a 5-minute deadline.
+- `@imgly/background-removal-node` and `onnxruntime-node` are
+  marked external in the bundle (esbuild can't bundle the native
+  ONNX binary). Users who want bg-remove run `npm install` in
+  `mcp-server/` once; the structured "install required" error
+  guides them when missing.
+
 ## [0.7.11] - 2026-04-27
 
 ### Added

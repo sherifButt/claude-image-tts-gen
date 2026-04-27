@@ -56,12 +56,13 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **five** (G
 ## Features
 
 ### Generation
-- **5 providers** behind a single tier abstraction (`small | mid | pro`):
+- **6 providers** behind a single tier abstraction (`small | mid | pro`):
   - **Google Gemini** (image: Flash + Imagen, TTS declared)
   - **OpenAI** (image: gpt-image-2 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
   - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
+  - **🎙 Voicebox (`provider: voicebox`)** — local-first voice studio ([voicebox.sh](https://voicebox.sh)) with 7 TTS engines (Qwen3-TTS, Chatterbox, Kokoro, ...), zero-shot cloning, 23 languages. $0/call, no API key.
 - **Image-to-image edits** via reference image input (gpt-image-2, Gemini multimodal, local server if it supports `/v1/images/edits`)
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg. Triggers both pre-emptively (text > provider's `maxCharsPerCall`) *and* reactively (provider rejects a shorter input as too long for output-duration / token reasons — a new `INPUT_TOO_LONG` code catches that and retries with chunking on the same provider, preserving voice)
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
@@ -71,7 +72,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **five** (G
 - **`voiceDefaulted` signal** on every TTS response — when you didn't spec a voice, the response says so, letting Claude catch mismatches before spending on a long run
 
 ### Cost awareness
-- **13-model pricing table** with batch (50% off) rates and 30-day staleness warning
+- **14-model pricing table** with batch (50% off) rates and 30-day staleness warning
 - **Per-call cost** in every tool response; **session ledger** persisted to `~/.claude-image-tts-gen/session.json`
 - **Per-project tracking** (cwd-hashed) — `session_spend --project`
 - **Budget caps** (daily / weekly / monthly) — soft warn at 80%, hard block at 100%
@@ -94,6 +95,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **five** (G
 - **Provider failover** on RATE_LIMIT / 5xx / timeout with logged cost delta
 - **Style + voice presets** — named reusable defaults applied via `style` / `voicePreset`
 - **Image post-processing presets** (OG / Twitter / favicon / app icon / LinkedIn / Instagram square + story) with optional webp
+- **Background remover** (`post_process --bg-remove`) — local ONNX cutout, $0/call, offline after first run. Cascades into preset resizes so `--bg-remove --presets og,instagram-square` produces transparent variants in one pass
 
 ### Plugin surface
 - 7 slash commands: `/gen-image`, `/gen-speech`, `/gen-cost`, `/gen-budget`, `/gen-batch-status`, `/gen-presets`, `/gen-health`
@@ -178,6 +180,11 @@ export LOCAL_DEFAULT_VOICE=am_adam     # depends on backend (am_* = male Kokoro 
 export LOCAL_BASE_URL=http://localhost:8880/v1   # default (Kokoro-FastAPI's port)
 export LOCAL_ENABLED=true                         # opt-in to failover chain
 # Back-compat: LMSTUDIO_BASE_URL / LMSTUDIO_ENABLED are still read.
+
+# Voicebox (voicebox.sh) — local-first voice studio with 7 TTS engines
+export VOICEBOX_BASE_URL=http://localhost:17493   # default
+export VOICEBOX_ENABLED=true                       # opt-in to failover chain
+export VOICEBOX_DEFAULT_VOICE=<profile_id>         # from GET /profiles
 ```
 
 Other optional:

@@ -69,7 +69,8 @@ Options:
       --pick-keeper <path>      Keeper file for pick-variant; requires --pick-variants
       --pick-variants <a,b,c>   Comma-separated variant paths
       --pick-sheet <path>       Optional contact-sheet to also trash
-      --post-process <input>    Resize an image; use --presets and/or --webp
+      --post-process <input>    Resize / webp / bg-remove an image
+      --bg-remove               Strip background to transparent PNG (post-process)
       --presets <a,b,c>         Preset list: og, twitter, favicon, app-icon, linkedin, instagram-square, instagram-story
       --webp                    Also emit .webp variants
       --webp-quality <n>        Default 85
@@ -109,7 +110,8 @@ function isProvider(s: string | undefined): s is ProviderId {
     s === "openai" ||
     s === "openrouter" ||
     s === "elevenlabs" ||
-    s === "local"
+    s === "local" ||
+    s === "voicebox"
   );
 }
 function isTier(s: string | undefined): s is Tier {
@@ -161,6 +163,7 @@ async function main(): Promise<void> {
         presets: { type: "string", description: "Comma-separated preset names" },
         webp: { type: "boolean", default: false },
         "webp-quality": { type: "string", description: "1..100, default 85" },
+        "bg-remove": { type: "boolean", default: false, description: "Strip background to a transparent PNG (post-process)" },
         style: { type: "string", description: "Apply saved style preset on image gen" },
         reference: { type: "string", description: "Reference image path (image-to-image)" },
         "reference-audio": { type: "string", description: "Reference audio path for local voice cloning" },
@@ -351,6 +354,7 @@ async function main(): Promise<void> {
         presets,
         webp: values.webp,
         webpQuality: quality,
+        bgRemove: values["bg-remove"],
       });
       process.stdout.write(result.text + "\n");
       process.exit(0);

@@ -12,6 +12,7 @@ const PROVIDER_GUIDANCE: Record<ProviderId, string> = {
   elevenlabs: "(no image rewrites for elevenlabs)",
   local:
     "Local server — keep it simple and direct. Local image models (Stable Diffusion variants) prefer subject + style + medium tags.",
+  voicebox: "(no image rewrites for voicebox — TTS-only)",
 };
 
 const SamplingResultSchema = z.object({

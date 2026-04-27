@@ -7,6 +7,10 @@ export interface Config {
   localBaseUrl: string;
   /** Whether the local provider is opted in to the failover chain. */
   localEnabled: boolean;
+  /** Voicebox server base URL (default http://localhost:17493 — voicebox.sh). */
+  voiceboxBaseUrl: string;
+  /** Whether Voicebox is opted in to the TTS failover chain. */
+  voiceboxEnabled: boolean;
   geminiImageModel: string;
   imageOutputDir: string;
   audioOutputDir: string;
@@ -24,6 +28,8 @@ export interface Config {
   openaiDefaultVoice: string | undefined;
   elevenlabsDefaultVoice: string | undefined;
   localDefaultVoice: string | undefined;
+  /** Voicebox profile_id to use when no --voice is passed. */
+  voiceboxDefaultVoice: string | undefined;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -50,6 +56,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     localEnabled: ["true", "1", "yes", "on"].includes(
       (env.LOCAL_ENABLED ?? env.LMSTUDIO_ENABLED ?? "").toLowerCase(),
     ),
+    voiceboxBaseUrl: env.VOICEBOX_BASE_URL ?? "http://localhost:17493",
+    voiceboxEnabled: ["true", "1", "yes", "on"].includes(
+      (env.VOICEBOX_ENABLED ?? "").toLowerCase(),
+    ),
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",
@@ -66,6 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     openaiDefaultVoice: env.OPENAI_DEFAULT_VOICE?.trim() || undefined,
     elevenlabsDefaultVoice: env.ELEVENLABS_DEFAULT_VOICE?.trim() || undefined,
     localDefaultVoice: env.LOCAL_DEFAULT_VOICE?.trim() || undefined,
+    voiceboxDefaultVoice: env.VOICEBOX_DEFAULT_VOICE?.trim() || undefined,
   };
 }
 

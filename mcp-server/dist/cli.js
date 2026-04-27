@@ -22785,8 +22785,8 @@ var require_graceful_fs = __commonJS({
         }
       }
       var fs$writeFile = fs4.writeFile;
-      fs4.writeFile = writeFile13;
-      function writeFile13(path3, data, options, cb) {
+      fs4.writeFile = writeFile14;
+      function writeFile14(path3, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
         return go$writeFile(path3, data, options, cb);
@@ -30424,6 +30424,10 @@ function loadConfig(env = process.env) {
     localEnabled: ["true", "1", "yes", "on"].includes(
       (env.LOCAL_ENABLED ?? env.LMSTUDIO_ENABLED ?? "").toLowerCase()
     ),
+    voiceboxBaseUrl: env.VOICEBOX_BASE_URL ?? "http://localhost:17493",
+    voiceboxEnabled: ["true", "1", "yes", "on"].includes(
+      (env.VOICEBOX_ENABLED ?? "").toLowerCase()
+    ),
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",
@@ -30439,7 +30443,8 @@ function loadConfig(env = process.env) {
     geminiDefaultVoice: env.GEMINI_DEFAULT_VOICE?.trim() || void 0,
     openaiDefaultVoice: env.OPENAI_DEFAULT_VOICE?.trim() || void 0,
     elevenlabsDefaultVoice: env.ELEVENLABS_DEFAULT_VOICE?.trim() || void 0,
-    localDefaultVoice: env.LOCAL_DEFAULT_VOICE?.trim() || void 0
+    localDefaultVoice: env.LOCAL_DEFAULT_VOICE?.trim() || void 0,
+    voiceboxDefaultVoice: env.VOICEBOX_DEFAULT_VOICE?.trim() || void 0
   };
 }
 function requireKey(envName, providerLabel, value) {
@@ -56304,6 +56309,115 @@ function parseDataUrl(url) {
   };
 }
 
+// src/providers/voicebox.ts
+init_errors();
+var POLL_INTERVAL_MS = 500;
+var POLL_TIMEOUT_MS = 5 * 6e4;
+var VoiceboxProvider = class {
+  id = "voicebox";
+  baseUrl;
+  constructor(opts) {
+    this.baseUrl = stripTrailingSlash(opts.baseUrl);
+  }
+  async generateSpeech(req) {
+    const profileId = req.voice;
+    if (!profileId) {
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        "Voicebox requires a profile_id as the voice",
+        `Pass --voice <profile_id> or set VOICEBOX_DEFAULT_VOICE. List profiles with: curl ${this.baseUrl}/profiles`
+      );
+    }
+    const params = req.params ?? {};
+    const engine = params.engine ?? void 0;
+    const modelSize = params.model_size ?? void 0;
+    const language = params.language ?? "en";
+    const body = {
+      profile_id: profileId,
+      text: req.text,
+      language
+    };
+    if (engine) body.engine = engine;
+    if (modelSize) body.model_size = modelSize;
+    const startRes = await fetch(`${this.baseUrl}/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!startRes.ok) {
+      const errBody = (await startRes.text()).slice(0, 500);
+      throw new StructuredError(
+        "PROVIDER_ERROR",
+        `Voicebox /generate ${startRes.status}: ${errBody}`,
+        `Confirm Voicebox is running at ${this.baseUrl} and the profile_id exists (GET /profiles).`
+      );
+    }
+    const initial = await startRes.json();
+    if (!initial.id) {
+      throw new StructuredError(
+        "PROVIDER_ERROR",
+        "Voicebox /generate returned no id",
+        `Hit /docs at ${this.baseUrl}/docs to verify the API.`
+      );
+    }
+    const final = await this.pollUntilComplete(initial.id);
+    const audio = await this.fetchAudio(final.id);
+    return {
+      mimeType: "audio/wav",
+      data: audio,
+      modelUsed: req.model,
+      providerUsed: this.id
+    };
+  }
+  async pollUntilComplete(generationId) {
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const res = await fetch(`${this.baseUrl}/history/${generationId}`);
+      if (!res.ok) {
+        const errBody = (await res.text()).slice(0, 300);
+        throw new StructuredError(
+          "PROVIDER_ERROR",
+          `Voicebox /history/${generationId} ${res.status}: ${errBody}`,
+          `The generation may have been deleted. Re-submit.`
+        );
+      }
+      const state = await res.json();
+      if (state.status === "completed") return state;
+      if (state.status === "failed") {
+        throw new StructuredError(
+          "PROVIDER_ERROR",
+          `Voicebox generation failed: ${state.error ?? "(no error message)"}`,
+          `Check Voicebox logs. Common causes: model not downloaded, GPU OOM, profile sample missing.`
+        );
+      }
+      await sleep3(POLL_INTERVAL_MS);
+    }
+    throw new StructuredError(
+      "PROVIDER_TIMEOUT",
+      `Voicebox generation ${generationId} did not complete within ${POLL_TIMEOUT_MS / 1e3}s`,
+      `Long inputs on CPU can exceed this \u2014 try shorter text, a smaller model_size, or run Voicebox with GPU acceleration.`
+    );
+  }
+  async fetchAudio(generationId) {
+    const res = await fetch(`${this.baseUrl}/audio/${generationId}`);
+    if (!res.ok) {
+      const errBody = (await res.text()).slice(0, 300);
+      throw new StructuredError(
+        "PROVIDER_ERROR",
+        `Voicebox /audio/${generationId} ${res.status}: ${errBody}`,
+        `The generation completed but the audio file is missing on the server side.`
+      );
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+};
+function stripTrailingSlash(url) {
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
+function sleep3(ms) {
+  return new Promise((resolve4) => setTimeout(resolve4, ms));
+}
+
 // src/providers/types.ts
 var OPENAI_TTS_VOICES_STD = [
   "alloy",
@@ -56423,6 +56537,33 @@ var MATRIX = [
     // usable only via explicit --model. check_local lists what's available.
     image: { small: NA, mid: NA, pro: NA },
     tts: { small: NA, mid: NA, pro: NA }
+  },
+  {
+    id: "voicebox",
+    // Voicebox is local TTS only (custom REST API, voicebox.sh).
+    // The 7 engines (qwen, luxtts, chatterbox, kokoro, ...) are bound to
+    // each profile, not to the tier — exposing one slot lets callers pick
+    // engine via params.engine when they want to override.
+    image: { small: NA, mid: NA, pro: NA },
+    tts: {
+      small: {
+        // The model field is informational here — engine + size live in
+        // params and are decided by the profile. "voicebox" is the label
+        // that appears in cost ledgers and sidecars.
+        model: "voicebox",
+        batchable: false,
+        implemented: true,
+        voices: [],
+        defaultVoice: void 0,
+        customVoicesAllowed: true,
+        // Voicebox auto-chunks internally up to 50k chars per request,
+        // but we keep our chunker engaged at 5000 for parity with other
+        // local providers and so partial failures still recover cleanly.
+        maxCharsPerCall: 5e3
+      },
+      mid: NA,
+      pro: NA
+    }
   },
   {
     id: "elevenlabs",
@@ -56582,6 +56723,7 @@ function createImageProvider(id, config) {
     case "local":
       return new LocalProvider({ baseUrl: config.localBaseUrl });
     case "elevenlabs":
+    case "voicebox":
       throw new Error(`${id} image provider is declared in the registry but not yet implemented`);
   }
 }
@@ -56595,6 +56737,8 @@ function createTtsProvider(id, config) {
       return new ElevenLabsProvider({ apiKey: requireElevenLabsKey(config) });
     case "local":
       return new LocalProvider({ baseUrl: config.localBaseUrl });
+    case "voicebox":
+      return new VoiceboxProvider({ baseUrl: config.voiceboxBaseUrl });
     case "openrouter":
       throw new Error("openrouter does not support TTS");
   }
@@ -57030,8 +57174,8 @@ async function storeInCache(hash, sourceFilePath, meta) {
   await writeFile4(join3(dir, "meta.json"), JSON.stringify(full, null, 2) + "\n", "utf8");
 }
 async function copyFromCache(hit, destPath) {
-  const { dirname: dirname16 } = await import("node:path");
-  await mkdir3(dirname16(destPath), { recursive: true });
+  const { dirname: dirname17 } = await import("node:path");
+  await mkdir3(dirname17(destPath), { recursive: true });
   await copyFile(hit.filePath, destPath);
 }
 
@@ -57208,6 +57352,14 @@ var pricing_default = {
         batch: 10
       },
       notes: "Gemini 2.5 Pro TTS sync. Approximate per-char. Batch 50% off."
+    },
+    "voicebox/voicebox": {
+      modality: "tts",
+      pricing: {
+        type: "million_chars",
+        standard: 0
+      },
+      notes: "Local Voicebox server (voicebox.sh) \u2014 $0/call. Engine + model_size selected per profile or via params; no API cost."
     }
   }
 };
@@ -58002,6 +58154,8 @@ function hasKeyFor(providerId, config) {
       return Boolean(config.elevenlabsApiKey);
     case "local":
       return config.localEnabled;
+    case "voicebox":
+      return config.voiceboxEnabled;
   }
 }
 function getFailoverOrder(modality, preferred, config) {
@@ -58021,6 +58175,8 @@ function envVarNameFor(providerId) {
       return "ELEVENLABS_API_KEY";
     case "local":
       return "LOCAL_ENABLED (opt-in) / LOCAL_BASE_URL";
+    case "voicebox":
+      return "VOICEBOX_ENABLED (opt-in) / VOICEBOX_BASE_URL";
   }
 }
 function isRetryable(err) {
@@ -58044,7 +58200,7 @@ async function withFailover(opts) {
       void 0,
       {
         requestedProvider: opts.preferredProvider,
-        availableProviders: ["google", "openai", "openrouter", "elevenlabs", "local"].filter((p) => hasKeyFor(p, opts.config))
+        availableProviders: ["google", "openai", "openrouter", "elevenlabs", "local", "voicebox"].filter((p) => hasKeyFor(p, opts.config))
       }
     );
   }
@@ -58760,6 +58916,8 @@ async function generateSpeech(args, config, opts = {}) {
         return config.elevenlabsDefaultVoice;
       case "local":
         return config.localDefaultVoice;
+      case "voicebox":
+        return config.voiceboxDefaultVoice;
       case "openrouter":
         return void 0;
     }
@@ -59471,6 +59629,17 @@ async function pingLocal(baseUrl) {
     clearTimeout(t2);
   }
 }
+async function pingVoicebox(baseUrl) {
+  const url = baseUrl.endsWith("/") ? `${baseUrl}health` : `${baseUrl}/health`;
+  const ctrl = new AbortController();
+  const t2 = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS);
+  try {
+    const r2 = await fetch(url, { signal: ctrl.signal });
+    if (!r2.ok) throw new Error(`voicebox ${r2.status}: ${(await r2.text()).slice(0, 200)}`);
+  } finally {
+    clearTimeout(t2);
+  }
+}
 async function checkProvider(configured, apiKey, pinger) {
   if (!configured || !apiKey) {
     return { configured: false, ok: null, latencyMs: null, error: null };
@@ -59484,15 +59653,16 @@ async function checkProvider(configured, apiKey, pinger) {
   }
 }
 async function healthCheck(config) {
-  const [google, openai, openrouter, elevenlabs, local] = await Promise.all([
+  const [google, openai, openrouter, elevenlabs, local, voicebox] = await Promise.all([
     checkProvider(Boolean(config.geminiApiKey), config.geminiApiKey, pingGoogle),
     checkProvider(Boolean(config.openaiApiKey), config.openaiApiKey, pingOpenAI),
     checkProvider(Boolean(config.openrouterApiKey), config.openrouterApiKey, pingOpenRouter),
     checkProvider(Boolean(config.elevenlabsApiKey), config.elevenlabsApiKey, pingElevenLabs),
-    checkProvider(config.localEnabled, config.localBaseUrl, pingLocal)
+    checkProvider(config.localEnabled, config.localBaseUrl, pingLocal),
+    checkProvider(config.voiceboxEnabled, config.voiceboxBaseUrl, pingVoicebox)
   ]);
   const pricing = getStaleness();
-  const all = { google, openai, openrouter, elevenlabs, local };
+  const all = { google, openai, openrouter, elevenlabs, local, voicebox };
   const configured = Object.values(all).filter((p) => p.configured);
   const allOk = configured.length > 0 && configured.every((p) => p.ok === true) && !pricing.isStale;
   return {
@@ -59706,6 +59876,35 @@ function suggestOutputPath(inputPath, preset, format = "png") {
   return `${base}.${preset}.${format}`;
 }
 
+// src/post/bg-remove.ts
+init_errors();
+import { mkdir as mkdir13, writeFile as writeFile12 } from "node:fs/promises";
+import { dirname as dirname13 } from "node:path";
+async function loadBackgroundRemoval() {
+  try {
+    const mod = await import("@imgly/background-removal-node");
+    return "removeBackground" in mod ? mod : mod.default;
+  } catch {
+    throw new StructuredError(
+      "CONFIG_ERROR",
+      "@imgly/background-removal-node is required for bg-remove but is not installed",
+      "Run `npm install @imgly/background-removal-node` in mcp-server/. The first invocation downloads ~80MB of ONNX model files; subsequent calls are offline."
+    );
+  }
+}
+function suggestBgRemoveOutputPath(inputPath) {
+  const dot = inputPath.lastIndexOf(".");
+  const base = dot === -1 ? inputPath : inputPath.slice(0, dot);
+  return `${base}.bg-removed.png`;
+}
+async function removeBackground(inputPath, outputPath) {
+  const { removeBackground: run } = await loadBackgroundRemoval();
+  await mkdir13(dirname13(outputPath), { recursive: true });
+  const blob = await run(inputPath, { output: { format: "image/png" } });
+  const buf = Buffer.from(await blob.arrayBuffer());
+  await writeFile12(outputPath, buf);
+}
+
 // src/tools/post-process.ts
 init_errors();
 async function postProcess(args) {
@@ -59729,35 +59928,43 @@ async function postProcess(args) {
       );
     }
   }
-  if (presets.length === 0 && !args.webp) {
+  if (presets.length === 0 && !args.webp && !args.bgRemove) {
     throw new StructuredError(
       "VALIDATION_ERROR",
-      "Specify at least one preset or set webp:true",
-      "Example: presets=['og','twitter'] or webp=true."
+      "Specify at least one preset, set webp:true, or set bgRemove:true",
+      "Example: presets=['og','twitter'], webp=true, or bgRemove=true."
     );
   }
   const outputs = [];
+  let source = args.input;
+  let cutoutPath = null;
+  if (args.bgRemove) {
+    cutoutPath = suggestBgRemoveOutputPath(args.input);
+    await removeBackground(args.input, cutoutPath);
+    outputs.push({ format: "png", path: cutoutPath, bgRemoved: true });
+    source = cutoutPath;
+  }
   for (const preset of presets) {
-    const pngOut = suggestOutputPath(args.input, preset, "png");
-    await resizeToPreset(args.input, preset, pngOut);
-    outputs.push({ preset, format: "png", path: pngOut });
+    const pngOut = suggestOutputPath(source, preset, "png");
+    await resizeToPreset(source, preset, pngOut);
+    outputs.push({ preset, format: "png", path: pngOut, bgRemoved: cutoutPath !== null });
     if (args.webp) {
-      const webpOut = suggestOutputPath(args.input, preset, "webp");
+      const webpOut = suggestOutputPath(source, preset, "webp");
       await convertToWebp(pngOut, webpOut, args.webpQuality);
-      outputs.push({ preset, format: "webp", path: webpOut });
+      outputs.push({ preset, format: "webp", path: webpOut, bgRemoved: cutoutPath !== null });
     }
   }
   if (presets.length === 0 && args.webp) {
-    const webpOut = args.input.replace(/\.[^.]+$/, ".webp");
-    await convertToWebp(args.input, webpOut, args.webpQuality);
-    outputs.push({ format: "webp", path: webpOut });
+    const webpOut = source.replace(/\.[^.]+$/, ".webp");
+    await convertToWebp(source, webpOut, args.webpQuality);
+    outputs.push({ format: "webp", path: webpOut, bgRemoved: cutoutPath !== null });
   }
   return {
     success: true,
     input: args.input,
     outputs,
     text: `Post-processed ${args.input} into ${outputs.length} file${outputs.length === 1 ? "" : "s"}:
-` + outputs.map((o) => `  ${o.preset ?? "(webp)"}: ${o.path}`).join("\n")
+` + outputs.map((o) => `  ${o.bgRemoved ? "[bg-removed] " : ""}${o.preset ?? (o.format === "webp" ? "(webp)" : "(cutout)")}: ${o.path}`).join("\n")
   };
 }
 
@@ -59840,7 +60047,7 @@ function renderText3(styles, voices) {
 }
 
 // src/tools/regenerate.ts
-import { dirname as dirname13 } from "node:path";
+import { dirname as dirname14 } from "node:path";
 async function regenerate(args, config) {
   if (!args.path) {
     throw new Error("path is required (sidecar .regenerate.json or original output file)");
@@ -59886,10 +60093,10 @@ async function regenerate(args, config) {
 }
 function resolveOriginalDir2(inputPath, meta) {
   if (!isSidecarPath(inputPath)) {
-    return dirname13(inputPath);
+    return dirname14(inputPath);
   }
   const first = meta.output.files[0];
-  return first ? dirname13(first) : void 0;
+  return first ? dirname14(first) : void 0;
 }
 
 // src/tools/session-spend.ts
@@ -59930,12 +60137,12 @@ async function setBudget(args) {
 }
 
 // src/tools/variants.ts
-import { dirname as dirname15, join as join11 } from "node:path";
+import { dirname as dirname16, join as join11 } from "node:path";
 
 // src/post/contact-sheet.ts
 init_errors();
-import { mkdir as mkdir13, writeFile as writeFile12 } from "node:fs/promises";
-import { dirname as dirname14 } from "node:path";
+import { mkdir as mkdir14, writeFile as writeFile13 } from "node:fs/promises";
+import { dirname as dirname15 } from "node:path";
 async function composeContactSheet(inputPaths, outputPath, opts = {}) {
   if (inputPaths.length === 0) {
     throw new StructuredError(
@@ -59978,8 +60185,8 @@ async function composeContactSheet(inputPaths, outputPath, opts = {}) {
   const sheet = await sharp({
     create: { width, height, channels: 4, background }
   }).composite(composites).png().toBuffer();
-  await mkdir13(dirname14(outputPath), { recursive: true });
-  await writeFile12(outputPath, sheet);
+  await mkdir14(dirname15(outputPath), { recursive: true });
+  await writeFile13(outputPath, sheet);
 }
 
 // src/tools/variants.ts
@@ -60012,7 +60219,7 @@ async function variants(args, config) {
     )
   );
   const variantPaths = results.map((r2) => r2.files[0]);
-  const baseDir = dirname15(variantPaths[0]);
+  const baseDir = dirname16(variantPaths[0]);
   const sheetPath = join11(baseDir, `contact-sheet-${timestamp()}-${slugify(args.prompt)}.png`);
   await composeContactSheet(variantPaths, sheetPath);
   const totalCost = results.reduce((sum, r2) => sum + r2.cost.total, 0);
@@ -60074,7 +60281,8 @@ Options:
       --pick-keeper <path>      Keeper file for pick-variant; requires --pick-variants
       --pick-variants <a,b,c>   Comma-separated variant paths
       --pick-sheet <path>       Optional contact-sheet to also trash
-      --post-process <input>    Resize an image; use --presets and/or --webp
+      --post-process <input>    Resize / webp / bg-remove an image
+      --bg-remove               Strip background to transparent PNG (post-process)
       --presets <a,b,c>         Preset list: og, twitter, favicon, app-icon, linkedin, instagram-square, instagram-story
       --webp                    Also emit .webp variants
       --webp-quality <n>        Default 85
@@ -60108,7 +60316,7 @@ Environment:
 `);
 }
 function isProvider(s2) {
-  return s2 === "google" || s2 === "openai" || s2 === "openrouter" || s2 === "elevenlabs" || s2 === "local";
+  return s2 === "google" || s2 === "openai" || s2 === "openrouter" || s2 === "elevenlabs" || s2 === "local" || s2 === "voicebox";
 }
 function isTier(s2) {
   return s2 === "small" || s2 === "mid" || s2 === "pro";
@@ -60158,6 +60366,7 @@ async function main() {
         presets: { type: "string", description: "Comma-separated preset names" },
         webp: { type: "boolean", default: false },
         "webp-quality": { type: "string", description: "1..100, default 85" },
+        "bg-remove": { type: "boolean", default: false, description: "Strip background to a transparent PNG (post-process)" },
         style: { type: "string", description: "Apply saved style preset on image gen" },
         reference: { type: "string", description: "Reference image path (image-to-image)" },
         "reference-audio": { type: "string", description: "Reference audio path for local voice cloning" },
@@ -60319,7 +60528,8 @@ async function main() {
         input: values["post-process"],
         presets,
         webp: values.webp,
-        webpQuality: quality
+        webpQuality: quality,
+        bgRemove: values["bg-remove"]
       });
       process.stdout.write(result2.text + "\n");
       process.exit(0);

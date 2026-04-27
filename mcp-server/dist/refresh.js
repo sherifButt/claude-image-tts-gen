@@ -174,6 +174,14 @@ var pricing_default = {
         batch: 10
       },
       notes: "Gemini 2.5 Pro TTS sync. Approximate per-char. Batch 50% off."
+    },
+    "voicebox/voicebox": {
+      modality: "tts",
+      pricing: {
+        type: "million_chars",
+        standard: 0
+      },
+      notes: "Local Voicebox server (voicebox.sh) \u2014 $0/call. Engine + model_size selected per profile or via params; no API cost."
     }
   }
 };

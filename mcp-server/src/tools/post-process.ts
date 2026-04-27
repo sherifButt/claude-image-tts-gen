@@ -6,6 +6,7 @@ import {
   suggestOutputPath,
   type PresetName,
 } from "../post/image-presets.js";
+import { removeBackground, suggestBgRemoveOutputPath } from "../post/bg-remove.js";
 import { StructuredError } from "../util/errors.js";
 
 export interface PostProcessArgs {
@@ -14,12 +15,17 @@ export interface PostProcessArgs {
   /** Also convert each output (and the original if no presets) to webp. */
   webp?: boolean;
   webpQuality?: number;
+  /** Strip the background and write a transparent PNG. Runs before presets,
+   *  so resized variants inherit the cutout. */
+  bgRemove?: boolean;
 }
 
 export interface PostProcessResult {
   preset?: PresetName;
   format: "png" | "webp";
   path: string;
+  /** True when this output had its background removed. */
+  bgRemoved?: boolean;
 }
 
 export interface PostProcessOutput {
@@ -52,32 +58,43 @@ export async function postProcess(args: PostProcessArgs): Promise<PostProcessOut
     }
   }
 
-  if (presets.length === 0 && !args.webp) {
+  if (presets.length === 0 && !args.webp && !args.bgRemove) {
     throw new StructuredError(
       "VALIDATION_ERROR",
-      "Specify at least one preset or set webp:true",
-      "Example: presets=['og','twitter'] or webp=true.",
+      "Specify at least one preset, set webp:true, or set bgRemove:true",
+      "Example: presets=['og','twitter'], webp=true, or bgRemove=true.",
     );
   }
 
   const outputs: PostProcessResult[] = [];
 
+  // bg-remove runs first so presets inherit the cutout. The cutout becomes
+  // the new "source" for downstream resizing/webp.
+  let source = args.input;
+  let cutoutPath: string | null = null;
+  if (args.bgRemove) {
+    cutoutPath = suggestBgRemoveOutputPath(args.input);
+    await removeBackground(args.input, cutoutPath);
+    outputs.push({ format: "png", path: cutoutPath, bgRemoved: true });
+    source = cutoutPath;
+  }
+
   for (const preset of presets) {
-    const pngOut = suggestOutputPath(args.input, preset, "png");
-    await resizeToPreset(args.input, preset, pngOut);
-    outputs.push({ preset, format: "png", path: pngOut });
+    const pngOut = suggestOutputPath(source, preset, "png");
+    await resizeToPreset(source, preset, pngOut);
+    outputs.push({ preset, format: "png", path: pngOut, bgRemoved: cutoutPath !== null });
 
     if (args.webp) {
-      const webpOut = suggestOutputPath(args.input, preset, "webp");
+      const webpOut = suggestOutputPath(source, preset, "webp");
       await convertToWebp(pngOut, webpOut, args.webpQuality);
-      outputs.push({ preset, format: "webp", path: webpOut });
+      outputs.push({ preset, format: "webp", path: webpOut, bgRemoved: cutoutPath !== null });
     }
   }
 
   if (presets.length === 0 && args.webp) {
-    const webpOut = args.input.replace(/\.[^.]+$/, ".webp");
-    await convertToWebp(args.input, webpOut, args.webpQuality);
-    outputs.push({ format: "webp", path: webpOut });
+    const webpOut = source.replace(/\.[^.]+$/, ".webp");
+    await convertToWebp(source, webpOut, args.webpQuality);
+    outputs.push({ format: "webp", path: webpOut, bgRemoved: cutoutPath !== null });
   }
 
   return {
@@ -86,6 +103,8 @@ export async function postProcess(args: PostProcessArgs): Promise<PostProcessOut
     outputs,
     text:
       `Post-processed ${args.input} into ${outputs.length} file${outputs.length === 1 ? "" : "s"}:\n` +
-      outputs.map((o) => `  ${o.preset ?? "(webp)"}: ${o.path}`).join("\n"),
+      outputs
+        .map((o) => `  ${o.bgRemoved ? "[bg-removed] " : ""}${o.preset ?? (o.format === "webp" ? "(webp)" : "(cutout)")}: ${o.path}`)
+        .join("\n"),
   };
 }

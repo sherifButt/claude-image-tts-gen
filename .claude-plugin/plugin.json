@@ -1,7 +1,7 @@
 {
   "name": "claude-image-tts-gen",
   "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
-  "version": "0.7.11",
+  "version": "0.8.0",
   "author": {
     "name": "Sherif Butt"
   },
@@ -22,6 +22,9 @@
         "LOCAL_DEFAULT_VOICE": "${LOCAL_DEFAULT_VOICE:-}",
         "LOCAL_BASE_URL": "${LOCAL_BASE_URL:-http://localhost:8880/v1}",
         "LOCAL_ENABLED": "${LOCAL_ENABLED:-false}",
+        "VOICEBOX_BASE_URL": "${VOICEBOX_BASE_URL:-http://localhost:17493}",
+        "VOICEBOX_ENABLED": "${VOICEBOX_ENABLED:-false}",
+        "VOICEBOX_DEFAULT_VOICE": "${VOICEBOX_DEFAULT_VOICE:-}",
         "GEMINI_IMAGE_MODEL": "${GEMINI_IMAGE_MODEL:-}",
         "IMAGE_OUTPUT_DIR": "${IMAGE_OUTPUT_DIR:-./generated-images}",
         "AUDIO_OUTPUT_DIR": "${AUDIO_OUTPUT_DIR:-./generated-audio}",

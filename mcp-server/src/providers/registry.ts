@@ -19,6 +19,7 @@ import {
 import { LocalProvider } from "./local.js";
 import { OpenAIProvider } from "./openai.js";
 import { OpenRouterProvider } from "./openrouter.js";
+import { VoiceboxProvider } from "./voicebox.js";
 import {
   OPENAI_TTS_VOICES_GPT4O,
   OPENAI_TTS_VOICES_STD,
@@ -151,6 +152,33 @@ const MATRIX: ProviderEntry[] = [
     // usable only via explicit --model. check_local lists what's available.
     image: { small: NA, mid: NA, pro: NA },
     tts: { small: NA, mid: NA, pro: NA },
+  },
+  {
+    id: "voicebox",
+    // Voicebox is local TTS only (custom REST API, voicebox.sh).
+    // The 7 engines (qwen, luxtts, chatterbox, kokoro, ...) are bound to
+    // each profile, not to the tier — exposing one slot lets callers pick
+    // engine via params.engine when they want to override.
+    image: { small: NA, mid: NA, pro: NA },
+    tts: {
+      small: {
+        // The model field is informational here — engine + size live in
+        // params and are decided by the profile. "voicebox" is the label
+        // that appears in cost ledgers and sidecars.
+        model: "voicebox",
+        batchable: false,
+        implemented: true,
+        voices: [],
+        defaultVoice: undefined,
+        customVoicesAllowed: true,
+        // Voicebox auto-chunks internally up to 50k chars per request,
+        // but we keep our chunker engaged at 5000 for parity with other
+        // local providers and so partial failures still recover cleanly.
+        maxCharsPerCall: 5000,
+      },
+      mid: NA,
+      pro: NA,
+    },
   },
   {
     id: "elevenlabs",
@@ -349,6 +377,7 @@ export function createImageProvider(id: ProviderId, config: Config): ImageProvid
     case "local":
       return new LocalProvider({ baseUrl: config.localBaseUrl });
     case "elevenlabs":
+    case "voicebox":
       throw new Error(`${id} image provider is declared in the registry but not yet implemented`);
   }
 }
@@ -363,6 +392,8 @@ export function createTtsProvider(id: ProviderId, config: Config): TtsProvider {
       return new ElevenLabsProvider({ apiKey: requireElevenLabsKey(config) });
     case "local":
       return new LocalProvider({ baseUrl: config.localBaseUrl });
+    case "voicebox":
+      return new VoiceboxProvider({ baseUrl: config.voiceboxBaseUrl });
     case "openrouter":
       throw new Error("openrouter does not support TTS");
   }

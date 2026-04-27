@@ -160,8 +160,8 @@ const speechInputSchema = {
     text: { type: "string", description: "Text to speak." },
     provider: {
       type: "string",
-      enum: ["openai", "google", "elevenlabs", "local"],
-      description: `Provider. Default: ${getDefaultProvider("tts")}. local uses LOCAL_BASE_URL (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / etc.).`,
+      enum: ["openai", "google", "elevenlabs", "local", "voicebox"],
+      description: `Provider. Default: ${getDefaultProvider("tts")}. local uses LOCAL_BASE_URL (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / etc.). voicebox uses VOICEBOX_BASE_URL (default http://localhost:17493 — voicebox.sh).`,
     },
     tier: {
       type: "string",
@@ -390,7 +390,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           preset: {
             type: "object",
             properties: {
-              provider: { type: "string", enum: ["openai", "google", "elevenlabs"] },
+              provider: { type: "string", enum: ["openai", "google", "elevenlabs", "local", "voicebox"] },
               tier: { type: "string", enum: ["small", "mid", "pro"] },
               model: { type: "string" },
               voice: { type: "string" },
@@ -426,7 +426,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "post_process",
       description:
-        `Resize an image to one or more share-target presets and/or convert to webp. Presets: ${Object.keys(PRESETS).join(", ")}.`,
+        `Resize, webp-convert, or strip background from an image. Presets: ${Object.keys(PRESETS).join(", ")}. bgRemove uses a local ONNX model — no API cost.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -437,6 +437,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           webp: { type: "boolean", description: "Also emit a .webp" },
           webpQuality: { type: "number", minimum: 1, maximum: 100, description: "Default 85" },
+          bgRemove: { type: "boolean", description: "Strip background to a transparent PNG. Runs before presets so cutouts cascade through resizes." },
         },
         required: ["input"],
       },

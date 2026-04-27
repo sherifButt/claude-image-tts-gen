@@ -1,4 +1,4 @@
-export type ProviderId = "google" | "openai" | "openrouter" | "elevenlabs" | "local";
+export type ProviderId = "google" | "openai" | "openrouter" | "elevenlabs" | "local" | "voicebox";
 export type Modality = "image" | "tts";
 export type Tier = "small" | "mid" | "pro";
 
