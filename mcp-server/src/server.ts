@@ -19,6 +19,7 @@ import { z } from "zod";
 import { batchStatus, type BatchStatusArgs } from "./tools/batch-status.js";
 import { batchSubmit, type BatchSubmitArgs } from "./tools/batch-submit.js";
 import { checkLocal } from "./tools/check-local.js";
+import { checkVoicebox } from "./tools/check-voicebox.js";
 import {
   checkBatchAvailability,
   createAssets,
@@ -298,6 +299,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "check_local",
       description:
         "Hit the local OpenAI-compatible server's /v1/models endpoint and report which models are loaded, which backend it looks like (Kokoro-FastAPI, Orpheus-FastAPI, Speaches, LM Studio, ...), and whether TTS/image models are available. Reads LOCAL_BASE_URL.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    {
+      name: "check_voicebox",
+      description:
+        "Probe the Voicebox server (voicebox.sh) at VOICEBOX_BASE_URL and report: server health (model loaded, GPU), profiles you have (voice IDs, language, voice_type), available engines with capabilities (qwen=cloning+instruct, chatterbox_turbo=tags like [laugh]/[sigh], kokoro=preset-only, ...), and preset voice counts per engine. Use this before calling generate_speech via Voicebox to pick the right engine for tags / cloning / multi-language needs.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
@@ -718,6 +725,14 @@ async function handleCheckLocal() {
   };
 }
 
+async function handleCheckVoicebox() {
+  const result = await checkVoicebox(config);
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: result.text }],
+  };
+}
+
 async function handleSaveStylePreset(args: unknown) {
   const result = await saveStylePreset((args ?? {}) as SaveStylePresetArgs);
   return { structuredContent: result, content: [{ type: "text", text: result.text }] };
@@ -884,6 +899,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "check_local") {
       return await handleCheckLocal();
+    }
+    if (name === "check_voicebox") {
+      return await handleCheckVoicebox();
     }
     if (name === "save_style_preset") return await handleSaveStylePreset(request.params.arguments);
     if (name === "save_voice_preset") return await handleSaveVoicePreset(request.params.arguments);

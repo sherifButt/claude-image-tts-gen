@@ -8,6 +8,7 @@ import {
 import { batchStatus } from "./tools/batch-status.js";
 import { batchSubmit } from "./tools/batch-submit.js";
 import { checkLocal } from "./tools/check-local.js";
+import { checkVoicebox } from "./tools/check-voicebox.js";
 import { createAssets, type CreateAssetsMode } from "./tools/create-assets.js";
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { exportSpend } from "./tools/export-spend.js";
@@ -51,6 +52,7 @@ Options:
   -d, --output-dir <dir>   Output directory (image: ${imageOutputDir}, audio: ${audioOutputDir})
       --speech             Generate speech audio instead of an image
       --list-providers <m> List declared providers for modality m (image|tts)
+      --check-voicebox     Probe Voicebox server: profiles, engines, capabilities (tags / cloning / instruct)
       --session-spend      Show running spend totals (today/week/month/all-time)
   -R, --regenerate <path>  Re-run a prior generation from its sidecar or output path
       --estimate-cost      Dry-run cost estimate across implemented providers/tiers
@@ -150,6 +152,7 @@ async function main(): Promise<void> {
         "set-budget-monthly": { type: "string" },
         "health-check": { type: "boolean", default: false },
         "check-local": { type: "boolean", default: false },
+        "check-voicebox": { type: "boolean", default: false },
         "batch-submit": { type: "string", description: "Path to JSON file with prompts array" },
         "batch-status": { type: "string", description: "Job ID to poll" },
         "batch-list": { type: "boolean", default: false },
@@ -290,6 +293,12 @@ async function main(): Promise<void> {
 
     if (values["check-local"]) {
       const result = await checkLocal(config);
+      process.stdout.write(result.text + "\n");
+      process.exit(result.success ? 0 : 1);
+    }
+
+    if (values["check-voicebox"]) {
+      const result = await checkVoicebox(config);
       process.stdout.write(result.text + "\n");
       process.exit(result.success ? 0 : 1);
     }

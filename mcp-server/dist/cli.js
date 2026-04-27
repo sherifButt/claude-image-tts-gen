@@ -56417,6 +56417,21 @@ function stripTrailingSlash(url) {
 function sleep3(ms) {
   return new Promise((resolve4) => setTimeout(resolve4, ms));
 }
+async function listVoiceboxProfiles(baseUrl) {
+  const url = `${stripTrailingSlash(baseUrl)}/profiles`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5e3);
+  try {
+    const r2 = await fetch(url, { signal: ctrl.signal });
+    if (!r2.ok) {
+      throw new Error(`Voicebox /profiles returned ${r2.status}: ${(await r2.text()).slice(0, 200)}`);
+    }
+    const data = await r2.json();
+    return Array.isArray(data) ? data : [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // src/providers/types.ts
 var OPENAI_TTS_VOICES_STD = [
@@ -58075,6 +58090,200 @@ function guessBackend(baseUrl, models) {
   return "unknown";
 }
 
+// src/providers/voicebox-engines.ts
+var CHATTERBOX_TURBO_TAGS = [
+  "[laugh]",
+  "[chuckle]",
+  "[gasp]",
+  "[cough]",
+  "[sigh]",
+  "[groan]",
+  "[sniff]",
+  "[shush]",
+  "[clear throat]"
+];
+var VOICEBOX_ENGINE_CAPABILITIES = {
+  qwen: {
+    id: "qwen",
+    label: "Qwen3-TTS",
+    voiceCloning: true,
+    emotionTags: { supported: false, tags: [] },
+    instructField: true,
+    languageCount: 10,
+    tradeoff: "0.6B / 1.7B sizes; voice cloning + delivery instructions ('speak slowly', 'whisper')."
+  },
+  qwen_custom_voice: {
+    id: "qwen_custom_voice",
+    label: "Qwen CustomVoice",
+    voiceCloning: false,
+    emotionTags: { supported: false, tags: [] },
+    instructField: true,
+    languageCount: 10,
+    tradeoff: "9 curated preset voices, no reference audio. Natural-language delivery control."
+  },
+  chatterbox: {
+    id: "chatterbox",
+    label: "Chatterbox Multilingual",
+    voiceCloning: false,
+    emotionTags: { supported: false, tags: [] },
+    instructField: false,
+    languageCount: 23,
+    tradeoff: "Broadest language coverage. Reads tags literally \u2014 pass plain prose."
+  },
+  chatterbox_turbo: {
+    id: "chatterbox_turbo",
+    label: "Chatterbox Turbo",
+    voiceCloning: false,
+    emotionTags: { supported: true, tags: CHATTERBOX_TURBO_TAGS },
+    instructField: false,
+    languageCount: 1,
+    tradeoff: "Fast 350M, English only. Supports paralinguistic tags inline."
+  },
+  luxtts: {
+    id: "luxtts",
+    label: "LuxTTS",
+    voiceCloning: false,
+    emotionTags: { supported: false, tags: [] },
+    instructField: false,
+    languageCount: 1,
+    tradeoff: "Lightweight ~1GB VRAM, 48kHz output, 150x realtime on CPU. English."
+  },
+  tada: {
+    id: "tada",
+    label: "TADA (HumeAI)",
+    voiceCloning: false,
+    emotionTags: { supported: false, tags: [] },
+    instructField: false,
+    languageCount: 10,
+    tradeoff: "1B / 3B sizes, 700s+ coherent audio. Reads tags literally."
+  },
+  kokoro: {
+    id: "kokoro",
+    label: "Kokoro",
+    voiceCloning: false,
+    emotionTags: { supported: false, tags: [] },
+    instructField: false,
+    languageCount: 8,
+    tradeoff: "Tiny 82M, fast CPU inference. 50 curated preset voices."
+  }
+};
+var VOICEBOX_CAPABILITIES_LAST_VERIFIED = "2026-04-27";
+
+// src/tools/check-voicebox.ts
+init_errors();
+var FETCH_TIMEOUT_MS = 5e3;
+async function fetchJson(url) {
+  const ctrl = new AbortController();
+  const t2 = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r2 = await fetch(url, { signal: ctrl.signal });
+    if (!r2.ok) throw new Error(`${url} ${r2.status}: ${(await r2.text()).slice(0, 200)}`);
+    return await r2.json();
+  } finally {
+    clearTimeout(t2);
+  }
+}
+async function checkVoicebox(config) {
+  const baseUrl = config.voiceboxBaseUrl.replace(/\/$/, "");
+  let health;
+  try {
+    health = await fetchJson(`${baseUrl}/health`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new StructuredError(
+      "PROVIDER_ERROR",
+      `Could not reach Voicebox at ${baseUrl}: ${message}`,
+      `Start Voicebox (https://voicebox.sh) or set VOICEBOX_BASE_URL to its base URL. Default port is 17493.`
+    );
+  }
+  let profiles = [];
+  try {
+    const raw = await listVoiceboxProfiles(baseUrl);
+    profiles = raw.map((p) => ({
+      id: p.id,
+      name: p.name,
+      language: p.language,
+      voiceType: p.voice_type,
+      defaultEngine: p.default_engine ?? null
+    }));
+  } catch {
+  }
+  const engineIds = Object.keys(VOICEBOX_ENGINE_CAPABILITIES);
+  const presetCounts = await Promise.all(
+    engineIds.map(async (id) => {
+      try {
+        const r2 = await fetchJson(
+          `${baseUrl}/profiles/presets/${id}`
+        );
+        return Array.isArray(r2.voices) ? r2.voices.length : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  const engines = engineIds.map((id, i2) => {
+    const cap = VOICEBOX_ENGINE_CAPABILITIES[id];
+    return {
+      id,
+      label: cap.label,
+      voiceCloning: cap.voiceCloning,
+      emotionTags: cap.emotionTags,
+      instructField: cap.instructField,
+      languageCount: cap.languageCount,
+      tradeoff: cap.tradeoff,
+      presetVoiceCount: presetCounts[i2]
+    };
+  });
+  return {
+    success: true,
+    baseUrl,
+    health,
+    profiles,
+    engines,
+    capabilitiesLastVerified: VOICEBOX_CAPABILITIES_LAST_VERIFIED,
+    text: renderText(baseUrl, health, profiles, engines)
+  };
+}
+function renderText(baseUrl, health, profiles, engines) {
+  const lines = [];
+  lines.push(`Voicebox at ${baseUrl}`);
+  const healthBits = [];
+  if (health.status) healthBits.push(`status=${health.status}`);
+  if (health.model_loaded !== void 0) healthBits.push(`model_loaded=${health.model_loaded}`);
+  if (health.gpu_available !== void 0)
+    healthBits.push(`gpu=${health.gpu_available ? health.gpu_type ?? "yes" : "no"}`);
+  if (health.backend_type) healthBits.push(`backend=${health.backend_type}`);
+  if (healthBits.length > 0) lines.push(`  ${healthBits.join("  ")}`);
+  lines.push("");
+  lines.push(`Profiles (${profiles.length}):`);
+  if (profiles.length === 0) {
+    lines.push(`  (none \u2014 create one in the Voicebox app or POST /profiles)`);
+  } else {
+    for (const p of profiles) {
+      const bits = [p.name, p.voiceType, p.language].filter(Boolean).join("  ");
+      lines.push(`  ${p.id}  ${bits}${p.defaultEngine ? `  default-engine=${p.defaultEngine}` : ""}`);
+    }
+  }
+  lines.push("");
+  lines.push(`Engines (capabilities verified ${VOICEBOX_CAPABILITIES_LAST_VERIFIED}):`);
+  for (const e2 of engines) {
+    const flags = [];
+    if (e2.voiceCloning) flags.push("clones");
+    if (e2.emotionTags.supported) flags.push(`tags=${e2.emotionTags.tags.join(" ")}`);
+    if (e2.instructField) flags.push("instruct=");
+    flags.push(`${e2.languageCount}lang`);
+    if (e2.presetVoiceCount !== null) flags.push(`presets=${e2.presetVoiceCount}`);
+    lines.push(`  ${e2.id.padEnd(18)} ${e2.label}`);
+    lines.push(`    ${flags.join("  ")}`);
+    lines.push(`    ${e2.tradeoff}`);
+  }
+  lines.push("");
+  lines.push(
+    `Pass an engine via params.engine on generate_speech (e.g. params.engine="chatterbox_turbo" for [laugh]/[sigh] tags).`
+  );
+  return lines.join("\n");
+}
+
 // src/tools/create-assets.ts
 init_errors();
 
@@ -59484,7 +59693,7 @@ function estimateCostDryRun(args) {
     estimates: rows,
     cheapest,
     cheapestBatch,
-    text: renderText(args.modality, units, rows, currency, cheapest, cheapestBatch)
+    text: renderText2(args.modality, units, rows, currency, cheapest, cheapestBatch)
   };
 }
 function resolveUnits(args) {
@@ -59493,7 +59702,7 @@ function resolveUnits(args) {
   if (args.text !== void 0) return args.text.length;
   return 0;
 }
-function renderText(modality, units, rows, currency, cheapest, cheapestBatch) {
+function renderText2(modality, units, rows, currency, cheapest, cheapestBatch) {
   const unitLabel = modality === "image" ? `${units} image${units === 1 ? "" : "s"}` : `${units} chars`;
   const lines = [`Cost estimate for ${unitLabel} (${currency}):`, ""];
   for (const r2 of rows) {
@@ -59685,10 +59894,10 @@ async function healthCheck(config) {
     ok: allOk,
     pricing,
     providers: all,
-    text: renderText2(all, pricing)
+    text: renderText3(all, pricing)
   };
 }
-function renderText2(providers, pricing) {
+function renderText3(providers, pricing) {
   const lines = [`Health check:`, ``, `Providers:`];
   for (const [id, h2] of Object.entries(providers)) {
     if (!h2.configured) {
@@ -60013,7 +60222,7 @@ async function listPresets(args = {}) {
     success: true,
     styles,
     voices,
-    text: renderText3(styles, voices)
+    text: renderText4(styles, voices)
   };
 }
 function validateName(name) {
@@ -60025,7 +60234,7 @@ function validateName(name) {
     );
   }
 }
-function renderText3(styles, voices) {
+function renderText4(styles, voices) {
   const lines = [];
   const styleEntries = Object.entries(styles);
   if (styleEntries.length > 0) {
@@ -60278,6 +60487,7 @@ Options:
   -d, --output-dir <dir>   Output directory (image: ${imageOutputDir}, audio: ${audioOutputDir})
       --speech             Generate speech audio instead of an image
       --list-providers <m> List declared providers for modality m (image|tts)
+      --check-voicebox     Probe Voicebox server: profiles, engines, capabilities (tags / cloning / instruct)
       --session-spend      Show running spend totals (today/week/month/all-time)
   -R, --regenerate <path>  Re-run a prior generation from its sidecar or output path
       --estimate-cost      Dry-run cost estimate across implemented providers/tiers
@@ -60368,6 +60578,7 @@ async function main() {
         "set-budget-monthly": { type: "string" },
         "health-check": { type: "boolean", default: false },
         "check-local": { type: "boolean", default: false },
+        "check-voicebox": { type: "boolean", default: false },
         "batch-submit": { type: "string", description: "Path to JSON file with prompts array" },
         "batch-status": { type: "string", description: "Job ID to poll" },
         "batch-list": { type: "boolean", default: false },
@@ -60492,6 +60703,11 @@ async function main() {
     }
     if (values["check-local"]) {
       const result2 = await checkLocal(config);
+      process.stdout.write(result2.text + "\n");
+      process.exit(result2.success ? 0 : 1);
+    }
+    if (values["check-voicebox"]) {
+      const result2 = await checkVoicebox(config);
       process.stdout.write(result2.text + "\n");
       process.exit(result2.success ? 0 : 1);
     }

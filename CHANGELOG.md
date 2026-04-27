@@ -4,6 +4,39 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-04-27
+
+### Added
+
+- **`check_voicebox` MCP tool** (CLI: `--check-voicebox`). Probes the
+  running [Voicebox](https://voicebox.sh) server and reports:
+  - Server health (model loaded, GPU type, backend)
+  - User profiles (id, name, language, voice_type, default_engine)
+  - All 7 engines with verified capabilities — voice cloning,
+    paralinguistic tags (`[laugh]`/`[sigh]`/etc.), `instruct`-field
+    natural-language delivery hints, language count, preset voice
+    counts, tradeoffs (model size, speed, VRAM)
+- Engine capability matrix (`providers/voicebox-engines.ts`) hand-
+  maintained from Voicebox's docs, timestamped via
+  `VOICEBOX_CAPABILITIES_LAST_VERIFIED`. Re-verify quarterly or when
+  Voicebox ships new engines.
+- Speech-generation skill updated to instruct Claude to call
+  `check_voicebox` before picking an engine — so requests like "narrate
+  this with a giggle and a sigh" route to `chatterbox_turbo`, voice
+  cloning routes to `qwen` (Qwen3-TTS), and broad-language work routes
+  to `chatterbox`.
+
+### Notes
+
+- Voicebox's API doesn't expose engine capabilities, so the matrix is
+  hand-coded. Preset voice counts ARE fetched live via
+  `GET /profiles/presets/{engine}`, which validates the engine list is
+  still current at runtime (a missing engine means our matrix is out
+  of date).
+- The capability matrix doubles as a `recommendEngine()` helper —
+  callers can ask "I need cloning + 23 languages" and get back the
+  best-fit engine ID, falling back to null if no engine matches.
+
 ## [0.8.1] - 2026-04-27
 
 ### Changed
