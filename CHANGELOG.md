@@ -4,6 +4,37 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.11] - 2026-04-27
+
+### Added
+
+- **OpenAI `gpt-image-2` registered as the OpenAI image model across
+  all three tiers** ([release announcement](https://developers.openai.com/api/docs/models/gpt-image-2),
+  [pricing](https://developers.openai.com/api/docs/pricing)). The
+  `openai` provider now resolves `small | mid | pro` to
+  `gpt-image-2` with `quality: low | medium | high` respectively.
+  `gpt-image-1` remains callable via explicit `--model gpt-image-1`
+  and keeps its pricing entries for backward compat.
+- Per-image pricing entries `openai/gpt-image-2:{low,medium,high}` at
+  $0.006 / $0.053 / $0.211 standard (50% off via Batch API). Figures
+  are derived from OpenAI's published token rates ($5/M text in,
+  $8/M image in, $30/M image out) — verify against the official
+  calculator before relying on them for tight budgets. Notes on each
+  pricing entry call this out.
+- `last_updated` field in `pricing.json` bumped to 2026-04-27.
+
+### Notes
+
+- At the `small` tier, `openai/gpt-image-2` ($0.006) is now ~6.5×
+  cheaper than the default `google/gemini-2.5-flash-image` ($0.039).
+  The default provider remains `google` (locked decision in
+  CLAUDE.md); switch via `--provider openai` when minimizing image
+  spend matters.
+- The aspect-ratio bucket map (`util/aspect.ts`) still routes through
+  the same three OpenAI sizes (`1024x1024 | 1024x1536 | 1536x1024`)
+  for parity, even though `gpt-image-2` accepts more flexible sizes
+  per the model card.
+
 ## [0.7.10] - 2026-04-21
 
 ### Added

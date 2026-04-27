@@ -58,11 +58,11 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **five** (G
 ### Generation
 - **5 providers** behind a single tier abstraction (`small | mid | pro`):
   - **Google Gemini** (image: Flash + Imagen, TTS declared)
-  - **OpenAI** (image: gpt-image-1 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
+  - **OpenAI** (image: gpt-image-2 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
   - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
-- **Image-to-image edits** via reference image input (gpt-image-1, Gemini multimodal, local server if it supports `/v1/images/edits`)
+- **Image-to-image edits** via reference image input (gpt-image-2, Gemini multimodal, local server if it supports `/v1/images/edits`)
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg. Triggers both pre-emptively (text > provider's `maxCharsPerCall`) *and* reactively (provider rejects a shorter input as too long for output-duration / token reasons — a new `INPUT_TOO_LONG` code catches that and retries with chunking on the same provider, preserving voice)
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
@@ -164,7 +164,7 @@ Configure via **shell env vars** — set before starting Claude Code (typically 
 ```sh
 # Keys — set at least one, or run a local server (no key required)
 export GEMINI_API_KEY=...        # default image + TTS provider
-export OPENAI_API_KEY=...        # image (gpt-image-1) + TTS (tts-1, gpt-4o-mini-tts, tts-1-hd)
+export OPENAI_API_KEY=...        # image (gpt-image-2) + TTS (tts-1, gpt-4o-mini-tts, tts-1-hd)
 export OPENROUTER_API_KEY=...    # image passthrough
 export ELEVENLABS_API_KEY=...    # TTS with timestamps
 

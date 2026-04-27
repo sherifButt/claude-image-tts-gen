@@ -16,8 +16,8 @@ export function isAspectRatio(v: unknown): v is AspectRatio {
 }
 
 /**
- * gpt-image-1 only supports three concrete sizes. Map each aspect into the
- * nearest bucket: square, landscape (3:2), or portrait (2:3).
+ * gpt-image-1 only supports three concrete sizes. gpt-image-2 accepts
+ * flexible sizes but we keep the same three-bucket mapping for parity.
  */
 export function aspectToOpenAISize(
   aspect: AspectRatio,

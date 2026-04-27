@@ -6,7 +6,7 @@ const PROVIDER_GUIDANCE: Record<ProviderId, string> = {
   google:
     "Gemini image models prefer concise but vivid prose: subject + setting + style + lighting + camera. Avoid bullet lists.",
   openai:
-    "gpt-image-1 prefers direct, visual descriptions. Avoid abstract concepts. Specify orientation if relevant.",
+    "gpt-image-2 prefers direct, visual descriptions. Avoid abstract concepts. Specify orientation if relevant.",
   openrouter:
     "Routed via OpenRouter — the upstream model is usually Gemini-style. Concise, vivid, scene-first.",
   elevenlabs: "(no image rewrites for elevenlabs)",

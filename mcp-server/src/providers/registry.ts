@@ -90,19 +90,19 @@ const MATRIX: ProviderEntry[] = [
     id: "openai",
     image: {
       small: {
-        model: "gpt-image-1",
+        model: "gpt-image-2",
         batchable: true,
         implemented: true,
         params: { quality: "low" },
       },
       mid: {
-        model: "gpt-image-1",
+        model: "gpt-image-2",
         batchable: true,
         implemented: true,
         params: { quality: "medium" },
       },
       pro: {
-        model: "gpt-image-1",
+        model: "gpt-image-2",
         batchable: true,
         implemented: true,
         params: { quality: "high" },

@@ -3,7 +3,7 @@ import { createRequire } from 'module'; const require = createRequire(import.met
 
 // src/pricing/pricing.json
 var pricing_default = {
-  last_updated: "2026-04-21",
+  last_updated: "2026-04-27",
   currency: "USD",
   sources: [
     "https://ai.google.dev/gemini-api/docs/pricing",
@@ -65,6 +65,33 @@ var pricing_default = {
         batch: 0.0835
       },
       notes: "1024x1024 high quality. Larger sizes (1024x1536, 1536x1024) cost ~$0.25."
+    },
+    "openai/gpt-image-2:low": {
+      modality: "image",
+      pricing: {
+        type: "image",
+        standard: 6e-3,
+        batch: 3e-3
+      },
+      notes: "1024x1024 low quality. Per-image figure derived from token pricing ($5/M text in, $8/M image in, $30/M image out); confirm against the official calculator before relying on it for tight budgets."
+    },
+    "openai/gpt-image-2:medium": {
+      modality: "image",
+      pricing: {
+        type: "image",
+        standard: 0.053,
+        batch: 0.0265
+      },
+      notes: "1024x1024 medium quality. Per-image figure derived from token pricing; confirm against the official calculator."
+    },
+    "openai/gpt-image-2:high": {
+      modality: "image",
+      pricing: {
+        type: "image",
+        standard: 0.211,
+        batch: 0.1055
+      },
+      notes: "1024x1024 high quality. Per-image figure derived from token pricing; confirm against the official calculator. Larger sizes cost more in proportion to output tokens."
     },
     "openai/tts-1": {
       modality: "tts",

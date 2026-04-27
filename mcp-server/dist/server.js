@@ -74255,19 +74255,19 @@ var MATRIX = [
     id: "openai",
     image: {
       small: {
-        model: "gpt-image-1",
+        model: "gpt-image-2",
         batchable: true,
         implemented: true,
         params: { quality: "low" }
       },
       mid: {
-        model: "gpt-image-1",
+        model: "gpt-image-2",
         batchable: true,
         implemented: true,
         params: { quality: "medium" }
       },
       pro: {
-        model: "gpt-image-1",
+        model: "gpt-image-2",
         batchable: true,
         implemented: true,
         params: { quality: "high" }
@@ -74930,7 +74930,7 @@ async function copyFromCache(hit, destPath) {
 
 // src/pricing/pricing.json
 var pricing_default = {
-  last_updated: "2026-04-21",
+  last_updated: "2026-04-27",
   currency: "USD",
   sources: [
     "https://ai.google.dev/gemini-api/docs/pricing",
@@ -74992,6 +74992,33 @@ var pricing_default = {
         batch: 0.0835
       },
       notes: "1024x1024 high quality. Larger sizes (1024x1536, 1536x1024) cost ~$0.25."
+    },
+    "openai/gpt-image-2:low": {
+      modality: "image",
+      pricing: {
+        type: "image",
+        standard: 6e-3,
+        batch: 3e-3
+      },
+      notes: "1024x1024 low quality. Per-image figure derived from token pricing ($5/M text in, $8/M image in, $30/M image out); confirm against the official calculator before relying on it for tight budgets."
+    },
+    "openai/gpt-image-2:medium": {
+      modality: "image",
+      pricing: {
+        type: "image",
+        standard: 0.053,
+        batch: 0.0265
+      },
+      notes: "1024x1024 medium quality. Per-image figure derived from token pricing; confirm against the official calculator."
+    },
+    "openai/gpt-image-2:high": {
+      modality: "image",
+      pricing: {
+        type: "image",
+        standard: 0.211,
+        batch: 0.1055
+      },
+      notes: "1024x1024 high quality. Per-image figure derived from token pricing; confirm against the official calculator. Larger sizes cost more in proportion to output tokens."
     },
     "openai/tts-1": {
       modality: "tts",
@@ -77923,7 +77950,7 @@ Pick a keeper with pick_variant --keeper <path> --variants ${variantPaths.length
 // src/rewriter/sampling.ts
 var PROVIDER_GUIDANCE = {
   google: "Gemini image models prefer concise but vivid prose: subject + setting + style + lighting + camera. Avoid bullet lists.",
-  openai: "gpt-image-1 prefers direct, visual descriptions. Avoid abstract concepts. Specify orientation if relevant.",
+  openai: "gpt-image-2 prefers direct, visual descriptions. Avoid abstract concepts. Specify orientation if relevant.",
   openrouter: "Routed via OpenRouter \u2014 the upstream model is usually Gemini-style. Concise, vivid, scene-first.",
   elevenlabs: "(no image rewrites for elevenlabs)",
   local: "Local server \u2014 keep it simple and direct. Local image models (Stable Diffusion variants) prefer subject + style + medium tags."
@@ -78055,7 +78082,7 @@ var imageInputSchema = {
     style: { type: "string", description: "Apply a saved style preset by name." },
     referenceImagePath: {
       type: "string",
-      description: "Path to a reference image (image-to-image). Supports gpt-image-1 (edits) and Gemini multimodal."
+      description: "Path to a reference image (image-to-image). Supports gpt-image-2 / gpt-image-1 (edits) and Gemini multimodal."
     },
     aspectRatio: {
       type: "string",

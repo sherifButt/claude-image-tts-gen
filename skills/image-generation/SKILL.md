@@ -50,7 +50,7 @@ when nothing is implied.
 | Ultra-wide cinematic                          | `21:9`        |
 | Classic 4:3 (slides, older displays)          | `4:3`         |
 
-The 1200×630 OG preset maps to `16:9` (closest bucket on gpt-image-1) or `3:2`.
+The 1200×630 OG preset maps to `16:9` (closest bucket on gpt-image-2 / gpt-image-1) or `3:2`.
 For exact OG dimensions, generate at `16:9` then pipe through `post_process --presets og`.
 
 ## Pick the provider
@@ -64,7 +64,7 @@ set instead of thrashing through fallbacks.
 
 - **Default `google`** (Gemini Flash Image) — cheapest, supports batch,
   good quality at small tier. Only implemented tier: `small`.
-- Switch to `openai` (gpt-image-1) when the user wants better text
+- Switch to `openai` (gpt-image-2) when the user wants better text
   rendering inside the image or photoreal portraits. Tiers `small | mid | pro`
   all implemented — but requires `OPENAI_API_KEY`.
 - `openrouter` is a passthrough — only use when the user explicitly
