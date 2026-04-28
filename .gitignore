@@ -35,3 +35,16 @@ batch/
 cache/
 projects/
 
+STRATEGY.md
+flywheel.png
+flywheel.svg
+
+distribution-progress.md
+distribution-strategy.md
+demo-script.md
+
+# Source screen recordings — keep locally, only the compressed
+# docs/hero.gif gets committed.
+docs/demo/*.mov
+docs/demo/*.gif
+

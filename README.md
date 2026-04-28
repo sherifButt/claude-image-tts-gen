@@ -1,12 +1,33 @@
 # Claude Image & TTS Generator
 
-Multi-provider AI image and text-to-speech generation, packaged as a Claude Code plugin and MCP server.
+> **Cost-aware image + TTS for Claude Code** — 6 providers, one budget, one ledger, zero lock-in.
 
-Provides multi-provider support, tier abstraction, batch mode, end-to-end cost tracking, MCP elicitation/sampling/notifications/resources, and a reproducible sidecar workflow.
+![Hero demo](docs/hero.gif)
+
+Generate images and voice with cloud or local models behind a single tier
+abstraction (`small | mid | pro`). Every call lands in a unified cost ledger
+with hard budget caps enforced *pre-call*, sidecar-tracked for full
+reproducibility, and falls back across providers when one fails — without
+your code knowing which one ran.
+
+## How it compares
+
+| | This plugin | Raw OpenAI / Gemini API | ElevenLabs subscription | guinacio's claude-image-gen |
+| :-- | :-- | :-: | :-: | :-: |
+| Multi-provider behind one interface | ✅ 6 providers | ❌ | ❌ | ❌ (OpenAI only) |
+| Pre-call budget enforcement | ✅ daily/weekly/monthly caps | ❌ | partial (plan limits) | ❌ |
+| Per-call + per-session cost ledger | ✅ | ❌ | partial (dashboard) | ❌ |
+| Batch mode (50% off where supported) | ✅ image + TTS | manual | ❌ | ❌ |
+| Reproducible sidecar / regenerate | ✅ `.regenerate.json` per output | ❌ | ❌ | ❌ |
+| Local $0/call escape hatch | ✅ Voicebox + Kokoro + 4 more | ❌ | ❌ | ❌ |
+| Voice cloning | ✅ local Chatterbox / XTTS / Voicebox + ElevenLabs voice IDs | n/a | ✅ | ❌ |
+| Long-text TTS auto-chunk + stitch | ✅ sentence-aware, reactive | manual | partial | n/a |
+| Provider failover on rate-limit / 5xx | ✅ logged cost delta | ❌ | ❌ | ❌ |
+| MIT licensed, semver'd, changelog | ✅ | n/a | n/a | ✅ |
 
 ## Why this MCP is different
 
-There are plenty of MCP servers that wrap one vendor. This one wraps **five** (Google Gemini, OpenAI, OpenRouter, ElevenLabs, and any OpenAI-compatible local server) behind a consistent interface, and adds the cross-cutting concerns that a thin wrapper leaves to you:
+There are plenty of MCP servers that wrap one vendor. This one wraps **six** (Google Gemini, OpenAI, OpenRouter, ElevenLabs, [Voicebox](https://voicebox.sh), and any OpenAI-compatible local server) behind a consistent interface, and adds the cross-cutting concerns that a thin wrapper leaves to you:
 
 - **One knob (`small | mid | pro`) spans every provider.** Code written for Gemini works unchanged against OpenAI or a local Kokoro model — swap `--provider` and the call still runs. No per-vendor quirks in your prompt code.
 - **Cost-aware from the first call.** Per-call + session + per-project ledgers, hard daily/weekly/monthly budget caps enforced *pre-call* (not after the charge), dry-run `estimate_cost` that ranks every provider/tier combo, and a $0 cache for identical repeats. You know what a generation costs before you spend, and after.
@@ -124,6 +145,7 @@ Two commands inside a Claude Code session — no clone, no build:
 Before starting Claude Code (or in a fresh terminal before relaunching), export at least your Gemini API key — grab a free one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey):
 ```sh
 export GEMINI_API_KEY='your-key'
+export OPENAI_API_KEY='your-key' #cheapest and most accurate (Mon, Apr 27th)
 ```
 See [Configuration](#configuration) for the full env var list and per-provider voice defaults. The plugin registers its slash commands (`/gen-image`, `/gen-speech`, …) and MCP tools automatically on enable.
 
