@@ -4,6 +4,39 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] - 2026-04-28
+
+### Fixed
+
+- **Native deps now install on first MCP-server start.** `@imgly/background-removal-node`,
+  `onnxruntime-node`, and `sharp` ship as `--external` and were never installed
+  by the marketplace fetch — calls relying on them (`post_process --bgRemove`,
+  most `post_process` resizes via `sharp`) failed at runtime with cryptic
+  module-not-found errors. The plugin now bootstraps `npm ci --omit=dev` in
+  `mcp-server/` on first launch when the sentinel module dirs are missing,
+  prints a one-time "First-time setup..." message, and continues into the
+  real server. Subsequent starts are instant.
+- **`bg-remove` error message now mentions the restart requirement.** If a user
+  hand-installs deps while the MCP process is already running, the restart
+  hint is surfaced — the running Node process can't pick up newly-installed
+  modules without a fresh start.
+
+### Added
+
+- **Tool description guidance for `bg-remove`.** `post_process --bgRemove`
+  description now flags that the underlying `@imgly` model is photo-trained
+  and works best on photographic subjects (portraits, products), not dense
+  illustration scenes (crowds, where's-waldo-style art) where it tends to
+  isolate the largest object and erase everything else as "background."
+
+### Internal
+
+- Server and CLI entry points split into a tiny bootstrap shim
+  (`src/server.ts`, `src/cli.ts`) and the heavy main bundle
+  (`src/server-main.ts`, `src/cli-main.ts`). The shims use only Node
+  built-ins so they run before any third-party module resolution; they
+  install deps if missing, then dynamic-import the main bundle.
+
 ## [0.8.2] - 2026-04-27
 
 ### Added

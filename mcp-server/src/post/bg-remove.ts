@@ -20,8 +20,12 @@ async function loadBackgroundRemoval(): Promise<BackgroundRemovalModule> {
   } catch {
     throw new StructuredError(
       "CONFIG_ERROR",
-      "@imgly/background-removal-node is required for bg-remove but is not installed",
-      "Run `npm install @imgly/background-removal-node` in mcp-server/. The first invocation downloads ~80MB of ONNX model files; subsequent calls are offline.",
+      "@imgly/background-removal-node is not installed in the plugin folder",
+      "The plugin's bootstrap should install this automatically on first start. " +
+        "If you're seeing this, the install was skipped or failed. " +
+        "Manual fix: cd into the plugin's mcp-server/ folder, run `npm ci --omit=dev`, then RESTART Claude Code (the running MCP process can't load newly-installed modules without a restart). " +
+        "First bg-remove call after install also downloads ~80 MB of ONNX model files; subsequent calls are offline. " +
+        "Note: bg-remove uses a photo-trained model and works best on photographic subjects (portraits, products). It can mis-segment dense illustration scenes (crowds, where's-waldo-style art) — the photo model treats secondary objects as background.",
     );
   }
 }
