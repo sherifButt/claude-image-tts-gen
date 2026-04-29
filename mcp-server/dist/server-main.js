@@ -71545,7 +71545,7 @@ async function loadBackgroundRemoval() {
     throw new StructuredError(
       "CONFIG_ERROR",
       "@imgly/background-removal-node is not installed in the plugin folder",
-      "The plugin's bootstrap should install this automatically on first start. If you're seeing this, the install was skipped or failed. Manual fix: cd into the plugin's mcp-server/ folder, run `npm ci --omit=dev`, then RESTART Claude Code (the running MCP process can't load newly-installed modules without a restart). First bg-remove call after install also downloads ~80 MB of ONNX model files; subsequent calls are offline. Note: bg-remove uses a photo-trained model and works best on photographic subjects (portraits, products). It can mis-segment dense illustration scenes (crowds, where's-waldo-style art) \u2014 the photo model treats secondary objects as background."
+      "The plugin's bootstrap should install this automatically on first start. If you're seeing this, the install was skipped or failed. Manual fix: cd into the plugin's mcp-server/ folder, run `npm ci --omit=dev`, then RESTART Claude Code (the running MCP process can't load newly-installed modules without a restart). First bg-remove call has a ~30s ONNX warmup (model loaded from disk; subsequent calls are <1s). Note: bg-remove uses a photo-trained model and works best on photographic subjects (portraits, products). It can mis-segment dense illustration scenes (crowds, where's-waldo-style art) \u2014 the photo model treats secondary objects as background."
     );
   }
 }
@@ -71557,7 +71557,21 @@ function suggestBgRemoveOutputPath(inputPath) {
 async function removeBackground(inputPath, outputPath) {
   const { removeBackground: run } = await loadBackgroundRemoval();
   await mkdir13(dirname13(outputPath), { recursive: true });
-  const blob = await run(inputPath, { output: { format: "image/png" } });
+  let lastPhase = "";
+  const onProgress = (key, current, total) => {
+    const phase = key.split(":")[0] ?? key;
+    if (phase !== lastPhase) {
+      lastPhase = phase;
+      process.stderr.write(
+        `[claude-image-tts-gen] bg-remove: ${phase} (${current}/${total})
+`
+      );
+    }
+  };
+  const blob = await run(inputPath, {
+    output: { format: "image/png" },
+    progress: onProgress
+  });
   const buf = Buffer.from(await blob.arrayBuffer());
   await writeFile12(outputPath, buf);
 }

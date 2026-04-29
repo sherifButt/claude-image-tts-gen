@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-04-29
+
+### Changed
+
+- **`bg-remove` now streams phase progress to stderr.** Previously the
+  first `post_process --bgRemove` call would appear to hang silently for
+  ~30s. We now pass a `progress` callback to `@imgly/background-removal-node`
+  and emit one stderr line per phase transition (`fetch`, `compute`, etc.)
+  so the user sees activity during ONNX warmup. Subsequent calls run in
+  <1s with one or two phase lines.
+
+### Fixed
+
+- **Misleading "downloads ~80 MB" copy in the bg-remove error.** The
+  default `medium` ONNX model is *bundled in the npm package* (chunked
+  into 4 MB SHA-named blobs in the @imgly dist), so there's no
+  runtime download. The slow first call is ONNX runtime warmup +
+  loading the chunks from disk into memory. Updated the error message
+  to describe the actual behavior.
+
 ## [0.8.5] - 2026-04-29
 
 ### Changed
