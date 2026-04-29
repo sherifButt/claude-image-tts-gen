@@ -69826,6 +69826,11 @@ async function withFailover(opts) {
 
 // src/tools/generate-image.ts
 function inlineSlot(provider, tier, model) {
+  try {
+    const registered = resolveSlot({ provider, modality: "image", tier });
+    if (registered.model === model) return registered;
+  } catch {
+  }
   return {
     provider,
     modality: "image",
@@ -70432,6 +70437,11 @@ function autoPlay(filePath) {
 // src/tools/generate-speech.ts
 init_errors();
 function inlineSlot2(provider, tier, model) {
+  try {
+    const registered = resolveSlot({ provider, modality: "tts", tier });
+    if (registered.model === model) return registered;
+  } catch {
+  }
   return {
     provider,
     modality: "tts",

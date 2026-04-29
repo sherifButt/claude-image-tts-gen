@@ -69,6 +69,12 @@ export interface GenerateImageOpts {
 }
 
 function inlineSlot(provider: ProviderId, tier: Tier, model: string): ResolvedSlot {
+  try {
+    const registered = resolveSlot({ provider, modality: "image", tier });
+    if (registered.model === model) return registered;
+  } catch {
+    // (provider, image, tier) isn't registered — fall through.
+  }
   return {
     provider,
     modality: "image",

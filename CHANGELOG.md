@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-04-29
+
+### Fixed
+
+- **Cost reported as $0 when `--model` is passed explicitly.** When a user
+  passes `--model gpt-image-2` (or any model whose registered slot uses
+  tier-suffixed pricing keys like `openai/gpt-image-2:medium`), the
+  `inlineSlot` helper in `generate-image.ts` and `generate-speech.ts` was
+  always setting `params: {}` — dropping the tier→quality mapping. The
+  pricing-key lookup then missed (`openai/gpt-image-2` instead of
+  `openai/gpt-image-2:medium`), `unknownCostEstimate` returned $0, and
+  the call ran "free." The bigger consequence: **the pre-call budget
+  guard never fired** for explicitly-named models, because $0 < any cap.
+  Now `inlineSlot` consults the registry — if the explicit model matches
+  the registered slot for the same `(provider, modality, tier)`, it
+  inherits the registered slot's params (and the rest of the slot
+  config, e.g. `batchable`). Arbitrary unknown models still fall through
+  to the empty-params slot as before.
+
 ## [0.8.3] - 2026-04-28
 
 ### Fixed
