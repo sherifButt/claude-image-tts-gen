@@ -5,12 +5,16 @@ export interface Config {
   elevenlabsApiKey: string | undefined;
   /** Local OpenAI-compatible server base URL (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, LM Studio, ...). */
   localBaseUrl: string;
-  /** Whether the local provider is opted in to the failover chain. */
+  /** Whether the local provider is opted in to the failover chain. Resolved at startup: explicit env wins; otherwise auto-detect probes localBaseUrl/models. */
   localEnabled: boolean;
+  /** True when LOCAL_ENABLED was unset, so `applyAutoDetection` should probe and decide. */
+  localAutoProbe: boolean;
   /** Voicebox server base URL (default http://localhost:17493 — voicebox.sh). */
   voiceboxBaseUrl: string;
-  /** Whether Voicebox is opted in to the TTS failover chain. */
+  /** Whether Voicebox is opted in to the TTS failover chain. Resolved at startup: explicit env wins; otherwise auto-detect probes voiceboxBaseUrl/health. */
   voiceboxEnabled: boolean;
+  /** True when VOICEBOX_ENABLED was unset, so `applyAutoDetection` should probe and decide. */
+  voiceboxAutoProbe: boolean;
   geminiImageModel: string;
   imageOutputDir: string;
   audioOutputDir: string;
@@ -51,15 +55,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // LOCAL_BASE_URL. Back-compat: LMSTUDIO_BASE_URL is still read.
     localBaseUrl:
       env.LOCAL_BASE_URL ?? env.LMSTUDIO_BASE_URL ?? "http://localhost:8880/v1",
-    // Opt-in via LOCAL_ENABLED=true; off by default since localhost may not
-    // be running. Back-compat: LMSTUDIO_ENABLED is still read.
+    // Tristate: explicit env wins, otherwise auto-probe at startup.
+    // Back-compat: LMSTUDIO_ENABLED is still read.
     localEnabled: ["true", "1", "yes", "on"].includes(
       (env.LOCAL_ENABLED ?? env.LMSTUDIO_ENABLED ?? "").toLowerCase(),
     ),
+    localAutoProbe: env.LOCAL_ENABLED === undefined && env.LMSTUDIO_ENABLED === undefined,
     voiceboxBaseUrl: env.VOICEBOX_BASE_URL ?? "http://localhost:17493",
     voiceboxEnabled: ["true", "1", "yes", "on"].includes(
       (env.VOICEBOX_ENABLED ?? "").toLowerCase(),
     ),
+    voiceboxAutoProbe: env.VOICEBOX_ENABLED === undefined,
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",

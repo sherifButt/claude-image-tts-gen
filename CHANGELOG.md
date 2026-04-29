@@ -4,7 +4,31 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.4] - 2026-04-29
+## [0.8.5] - 2026-04-29
+
+### Changed
+
+- **Voicebox + local providers now auto-detect at startup.** Previously
+  both required an explicit `VOICEBOX_ENABLED=true` / `LOCAL_ENABLED=true`
+  env var to be eligible for the failover chain — and an explicit
+  `--provider voicebox` request was rejected when the flag was unset.
+  That meant a perfectly running Voicebox server on `localhost:17493`
+  would still be ignored unless the user happened to know the flag.
+
+  Behavior now: `*_ENABLED` env vars are tristate. If explicitly set to
+  `true` or `false`, that value wins. If unset, the server probes the
+  endpoint at startup (`{voiceboxBaseUrl}/health`,
+  `{localBaseUrl}/models`, 800 ms timeout) and treats reachable
+  endpoints as enabled. Resolution is logged at info level.
+
+  Demo flow simplification: with this change, a default demo install
+  needs only `GEMINI_API_KEY` — Voicebox is picked up automatically if
+  it's running.
+
+### Fixed
+
+- **MCP server identity reported `version: "0.0.1"`** — hardcoded since
+  the project started, never updated. Now matches the released version.
 
 ### Fixed
 

@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { loadConfig } from "./config.js";
+import { applyAutoDetection } from "./providers/auto-detect.js";
 import {
   getDefaultProvider,
   getDefaultTier,
@@ -196,6 +197,7 @@ async function main(): Promise<void> {
         ? { IMAGE_OUTPUT_DIR: values["output-dir"] }
         : {}),
     });
+    await applyAutoDetection(config);
 
     if (values.help) {
       printHelp(config.imageOutputDir, config.audioOutputDir);

@@ -1634,7 +1634,7 @@ var require_node = __commonJS({
     var tty = __require("tty");
     var util = __require("util");
     exports.init = init;
-    exports.log = log;
+    exports.log = log2;
     exports.formatArgs = formatArgs;
     exports.save = save;
     exports.load = load;
@@ -1769,7 +1769,7 @@ var require_node = __commonJS({
       }
       return (/* @__PURE__ */ new Date()).toISOString() + " ";
     }
-    function log(...args) {
+    function log2(...args) {
       return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + "\n");
     }
     function save(namespaces) {
@@ -11208,7 +11208,7 @@ var require_logging_utils = __commonJS({
     exports.getDebugBackend = getDebugBackend;
     exports.getStructuredBackend = getStructuredBackend;
     exports.setBackend = setBackend;
-    exports.log = log;
+    exports.log = log2;
     var events_1 = __require("events");
     var process2 = __importStar(__require("process"));
     var util = __importStar(__require("util"));
@@ -11240,7 +11240,7 @@ var require_logging_utils = __commonJS({
         this.func.info = (...args) => this.invokeSeverity(LogSeverity.INFO, ...args);
         this.func.warn = (...args) => this.invokeSeverity(LogSeverity.WARNING, ...args);
         this.func.error = (...args) => this.invokeSeverity(LogSeverity.ERROR, ...args);
-        this.func.sublog = (namespace2) => log(namespace2, this.func);
+        this.func.sublog = (namespace2) => log2(namespace2, this.func);
       }
       invoke(fields, ...args) {
         if (this.upstream) {
@@ -11407,7 +11407,7 @@ var require_logging_utils = __commonJS({
       cachedBackend = backend;
       loggerCache.clear();
     }
-    function log(namespace, parent) {
+    function log2(namespace, parent) {
       if (!cachedBackend) {
         const enablesFlag = process2.env[exports.env.nodeEnables];
         if (!enablesFlag) {
@@ -11540,7 +11540,7 @@ var require_src4 = __commonJS({
     exports.HEADER_NAME = "Metadata-Flavor";
     exports.HEADER_VALUE = "Google";
     exports.HEADERS = Object.freeze({ [exports.HEADER_NAME]: exports.HEADER_VALUE });
-    var log = logger.log("gcp-metadata");
+    var log2 = logger.log("gcp-metadata");
     exports.METADATA_SERVER_DETECTION = Object.freeze({
       "assume-present": "don't try to ping the metadata server, but assume it's present",
       none: "don't try to ping the metadata server, but don't try to use it either",
@@ -11603,9 +11603,9 @@ var require_src4 = __commonJS({
         responseType: "text",
         timeout: requestTimeout()
       };
-      log.info("instance request %j", req);
+      log2.info("instance request %j", req);
       const res = await requestMethod(req);
-      log.info("instance metadata is %s", res.data);
+      log2.info("instance metadata is %s", res.data);
       const metadataFlavor = res.headers.get(exports.HEADER_NAME);
       if (metadataFlavor !== exports.HEADER_VALUE) {
         throw new RangeError(`Invalid response from metadata service: incorrect ${exports.HEADER_NAME} header. Expected '${exports.HEADER_VALUE}', got ${metadataFlavor ? `'${metadataFlavor}'` : "no header"}`);
@@ -23477,7 +23477,7 @@ var require_mtime_precision = __commonJS({
   "node_modules/proper-lockfile/lib/mtime-precision.js"(exports, module) {
     "use strict";
     var cacheSymbol = /* @__PURE__ */ Symbol();
-    function probe(file, fs3, callback) {
+    function probe2(file, fs3, callback) {
       const cachedPrecision = fs3[cacheSymbol];
       if (cachedPrecision) {
         return fs3.stat(file, (err, stat3) => {
@@ -23509,7 +23509,7 @@ var require_mtime_precision = __commonJS({
       }
       return new Date(now);
     }
-    module.exports.probe = probe;
+    module.exports.probe = probe2;
     module.exports.getMtime = getMtime;
   }
 });
@@ -23870,15 +23870,17 @@ function loadConfig(env = process.env) {
     // (:5005), Speaches (:8000), LM Studio (:1234), etc. can override with
     // LOCAL_BASE_URL. Back-compat: LMSTUDIO_BASE_URL is still read.
     localBaseUrl: env.LOCAL_BASE_URL ?? env.LMSTUDIO_BASE_URL ?? "http://localhost:8880/v1",
-    // Opt-in via LOCAL_ENABLED=true; off by default since localhost may not
-    // be running. Back-compat: LMSTUDIO_ENABLED is still read.
+    // Tristate: explicit env wins, otherwise auto-probe at startup.
+    // Back-compat: LMSTUDIO_ENABLED is still read.
     localEnabled: ["true", "1", "yes", "on"].includes(
       (env.LOCAL_ENABLED ?? env.LMSTUDIO_ENABLED ?? "").toLowerCase()
     ),
+    localAutoProbe: env.LOCAL_ENABLED === void 0 && env.LMSTUDIO_ENABLED === void 0,
     voiceboxBaseUrl: env.VOICEBOX_BASE_URL ?? "http://localhost:17493",
     voiceboxEnabled: ["true", "1", "yes", "on"].includes(
       (env.VOICEBOX_ENABLED ?? "").toLowerCase()
     ),
+    voiceboxAutoProbe: env.VOICEBOX_ENABLED === void 0,
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",
@@ -23920,6 +23922,70 @@ function requireOpenRouterKey(config) {
 }
 function requireElevenLabsKey(config) {
   return requireKey("ELEVENLABS_API_KEY", "elevenlabs", config.elevenlabsApiKey);
+}
+
+// src/providers/auto-detect.ts
+var PROBE_TIMEOUT_MS = 800;
+async function probe(url) {
+  const ctrl = new AbortController();
+  const t2 = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const r2 = await fetch(url, { method: "GET", signal: ctrl.signal });
+    return r2.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t2);
+  }
+}
+async function probeVoicebox(baseUrl) {
+  return probe(`${baseUrl.replace(/\/$/, "")}/health`);
+}
+async function probeLocal(baseUrl) {
+  return probe(`${baseUrl.replace(/\/$/, "")}/models`);
+}
+function log(config, level, msg) {
+  const ranks = { error: 0, warn: 1, info: 2, debug: 3 };
+  if (ranks[level] <= ranks[config.logLevel]) {
+    process.stderr.write(`[claude-image-tts-gen] ${msg}
+`);
+  }
+}
+async function applyAutoDetection(config) {
+  const tasks = [];
+  if (config.voiceboxAutoProbe) {
+    tasks.push(
+      probeVoicebox(config.voiceboxBaseUrl).then((reachable) => {
+        if (reachable) {
+          config.voiceboxEnabled = true;
+          log(
+            config,
+            "info",
+            `voicebox: auto-detected at ${config.voiceboxBaseUrl} (set VOICEBOX_ENABLED=false to opt out)`
+          );
+        } else {
+          log(config, "debug", `voicebox: not reachable at ${config.voiceboxBaseUrl}, skipping`);
+        }
+      })
+    );
+  }
+  if (config.localAutoProbe) {
+    tasks.push(
+      probeLocal(config.localBaseUrl).then((reachable) => {
+        if (reachable) {
+          config.localEnabled = true;
+          log(
+            config,
+            "info",
+            `local: auto-detected at ${config.localBaseUrl} (set LOCAL_ENABLED=false to opt out)`
+          );
+        } else {
+          log(config, "debug", `local: not reachable at ${config.localBaseUrl}, skipping`);
+        }
+      })
+    );
+  }
+  await Promise.all(tasks);
 }
 
 // src/providers/registry.ts
@@ -54078,6 +54144,7 @@ async function main() {
       ...values["output-dir"] && values.speech ? { AUDIO_OUTPUT_DIR: values["output-dir"] } : {},
       ...values["output-dir"] && !values.speech ? { IMAGE_OUTPUT_DIR: values["output-dir"] } : {}
     });
+    await applyAutoDetection(config);
     if (values.help) {
       printHelp(config.imageOutputDir, config.audioOutputDir);
       process.exit(0);

@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { loadConfig } from "./config.js";
+import { applyAutoDetection } from "./providers/auto-detect.js";
 import {
   getDefaultProvider,
   getDefaultTier,
@@ -54,8 +55,9 @@ import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
 
-const VERSION = "0.0.1";
+const VERSION = "0.8.5";
 const config = loadConfig();
+await applyAutoDetection(config);
 
 const server = new Server(
   { name: "claude-image-tts-gen", version: VERSION },
