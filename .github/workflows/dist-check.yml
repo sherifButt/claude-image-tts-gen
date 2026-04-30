@@ -36,9 +36,7 @@ jobs:
         working-directory: mcp-server
         run: |
           rm -rf dist
-          npm run build:server
-          npm run build:cli
-          npm run build:refresh
+          npm run build
 
       - name: Fail if committed dist/ differs from rebuild
         run: |
