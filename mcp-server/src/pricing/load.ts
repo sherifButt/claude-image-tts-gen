@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Modality } from "../providers/types.js";
-import pricingData from "./pricing.json" with { type: "json" };
 import type {
   CostEstimate,
   PriceQuery,
@@ -8,7 +10,10 @@ import type {
   Staleness,
 } from "./types.js";
 
-const TABLE = pricingData as PriceTable;
+const HERE = dirname(fileURLToPath(import.meta.url));
+const TABLE = JSON.parse(
+  readFileSync(join(HERE, "pricing.json"), "utf8"),
+) as PriceTable;
 const STALE_THRESHOLD_DAYS = 30;
 
 export function getPriceTable(): PriceTable {

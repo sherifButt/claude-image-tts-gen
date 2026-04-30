@@ -1,6 +1,6 @@
 {
   "name": "claude-image-tts-gen-mcp",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "description": "MCP server for multi-provider image and TTS generation",
   "type": "module",
   "main": "dist/server.js",
@@ -10,15 +10,13 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build:bootstrap-server": "esbuild src/server.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/server.js --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "build:bootstrap-cli": "esbuild src/cli.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\nimport { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "build:server": "esbuild src/server-main.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/server-main.js --external:@imgly/background-removal-node --external:onnxruntime-node --external:sharp --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "build:cli": "esbuild src/cli-main.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/cli-main.js --external:@imgly/background-removal-node --external:onnxruntime-node --external:sharp --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "build:refresh": "esbuild src/pricing/refresh.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/refresh.js --banner:js=\"#!/usr/bin/env node\nimport { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "build": "npm run typecheck && npm run build:server && npm run build:cli && npm run build:bootstrap-server && npm run build:bootstrap-cli && npm run build:refresh",
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\"",
+    "build:tsc": "tsc",
+    "build:postbuild": "node scripts/postbuild.mjs",
+    "build": "npm run clean && npm run build:tsc && npm run build:postbuild",
     "start": "node dist/server.js",
     "start:cli": "node dist/cli.js --help",
-    "pricing:refresh": "node dist/refresh.js",
+    "pricing:refresh": "node dist/pricing/refresh.js",
     "dev": "tsc --watch"
   },
   "dependencies": {
@@ -33,7 +31,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "esbuild": "^0.27.2",
     "typescript": "^5.4.0"
   },
   "files": [

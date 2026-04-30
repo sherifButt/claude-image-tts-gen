@@ -4,6 +4,46 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2026-04-30
+
+### Changed
+
+- **Build switched from esbuild bundling to plain `tsc` compilation.**
+  Root-cause fix for the dist-sync CI failure that has been red on every
+  push since the workflow was added 2026-04-18. esbuild produces ~3700
+  bytes of platform-specific output between darwin-arm64 and linux-x64
+  even on identical source + lockfile + esbuild version. Switching to
+  `tsc` (deterministic across OSes) makes Mac-built and Linux-built
+  dists byte-identical. No runtime behavior changes — native deps
+  (`@imgly`, `sharp`, `onnxruntime-node`) were already `--external` in
+  the bundle config, so they were already runtime-resolved from
+  `node_modules`. With tsc the import statements stay as-is and Node
+  resolves them the same way at runtime.
+- **dist/ is now ~50 small files instead of 4 bundled megafiles.**
+  `server-main.js` shrank from 2.5 MB → 39 KB; `cli-main.js` 1.9 MB →
+  22 KB. Total dist is a fraction of the bundled size because the
+  bundle was inlining dep code that's now resolved from node_modules
+  (which we already ship via the bootstrap install).
+
+### Fixed
+
+- **Hardcoded version strings.** Server identity reported `v0.8.5`
+  (last manual bump) and CLI banner reported `v0.5.0` (never updated).
+  Both now read `0.8.7`. Long-term: read from `package.json` at
+  startup so this can't drift again — left for a follow-up.
+
+### Internal
+
+- Removed `esbuild` from `devDependencies`.
+- New `scripts/postbuild.mjs` copies `pricing.json` next to the
+  compiled `pricing/load.js` and prepends shebangs to entry-point
+  files. Cross-platform (Node fs API only).
+- `pricing/load.ts` switched from JSON import attributes
+  (`import x from "./pricing.json" with { type: "json" }`) to plain
+  `readFileSync` + `JSON.parse`. The import-attributes syntax is
+  Node 22+ stable but unsupported on Node 18 (our minimum); the
+  filesystem read is universal.
+
 ## [0.8.6] - 2026-04-29
 
 ### Changed
