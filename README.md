@@ -65,7 +65,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **six** (Go
 >   --provider local --model kokoro
 > ```
 >
-> Opt in via `LOCAL_ENABLED=true` to include the local provider in the failover chain.
+> The local provider is **auto-detected** at server startup (since v0.8.5) — if `LOCAL_BASE_URL/models` responds, it's included in the failover chain automatically. Set `LOCAL_ENABLED=false` to force-exclude it. Same auto-detect applies to Voicebox via `VOICEBOX_BASE_URL/health`.
 >
 > **Not supported as a TTS backend: [LM Studio](https://lmstudio.ai/).** LM Studio's
 > OpenAI-compatible server only exposes `/v1/chat/completions`, `/v1/completions`,
@@ -158,7 +158,7 @@ See [Configuration](#configuration) for the full env var list and per-provider v
 
 System dependencies (optional but recommended):
 - **`ffmpeg`** — required for long-text TTS concat and audio post-processing. macOS: `brew install ffmpeg`.
-- **`sharp`** — bundled with the MCP server via npm; no manual install needed.
+- **`sharp`, `@imgly/background-removal-node`, `onnxruntime-node`** — auto-installed on first MCP-server start (v0.8.3+). The bootstrap shim runs `npm ci --omit=dev` once if these aren't present, then continues. Subsequent starts are instant.
 
 ### Manual / development install
 
@@ -168,7 +168,7 @@ If you want to hack on the MCP server, run the CLI standalone, or use this outsi
 git clone https://github.com/sherifButt/claude-image-tts-gen.git
 cd claude-image-tts-gen/mcp-server
 npm install
-npm run build      # bundles dist/server.js, dist/cli.js, dist/refresh.js
+npm run build      # tsc → dist/ (~50 small .js files mirroring src/) + postbuild asset copy
 ```
 
 Wire the built server into Claude Code manually:
@@ -198,14 +198,17 @@ export OPENAI_DEFAULT_VOICE=onyx       # male
 export ELEVENLABS_DEFAULT_VOICE=<id>   # from elevenlabs.io/voice-lab
 export LOCAL_DEFAULT_VOICE=am_adam     # depends on backend (am_* = male Kokoro voices)
 
-# Local server (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / ...)
-export LOCAL_BASE_URL=http://localhost:8880/v1   # default (Kokoro-FastAPI's port)
-export LOCAL_ENABLED=true                         # opt-in to failover chain
+# Local server (Kokoro-FastAPI / Speaches / Orpheus-FastAPI / ...) and Voicebox
+# are auto-detected at startup since v0.8.5 — if the endpoint responds, they're
+# included in failover automatically. The exports below override defaults; set
+# *_ENABLED=false only to force-exclude a reachable server.
+export LOCAL_BASE_URL=http://localhost:8880/v1     # default (Kokoro-FastAPI's port)
+# export LOCAL_ENABLED=false                         # uncomment to opt out
 # Back-compat: LMSTUDIO_BASE_URL / LMSTUDIO_ENABLED are still read.
 
 # Voicebox (voicebox.sh) — local-first voice studio with 7 TTS engines
-export VOICEBOX_BASE_URL=http://localhost:17493   # default
-export VOICEBOX_ENABLED=true                       # opt-in to failover chain
+export VOICEBOX_BASE_URL=http://localhost:17493    # default
+# export VOICEBOX_ENABLED=false                      # uncomment to opt out
 export VOICEBOX_DEFAULT_VOICE=<profile_id>         # from GET /profiles
 ```
 
@@ -241,7 +244,8 @@ export OPENAI_DEFAULT_VOICE='onyx'                        # male on OpenAI
 export ELEVENLABS_DEFAULT_VOICE='<voice-id-from-voicelab>' # raw voice ID
 export LOCAL_DEFAULT_VOICE='am_adam'                      # male on Kokoro-FastAPI
 export LOCAL_BASE_URL='http://localhost:8880/v1'
-export LOCAL_ENABLED='false'                              # set to 'true' to include in failover
+# Local + Voicebox auto-detect at startup (v0.8.5+); only set
+# *_ENABLED=false to force-exclude a reachable server.
 EOF
 
 source ~/.zshrc   # load in the current terminal; new terminals inherit automatically
