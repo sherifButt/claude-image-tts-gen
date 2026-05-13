@@ -27,13 +27,17 @@ npm-debug.log*
 
 # Runtime state written by the MCP server when STATE_DIR isn't set and cwd
 # happens to be the repo (happens during smoke tests). Real usage puts
-# these in ~/.claude-image-tts-gen/.
-session.json
-budget.json
-presets/
-batch/
-cache/
-projects/
+# these in ~/.claude-image-tts-gen/. Patterns are anchored to repo root
+# with a leading slash — unanchored, `batch/` / `cache/` / `presets/`
+# also matched `mcp-server/dist/batch/` etc. and silently excluded the
+# compiled batch module from git, breaking plugin installs (the GitHub
+# release tarball shipped without those files). See CHANGELOG v0.8.10.
+/session.json
+/budget.json
+/presets/
+/batch/
+/cache/
+/projects/
 
 STRATEGY.md
 flywheel.png
@@ -47,4 +51,5 @@ demo-script.md
 # docs/hero.gif gets committed.
 docs/demo/*.mov
 docs/demo/*.gif
+docs/designer/
 

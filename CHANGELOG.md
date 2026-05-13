@@ -4,6 +4,41 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.10] - 2026-05-13
+
+### Fixed
+
+- **Hotfix v0.8.9's still-broken bootstrap.** The released v0.8.9 tarball
+  was missing `dist/batch/`, `dist/cache/`, and `dist/presets/` entirely,
+  so the MCP server crashed at module-resolve time with
+  `ERR_MODULE_NOT_FOUND: dist/batch/provider-registry.js` before
+  responding to the MCP handshake.
+- **Root cause: unanchored `.gitignore` patterns.** The lines `batch/`,
+  `cache/`, `presets/`, and `projects/` (intended to ignore runtime
+  state when the server is run with `cwd == repo`) match anywhere in
+  the tree — including `mcp-server/dist/batch/` etc. The compiled batch
+  module, cache store, and preset store were silently excluded from
+  git every time `git add mcp-server/dist/` was run. The corresponding
+  `src/batch/`, `src/cache/`, `src/presets/` directories were
+  grandfathered in (already tracked before the gitignore landed), so
+  the source compiled cleanly locally but the git tree — and therefore
+  the release tarball — was missing 10 files.
+- v0.8.6 (esbuild-bundled, single dist megafile) wasn't affected
+  because there were no `dist/batch/*.js` files; the tsc switch in
+  v0.8.7 created the per-file dist tree where the gitignore bug bit.
+  v0.8.7 / v0.8.8 users escaped detection because their
+  `node_modules/` survived from a prior install and the lockfile
+  error in v0.8.8 masked this one; v0.8.9 fixed the lockfile, exposing
+  the missing-dist failure.
+
+### Internal
+
+- Anchored the four runtime-state gitignore patterns to the repo root
+  with a leading `/`. Added a comment explaining the trap so the next
+  person editing this list doesn't regress it.
+- Force-added the 10 previously-untracked dist files
+  (`dist/batch/*.js`, `dist/cache/*.js`, `dist/presets/*.js`).
+
 ## [0.8.9] - 2026-05-13
 
 ### Fixed
