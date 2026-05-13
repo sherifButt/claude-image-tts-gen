@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.9] - 2026-05-13
+
+### Fixed
+
+- **Hotfix v0.8.8's broken first-run bootstrap.** The `package-lock.json`
+  shipped in v0.8.8 (and v0.8.7) was generated on a Mac without
+  `--include=optional`, leaving `sharp`'s platform-binary entries in an
+  inconsistent state — present in `optionalDependencies` but missing
+  from the resolved `node_modules/` map. `npm ci --omit=dev` (run by
+  `bootstrap.ts` on first plugin invocation) is strict and refused with
+  `Missing: @img/sharp-win32-arm64@ from lock file`. v0.8.7 users
+  weren't bitten because their cached `node_modules/` survived
+  in-place; v0.8.8 was the first fresh install and immediately
+  failed. The new lockfile regenerated via `npm install
+  --include=optional` resolves all 23 platform binaries cleanly and
+  cold-bootstrap passes end-to-end.
+
 ## [0.8.8] - 2026-05-13
 
 ### Added

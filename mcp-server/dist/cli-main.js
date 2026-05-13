@@ -21,7 +21,7 @@ import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
 import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.8.8";
+const VERSION = "0.8.9";
 function printHelp(imageOutputDir, audioOutputDir) {
     process.stdout.write(`
 claude-image-tts-gen-cli v${VERSION}
