@@ -4,6 +4,48 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8] - 2026-05-13
+
+### Added
+
+- **`gemini-3.1-flash-image-preview` (Nano Banana 2)** as the mid-tier image
+  slot on Google native and OpenRouter passthrough. Filled a gap in the
+  matrix: Google mid was `NA` before, OpenRouter mid was `NA` before, and
+  both jumped straight from Flash (small) to Imagen 4 / Gemini-3 Pro (pro).
+  The new model sits exactly between at $0.067/image standard / $0.034
+  batch (per ai.google.dev pricing for 1024px output; verify resolution-
+  specific quotes — 2K ≈ $0.101, 4K ≈ $0.151).
+- **Multi-reference image input.** `generate_image` now accepts
+  `referenceImagePaths: string[]` alongside the existing singular
+  `referenceImagePath`. The CLI's `--reference` flag is now repeatable:
+  `--reference subject.png --reference scene.png` sends both. Threads
+  through to gpt-image-2's `images.edit` (which accepts an array of
+  uploadables on the OpenAI SDK) and Gemini multimodal (which accepts
+  multiple `inlineData` parts in a single `parts` array). Useful for
+  product-on-scene composition, style transfer with separate content +
+  style refs, and consistent-character generation with character + pose
+  refs.
+
+### Changed
+
+- `ImageGenRequest.referenceImage` (singular) → `referenceImages` (array)
+  on the provider type. Tool layer keeps both singular + plural fields
+  and concatenates them in order (singular first). Cache key preserves
+  the legacy `ref` shape for the 1-reference case so pre-v0.8.8 cached
+  entries still hit; multi-reference uses a new `refs` array key.
+- Sidecars going forward emit `referenceImagePaths: string[]`. Readers
+  honour both `referenceImagePath` (legacy) and `referenceImagePaths`
+  (new) so `regenerate` / `iterate` work against existing
+  `.regenerate.json` files on disk.
+- Imagen 4's reference-image rejection message now points at both
+  `gemini-2.5-flash-image` *and* `gemini-3.1-flash-image-preview` as
+  multimodal alternatives.
+
+### Internal
+
+- `pricing.json` `last_updated` → 2026-05-13. 22 pricing rows now
+  (was 20), one each for Google and OpenRouter on the new model.
+
 ## [0.8.7] - 2026-04-30
 
 ### Changed

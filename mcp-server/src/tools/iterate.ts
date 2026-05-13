@@ -60,6 +60,7 @@ export async function iterate(
         model: meta.model,
         aspectRatio: input.aspectRatio,
         referenceImagePath: input.referenceImagePath,
+        referenceImagePaths: input.referenceImagePaths,
         outputPath: args.outputPath,
         outputDir: args.outputPath ? undefined : originalDir,
       },

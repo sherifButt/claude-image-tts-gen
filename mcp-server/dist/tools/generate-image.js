@@ -65,24 +65,39 @@ export async function generateImage(args, config, opts = {}) {
     const requestedProvider = args.provider ?? presetProvider ?? getDefaultProvider("image");
     const tier = args.tier ?? presetTier ?? getDefaultTier();
     const explicitModel = args.model ?? presetModel;
-    // Load reference image if requested.
-    let referenceImage;
-    if (args.referenceImagePath) {
-        if (!existsSync(args.referenceImagePath)) {
-            throw new StructuredError("NOT_FOUND", `Reference image not found: ${args.referenceImagePath}`, "Pass an existing image file path.");
+    // Load reference images if requested. Singular `referenceImagePath` is
+    // sugar for a 1-element array; when both are passed, concatenate in order
+    // (singular first, then the array).
+    const refPaths = [
+        ...(args.referenceImagePath ? [args.referenceImagePath] : []),
+        ...(args.referenceImagePaths ?? []),
+    ];
+    const referenceImages = [];
+    for (const path of refPaths) {
+        if (!existsSync(path)) {
+            throw new StructuredError("NOT_FOUND", `Reference image not found: ${path}`, "Pass an existing image file path.");
         }
-        const data = await readFile(args.referenceImagePath);
-        const ext = args.referenceImagePath.toLowerCase().split(".").pop() ?? "png";
+        const data = await readFile(path);
+        const ext = path.toLowerCase().split(".").pop() ?? "png";
         const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" :
             ext === "webp" ? "image/webp" :
                 ext === "png" ? "image/png" :
                     "image/png";
-        referenceImage = { data, mimeType, path: args.referenceImagePath };
+        referenceImages.push({ data, mimeType, path });
     }
     let providerUsed = requestedProvider;
     let slot = explicitModel
         ? inlineSlot(requestedProvider, tier, explicitModel)
         : resolveSlot({ provider: requestedProvider, modality: "image", tier });
+    // Cache key: preserve the legacy `ref` shape for the single-reference
+    // case so pre-multi-ref cached entries still hit. Multi-ref uses `refs`.
+    const refKeyParams = {};
+    if (referenceImages.length === 1) {
+        refKeyParams.ref = referenceImages[0].path ?? "buffer";
+    }
+    else if (referenceImages.length > 1) {
+        refKeyParams.refs = referenceImages.map((r) => r.path ?? "buffer");
+    }
     const cacheKey = buildCacheKey({
         provider: requestedProvider,
         model: slot.model,
@@ -91,7 +106,7 @@ export async function generateImage(args, config, opts = {}) {
         params: {
             ...slot.params,
             ...(aspectRatio ? { aspectRatio } : {}),
-            ...(referenceImage ? { ref: referenceImage.path ?? "buffer" } : {}),
+            ...refKeyParams,
         },
     });
     const cached = await lookupCache(cacheKey);
@@ -128,7 +143,7 @@ export async function generateImage(args, config, opts = {}) {
                 prompt: resolvedPrompt,
                 model: slot.model,
                 params: slot.params,
-                referenceImage,
+                referenceImages,
                 aspectRatio,
             });
         }
@@ -161,7 +176,7 @@ export async function generateImage(args, config, opts = {}) {
                     prompt: resolvedPrompt,
                     model: resolvedSlot.model,
                     params: resolvedSlot.params,
-                    referenceImage,
+                    referenceImages,
                     aspectRatio,
                 });
             },
@@ -248,7 +263,7 @@ export async function generateImage(args, config, opts = {}) {
             params: slot.params,
             input: {
                 prompt: resolvedPrompt,
-                ...(args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}),
+                ...(refPaths.length > 0 ? { referenceImagePaths: refPaths } : {}),
                 ...(aspectRatio ? { aspectRatio } : {}),
             },
             output: { files: [filePath], mimeType },

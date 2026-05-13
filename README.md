@@ -78,13 +78,13 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **six** (Go
 
 ### Generation
 - **6 providers** behind a single tier abstraction (`small | mid | pro`):
-  - **Google Gemini** (image: Flash + Imagen, TTS declared)
+  - **Google Gemini** (image: 2.5 Flash + 3.1 Flash Preview ("Nano Banana 2") + Imagen 4, TTS declared)
   - **OpenAI** (image: gpt-image-2 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
-  - **OpenRouter** (image passthrough)
+  - **OpenRouter** (image passthrough: 2.5-flash-image, 3.1-flash-image-preview, 3-pro-image-preview)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
   - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
   - **🎙 Voicebox (`provider: voicebox`)** — local-first voice studio ([voicebox.sh](https://voicebox.sh)) with 7 TTS engines (Qwen3-TTS, Chatterbox, Kokoro, ...), zero-shot cloning, 23 languages. $0/call, no API key.
-- **Image-to-image edits** via reference image input (gpt-image-2, Gemini multimodal, local server if it supports `/v1/images/edits`)
+- **Image-to-image edits** via reference image input (gpt-image-2, Gemini multimodal, local server if it supports `/v1/images/edits`). **Multi-reference composition** (v0.8.8) — pass an array of inputs to gpt-image-2 or gemini-3.1-flash-image-preview via `referenceImagePaths[]` (MCP) or repeated `--reference` flags (CLI)
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg. Triggers both pre-emptively (text > provider's `maxCharsPerCall`) *and* reactively (provider rejects a shorter input as too long for output-duration / token reasons — a new `INPUT_TOO_LONG` code catches that and retries with chunking on the same provider, preserving voice)
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
@@ -93,7 +93,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **six** (Go
 - **`voiceDefaulted` signal** on every TTS response — when you didn't spec a voice, the response says so, letting Claude catch mismatches before spending on a long run
 
 ### Cost awareness
-- **14-model pricing table** with batch (50% off) rates and 30-day staleness warning
+- **22-model pricing table** with batch (50% off) rates and 30-day staleness warning
 - **Per-call cost** in every tool response; **session ledger** persisted to `~/.claude-image-tts-gen/session.json`
 - **Per-project tracking** (cwd-hashed) — `session_spend --project`
 - **Budget caps** (daily / weekly / monthly) — soft warn at 80%, hard block at 100%
@@ -311,12 +311,20 @@ export LOCAL_BASE_URL=http://localhost:4123/v1
 node mcp-server/dist/cli.js --speech -p "read this in my voice" \
   --provider local --model chatterbox \
   --reference-audio ~/voice-samples/me.wav
+
+# Multi-reference image composition (gpt-image-2 or gemini-3.1-flash-image-preview)
+# Repeat --reference for each input; order matters for some providers.
+node mcp-server/dist/cli.js -p "place the product from img 1 on the background of img 2" \
+  --provider google --tier mid \
+  --reference product.png --reference background.png
 ```
 
 ## Status
 
-**v0.7.8** — v0.7.0 architectural pump retained; plugin manifest reverted to the working 0.6.x shell-env pattern. See [CHANGELOG.md](./CHANGELOG.md) for the full timeline. Highlights since v0.6:
+**v0.8.8** — adds `gemini-3.1-flash-image-preview` ("Nano Banana 2") as the Google + OpenRouter mid-tier image slot, and multi-reference image input via `referenceImagePaths[]` (MCP) / repeated `--reference` (CLI). See [CHANGELOG.md](./CHANGELOG.md) for the full timeline. Highlights since v0.6:
 
+- **Nano Banana 2 + multi-reference composition** (v0.8.8). Google's gemini-3.1-flash-image-preview lands as the mid-tier slot on both Google native and OpenRouter passthrough at $0.067/image standard ($0.034 batch). gpt-image-2 and Gemini multimodal now accept an ordered array of reference images so you can compose subject + scene + style refs in a single call.
+- **Build via `tsc`, not esbuild** (v0.8.7). Root-cause fix for the dist-sync CI failure: tsc output is byte-identical across darwin-arm64 and linux-x64; esbuild was not. dist/ shrank from a few bundled megafiles to ~50 small `.js` files mirroring `src/`.
 - **Reactive chunk-on-length-error** (v0.7.0). Long-text TTS used to fail when a provider rejected the input on duration/token grounds, forcing callers to chunk externally and lose voice/cache/sidecar fidelity. A new `INPUT_TOO_LONG` error code catches those rejections and auto-retries with chunking on the same provider.
 - **Per-provider default voices** (v0.7.0). `GEMINI_DEFAULT_VOICE=Charon` etc., scoped per provider so voice names don't leak across incompatible namespaces. Applied at every slot resolution point.
 - **`voiceDefaulted` signal** (v0.7.0). Every TTS response now indicates whether the voice came from an explicit argument or a fallback default — lets agents catch mismatches before spending on a long run.

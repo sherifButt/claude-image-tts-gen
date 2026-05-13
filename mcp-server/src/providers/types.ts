@@ -12,7 +12,10 @@ export interface ImageGenRequest {
   prompt: string;
   model: string;
   params?: Record<string, unknown>;
-  referenceImage?: ReferenceImage;
+  /** Reference images for image-to-image or multi-reference composition.
+   *  Order matters for providers that condition on each in sequence
+   *  (e.g. Gemini multimodal). Undefined or empty → text-only generation. */
+  referenceImages?: ReferenceImage[];
   aspectRatio?: import("../util/aspect.js").AspectRatio;
 }
 

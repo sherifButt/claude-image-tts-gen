@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-27",
+  "last_updated": "2026-05-13",
   "currency": "USD",
   "sources": [
     "https://ai.google.dev/gemini-api/docs/pricing",
@@ -34,6 +34,15 @@
         "batch": 0.067
       },
       "notes": "Gemini 3 Pro Image Preview. Estimate per image; verify against current quote."
+    },
+    "google/gemini-3.1-flash-image-preview": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.067,
+        "batch": 0.034
+      },
+      "notes": "Gemini 3.1 Flash Image Preview (\"Nano Banana 2\"). 1024px baseline at $60/M image-output tokens × ~1120 tokens. 2K ≈ $0.101, 4K ≈ $0.151; verify resolution-specific quotes against ai.google.dev/gemini-api/docs/pricing."
     },
     "openai/gpt-image-1:low": {
       "modality": "image",
@@ -152,6 +161,14 @@
         "standard": 0.134
       },
       "notes": "Passthrough to Gemini 3 Pro Image. OpenRouter may apply small margin."
+    },
+    "openrouter/google/gemini-3.1-flash-image-preview": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.067
+      },
+      "notes": "Passthrough to Gemini 3.1 Flash Image Preview (\"Nano Banana 2\"). OpenRouter may apply small margin; verify on openrouter.ai/google/gemini-3.1-flash-image-preview."
     },
     "google/gemini-2.5-flash-preview-tts": {
       "modality": "tts",

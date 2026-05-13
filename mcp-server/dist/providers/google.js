@@ -48,10 +48,10 @@ export class GoogleProvider {
         return await this.generateImageViaGemini(req);
     }
     async generateImageViaImagen(req) {
-        if (req.referenceImage) {
+        if (req.referenceImages && req.referenceImages.length > 0) {
             // Imagen 4 generate doesn't accept input images. Point the caller at the
             // Gemini Flash multimodal path (or editImage) explicitly.
-            throw new Error("Imagen 4 does not accept reference images for generation. Use gemini-2.5-flash-image for image-to-image, or call images.edit separately.");
+            throw new Error("Imagen 4 does not accept reference images for generation. Use gemini-2.5-flash-image or gemini-3.1-flash-image-preview for image-to-image, or call images.edit separately.");
         }
         const response = await this.client.models.generateImages({
             model: req.model,
@@ -79,17 +79,18 @@ export class GoogleProvider {
         const effectivePrompt = req.aspectRatio
             ? injectAspectIntoPrompt(req.prompt, req.aspectRatio)
             : req.prompt;
-        const contents = req.referenceImage
+        const refs = req.referenceImages ?? [];
+        const contents = refs.length > 0
             ? [
                 {
                     role: "user",
                     parts: [
-                        {
+                        ...refs.map((ref) => ({
                             inlineData: {
-                                mimeType: req.referenceImage.mimeType,
-                                data: req.referenceImage.data.toString("base64"),
+                                mimeType: ref.mimeType,
+                                data: ref.data.toString("base64"),
                             },
-                        },
+                        })),
                         { text: effectivePrompt },
                     ],
                 },

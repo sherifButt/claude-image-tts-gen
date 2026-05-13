@@ -32,7 +32,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.8.7";
+const VERSION = "0.8.8";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`
@@ -78,7 +78,7 @@ Options:
       --webp                    Also emit .webp variants
       --webp-quality <n>        Default 85
       --style <name>            Apply saved image style preset on generation
-      --reference <path>        Reference image (image-to-image edit)
+      --reference <path>        Reference image (image-to-image edit). Repeat for multi-reference (gpt-image-2 / gemini-3.1-flash-image-preview).
   -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
       --no-sidecar              Skip the hidden .<name>.regenerate.json sidecar
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
@@ -172,7 +172,7 @@ async function main(): Promise<void> {
         "webp-quality": { type: "string", description: "1..100, default 85" },
         "bg-remove": { type: "boolean", default: false, description: "Strip background to a transparent PNG (post-process)" },
         style: { type: "string", description: "Apply saved style preset on image gen" },
-        reference: { type: "string", description: "Reference image path (image-to-image)" },
+        reference: { type: "string", multiple: true, description: "Reference image path (image-to-image). Repeat for multi-reference: --reference a.png --reference b.png" },
         "reference-audio": { type: "string", description: "Reference audio path for local voice cloning" },
         "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
         "no-sidecar": { type: "boolean", default: false, description: "Skip writing the .regenerate.json sidecar" },
@@ -486,7 +486,7 @@ async function main(): Promise<void> {
             tier: values.tier as Tier | undefined,
             model: values.model,
             style: values.style,
-            referenceImagePath: values.reference,
+            referenceImagePaths: values.reference,
             aspectRatio: values["aspect-ratio"] as GenerateImageArgs["aspectRatio"],
             outputPath: values.output,
             outputDir,

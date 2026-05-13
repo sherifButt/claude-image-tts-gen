@@ -13,7 +13,7 @@ const MATRIX = [
         id: "google",
         image: {
             small: { model: "gemini-2.5-flash-image", batchable: true, implemented: true },
-            mid: NA,
+            mid: { model: "gemini-3.1-flash-image-preview", batchable: true, implemented: true },
             pro: { model: "imagen-4.0-generate-001", batchable: false, implemented: true },
         },
         tts: {
@@ -90,7 +90,7 @@ const MATRIX = [
         id: "openrouter",
         image: {
             small: { model: "google/gemini-2.5-flash-image", batchable: false, implemented: true },
-            mid: NA,
+            mid: { model: "google/gemini-3.1-flash-image-preview", batchable: false, implemented: true },
             pro: { model: "google/gemini-3-pro-image-preview", batchable: false, implemented: true },
         },
         tts: { small: NA, mid: NA, pro: NA },

@@ -47,17 +47,17 @@ export class LocalProvider implements ImageProvider, TtsProvider {
   }
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
-    if (req.referenceImage) {
-      const ext = (req.referenceImage.mimeType.split("/")[1] ?? "png").replace(
-        /[^a-z0-9]/gi,
-        "",
+    const refs = req.referenceImages ?? [];
+    if (refs.length > 0) {
+      const files = await Promise.all(
+        refs.map(async (ref, idx) => {
+          const ext = (ref.mimeType.split("/")[1] ?? "png").replace(/[^a-z0-9]/gi, "");
+          return await toFile(ref.data, `reference-${idx}.${ext}`, { type: ref.mimeType });
+        }),
       );
-      const file = await toFile(req.referenceImage.data, `reference.${ext}`, {
-        type: req.referenceImage.mimeType,
-      });
       const response = await this.client.images.edit({
         model: req.model,
-        image: file,
+        image: files.length === 1 ? files[0] : files,
         prompt: req.prompt,
         n: 1,
       });

@@ -8,8 +8,11 @@ export interface SidecarLineage {
 
 export interface SidecarImageInput {
   prompt: string;
-  /** Path to a reference image used as conditioning input (image-to-image). */
+  /** Legacy single-reference field. Pre-v0.8.8 sidecars wrote this; readers
+   *  must still honour it. New writes use `referenceImagePaths` instead. */
   referenceImagePath?: string;
+  /** Reference images for image-to-image / multi-reference composition. */
+  referenceImagePaths?: string[];
   /** Aspect ratio passed to the provider at generation time. */
   aspectRatio?: import("../util/aspect.js").AspectRatio;
 }

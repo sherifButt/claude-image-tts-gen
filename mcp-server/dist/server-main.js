@@ -31,7 +31,7 @@ import { rewritePromptViaMcpSampling } from "./rewriter/sampling.js";
 import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.8.7";
+const VERSION = "0.8.8";
 const config = loadConfig();
 await applyAutoDetection(config);
 const server = new Server({ name: "claude-image-tts-gen", version: VERSION }, { capabilities: { tools: {}, resources: { listChanged: false } } });
@@ -109,7 +109,12 @@ const imageInputSchema = {
         style: { type: "string", description: "Apply a saved style preset by name." },
         referenceImagePath: {
             type: "string",
-            description: "Path to a reference image (image-to-image). Supports gpt-image-2 / gpt-image-1 (edits) and Gemini multimodal.",
+            description: "Path to a reference image (image-to-image). Sugar for `referenceImagePaths` with one entry. Supports gpt-image-2 / gpt-image-1 (edits) and Gemini multimodal (2.5-flash-image / 3.1-flash-image-preview).",
+        },
+        referenceImagePaths: {
+            type: "array",
+            items: { type: "string" },
+            description: "Multiple reference image paths for multi-reference composition (e.g. gpt-image-2 supports an array of inputs; Gemini multimodal accepts multiple inlineData parts). When both `referenceImagePath` and `referenceImagePaths` are passed, they're concatenated in order.",
         },
         aspectRatio: {
             type: "string",

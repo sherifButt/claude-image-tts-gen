@@ -36,8 +36,13 @@ export interface GenerateImageArgs {
   outputDir?: string;
   /** Apply a saved style preset (provider/tier/model defaults + prompt prefix/suffix). */
   style?: string;
-  /** Path to a reference image to use as input (image-to-image). */
+  /** Path to a reference image to use as input (image-to-image). Sugar for
+   *  the 1-element case of `referenceImagePaths`. */
   referenceImagePath?: string;
+  /** Multiple reference images for image-to-image / multi-reference
+   *  composition (e.g. gpt-image-2, gemini-3.1-flash-image-preview). When both
+   *  this and `referenceImagePath` are passed, they're concatenated in order. */
+  referenceImagePaths?: string[];
   /** Output aspect ratio. Defaults to 1:1 when omitted. */
   aspectRatio?: AspectRatio;
   /** Write a .regenerate.json sidecar next to the output. Default true (or EMIT_SIDECAR env). */
@@ -136,24 +141,30 @@ export async function generateImage(
   const tier = args.tier ?? presetTier ?? getDefaultTier();
   const explicitModel = args.model ?? presetModel;
 
-  // Load reference image if requested.
-  let referenceImage: ReferenceImage | undefined;
-  if (args.referenceImagePath) {
-    if (!existsSync(args.referenceImagePath)) {
+  // Load reference images if requested. Singular `referenceImagePath` is
+  // sugar for a 1-element array; when both are passed, concatenate in order
+  // (singular first, then the array).
+  const refPaths = [
+    ...(args.referenceImagePath ? [args.referenceImagePath] : []),
+    ...(args.referenceImagePaths ?? []),
+  ];
+  const referenceImages: ReferenceImage[] = [];
+  for (const path of refPaths) {
+    if (!existsSync(path)) {
       throw new StructuredError(
         "NOT_FOUND",
-        `Reference image not found: ${args.referenceImagePath}`,
+        `Reference image not found: ${path}`,
         "Pass an existing image file path.",
       );
     }
-    const data = await readFile(args.referenceImagePath);
-    const ext = args.referenceImagePath.toLowerCase().split(".").pop() ?? "png";
+    const data = await readFile(path);
+    const ext = path.toLowerCase().split(".").pop() ?? "png";
     const mimeType =
       ext === "jpg" || ext === "jpeg" ? "image/jpeg" :
       ext === "webp" ? "image/webp" :
       ext === "png" ? "image/png" :
       "image/png";
-    referenceImage = { data, mimeType, path: args.referenceImagePath };
+    referenceImages.push({ data, mimeType, path });
   }
 
   let providerUsed: ProviderId = requestedProvider;
@@ -161,6 +172,14 @@ export async function generateImage(
     ? inlineSlot(requestedProvider, tier, explicitModel)
     : resolveSlot({ provider: requestedProvider, modality: "image", tier });
 
+  // Cache key: preserve the legacy `ref` shape for the single-reference
+  // case so pre-multi-ref cached entries still hit. Multi-ref uses `refs`.
+  const refKeyParams: Record<string, unknown> = {};
+  if (referenceImages.length === 1) {
+    refKeyParams.ref = referenceImages[0].path ?? "buffer";
+  } else if (referenceImages.length > 1) {
+    refKeyParams.refs = referenceImages.map((r) => r.path ?? "buffer");
+  }
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
@@ -169,7 +188,7 @@ export async function generateImage(
     params: {
       ...slot.params,
       ...(aspectRatio ? { aspectRatio } : {}),
-      ...(referenceImage ? { ref: referenceImage.path ?? "buffer" } : {}),
+      ...refKeyParams,
     },
   });
   const cached = await lookupCache(cacheKey);
@@ -216,7 +235,7 @@ export async function generateImage(
         prompt: resolvedPrompt,
         model: slot.model,
         params: slot.params,
-        referenceImage,
+        referenceImages,
         aspectRatio,
       });
     } catch (err) {
@@ -247,7 +266,7 @@ export async function generateImage(
           prompt: resolvedPrompt,
           model: resolvedSlot.model,
           params: resolvedSlot.params,
-          referenceImage,
+          referenceImages,
           aspectRatio,
         });
       },
@@ -345,7 +364,7 @@ export async function generateImage(
       params: slot.params,
       input: {
         prompt: resolvedPrompt,
-        ...(args.referenceImagePath ? { referenceImagePath: args.referenceImagePath } : {}),
+        ...(refPaths.length > 0 ? { referenceImagePaths: refPaths } : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
       },
       output: { files: [filePath], mimeType },
