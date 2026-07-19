@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>genkettle — cost-aware image + TTS for Claude Code</title>
+<meta name="description" content="Six providers, one budget, one ledger, zero lock-in. An MCP plugin that generates images and speech with hard pre-call budget caps, sidecar reproducibility, and a free local escape hatch." />
+<meta property="og:title" content="genkettle — cost-aware image + TTS for Claude Code" />
+<meta property="og:description" content="Six providers, one budget, one ledger, zero lock-in." />
+<link rel="icon" href="assets/genkettle-mark.svg" type="image/svg+xml" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<script>
+  // pre-paint theme resolver
+  (function () {
+    var stored = localStorage.getItem('gk-theme');
+    var sys = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', stored || sys);
+  })();
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; scroll-behavior: smooth; }
+
+  :root,
+  [data-theme="dark"] {
+    --bg:        #0a0a0b;
+    --bg-elev:   #111113;
+    --bg-hi:     #16161a;
+    --line:      #1f1f23;
+    --line-hi:   #2c2c33;
+    --ink:       #ededee;
+    --ink-dim:   #a3a3a8;
+    --ink-mute:  #6b6b72;
+    --ink-faint: #3d3d44;
+    --accent:    #c8e85c;
+    --accent-ink:#0a0a0b;
+    --halo-1:    rgba(200, 232, 92, 0.045);
+    --halo-2:    rgba(255, 255, 255, 0.015);
+  }
+
+  [data-theme="light"] {
+    --bg:        #fbfbf9;
+    --bg-elev:   #ffffff;
+    --bg-hi:     #f4f3ee;
+    --line:      #e8e6df;
+    --line-hi:   #d4d2c9;
+    --ink:       #0c0c0d;
+    --ink-dim:   #4d4d52;
+    --ink-mute:  #898987;
+    --ink-faint: #b8b6ae;
+    --accent:    #5b7a1a;
+    --accent-ink:#fbfbf9;
+    --halo-1:    rgba(91, 122, 26, 0.05);
+    --halo-2:    rgba(0, 0, 0, 0.02);
+  }
+
+  :root {
+    --serif: 'Instrument Serif', 'Times New Roman', serif;
+    --sans:  'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    --max:   1140px;
+    --gutter:clamp(1.25rem, 4vw, 2rem);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 400;
+    font-size: 16px;
+    line-height: 1.55;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% 0%, var(--halo-1), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 60%, var(--halo-2), transparent 60%);
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  a { color: inherit; text-decoration: none; }
+  a:hover { color: var(--ink); }
+
+  /* ---------- layout primitives ---------- */
+  .wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
+  .rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: saturate(140%) blur(10px);
+    -webkit-backdrop-filter: saturate(140%) blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .row {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); }
+  .brand .mark { width: 22px; height: 22px; color: var(--ink); }
+  .brand .word { height: 14px; color: var(--ink); }
+  .nav-links { display: flex; align-items: center; gap: 28px; font-size: 14px; color: var(--ink-dim); }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px;
+    background: var(--ink); color: var(--bg);
+    border-radius: 6px; font-size: 13px; font-weight: 500;
+    transition: transform 0.15s ease;
+  }
+  .nav-cta:hover { color: var(--bg); transform: translateY(-1px); }
+  .theme-toggle {
+    width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 6px;
+    color: var(--ink-dim); cursor: pointer; transition: all 0.15s;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--line-hi); }
+  @media (max-width: 720px) {
+    .nav-links a:not(.nav-cta) { display: none; }
+  }
+
+  /* ---------- hero ---------- */
+  .hero { padding: clamp(80px, 14vh, 160px) 0 clamp(60px, 10vh, 120px); text-align: center; position: relative; }
+  .hero .lockup {
+    width: clamp(220px, 32vw, 340px);
+    height: auto;
+    color: var(--ink);
+    margin-bottom: 36px;
+    filter: drop-shadow(0 0 30px var(--halo-1));
+  }
+  .hero h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(2.4rem, 6.5vw, 4.6rem);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    max-width: 14ch;
+    margin: 0 auto 22px;
+    color: var(--ink);
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--ink-dim);
+  }
+  .hero .lede {
+    font-size: clamp(1rem, 1.4vw, 1.125rem);
+    color: var(--ink-dim);
+    max-width: 58ch;
+    margin: 0 auto 36px;
+    line-height: 1.55;
+  }
+  .hero .lede strong { color: var(--ink); font-weight: 500; }
+  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 18px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { color: var(--accent-ink); transform: translateY(-1px); }
+  .btn-ghost { color: var(--ink); border-color: var(--line-hi); }
+  .btn-ghost:hover { color: var(--ink); background: var(--bg-elev); }
+  .btn .arrow { transition: transform 0.15s ease; }
+  .btn:hover .arrow { transform: translateX(2px); }
+
+  /* ---------- meta strip under hero ---------- */
+  .meta-strip {
+    display: flex; justify-content: center; gap: clamp(24px, 5vw, 60px);
+    flex-wrap: wrap;
+    margin-top: 48px; padding-top: 28px;
+    border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-mute);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .meta-strip span { display: inline-flex; align-items: center; gap: 6px; }
+  .meta-strip span::before {
+    content: ''; width: 5px; height: 5px; background: var(--accent); border-radius: 50%;
+  }
+
+  /* ---------- section primitives ---------- */
+  section { padding: clamp(64px, 10vh, 112px) 0; }
+  .eyebrow {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-mute);
+    margin-bottom: 14px;
+  }
+  .eyebrow::before { content: '— '; color: var(--accent); }
+  .section-title {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(1.85rem, 3.6vw, 2.6rem);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    max-width: 22ch;
+    margin-bottom: 18px;
+  }
+  .section-title em { font-style: italic; color: var(--ink-dim); }
+  .section-lede { color: var(--ink-dim); max-width: 60ch; font-size: 1.0625rem; }
+  .section-head { margin-bottom: 56px; }
+
+  /* ---------- comparison ---------- */
+  .compare-wrap { overflow-x: auto; margin: 0 -1rem; padding: 0 1rem; }
+  .compare {
+    width: 100%; min-width: 760px;
+    border-collapse: separate; border-spacing: 0;
+    font-size: 14px;
+  }
+  .compare th, .compare td {
+    text-align: center; padding: 14px 12px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-dim);
+  }
+  .compare th:first-child, .compare td:first-child {
+    text-align: left; color: var(--ink); font-weight: 400;
+    width: 38%;
+  }
+  .compare thead th {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-mute); font-weight: 500;
+    border-bottom: 1px solid var(--line-hi);
+    padding-bottom: 18px;
+  }
+  .compare thead th.us {
+    color: var(--ink); position: relative;
+  }
+  .compare thead th.us::after {
+    content: ''; position: absolute; bottom: -1px; left: 8px; right: 8px;
+    height: 2px; background: var(--accent);
+  }
+  .compare td.us { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .compare .yes { color: var(--ink); }
+  .compare .yes::before { content: '✓'; color: var(--accent); margin-right: 6px; font-weight: 600; }
+  .compare .no { color: var(--ink-faint); }
+  .compare .partial { color: var(--ink-dim); font-size: 12.5px; }
+  .compare tr:last-child td { border-bottom: 0; }
+
+  /* ---------- pillars ---------- */
+  .pillars {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 1px; background: var(--line);
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  }
+  @media (max-width: 720px) { .pillars { grid-template-columns: 1fr; } }
+  .pillar {
+    background: var(--bg);
+    padding: 32px;
+    transition: background 0.2s ease;
+  }
+  .pillar:hover { background: var(--bg-elev); }
+  .pillar .num {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-mute);
+    letter-spacing: 0.08em; margin-bottom: 16px; display: block;
+  }
+  .pillar h3 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 1.5rem; line-height: 1.2; letter-spacing: -0.01em;
+    margin-bottom: 12px; color: var(--ink);
+  }
+  .pillar p { color: var(--ink-dim); font-size: 14.5px; line-height: 1.6; }
+  .pillar p code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-hi); color: var(--ink);
+    padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line);
+  }
+
+  /* ---------- local highlight ---------- */
+  .local {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: clamp(32px, 5vw, 56px);
+    display: grid; grid-template-columns: 1fr 1.1fr; gap: 48px;
+    align-items: center;
+  }
+  @media (max-width: 860px) { .local { grid-template-columns: 1fr; } }
+  .local h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(1.85rem, 3.4vw, 2.4rem); line-height: 1.1; letter-spacing: -0.015em;
+    margin-bottom: 16px;
+  }
+  .local h2 em { font-style: italic; color: var(--accent); }
+  .local p { color: var(--ink-dim); margin-bottom: 16px; font-size: 1.0125rem; line-height: 1.6; }
+
+  /* code block */
+  .code {
+    background: #0b0b0c;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  [data-theme="light"] .code { background: #14141a; color: #e8e8e8; }
+  .code .head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--line);
+    font-size: 11px; color: var(--ink-mute);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  [data-theme="light"] .code .head { background: rgba(255,255,255,0.05); color: #aaa; border-bottom-color: #2a2a2f; }
+  .code .body { padding: 16px 18px; color: #ededee; white-space: pre; overflow-x: auto; }
+  [data-theme="light"] .code .body { color: #ededee; }
+  .code .c { color: #6b6b72; }
+  .code .k { color: #c8e85c; }
+  .code .s { color: #e8a85c; }
+  .copy-btn {
+    background: transparent; border: 1px solid var(--line); border-radius: 4px;
+    color: var(--ink-mute); font-family: var(--mono); font-size: 10px;
+    padding: 3px 8px; cursor: pointer; letter-spacing: 0.05em;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: var(--ink); border-color: var(--line-hi); }
+
+  /* ---------- features grid ---------- */
+  .features {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  }
+  @media (max-width: 860px) { .features { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+  .feature {
+    background: var(--bg); padding: 26px 24px;
+    transition: background 0.2s ease;
+  }
+  .feature:hover { background: var(--bg-elev); }
+  .feature .ico {
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .feature h4 {
+    font-size: 14.5px; font-weight: 500; color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .feature p {
+    font-size: 13px; color: var(--ink-dim); line-height: 1.55;
+  }
+  .feature p code {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--bg-hi); padding: 1px 4px; border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* ---------- install steps ---------- */
+  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  @media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+  .step .step-no {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-mute);
+    letter-spacing: 0.08em;
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-bottom: 14px;
+  }
+  .step .step-no::before {
+    content: ''; width: 18px; height: 18px;
+    border: 1px solid var(--line-hi); border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--accent); font-weight: 500; font-size: 10px;
+  }
+  .step:nth-child(1) .step-no::before { content: '1'; }
+  .step:nth-child(2) .step-no::before { content: '2'; }
+  .step h4 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 1.4rem; line-height: 1.25;
+    margin-bottom: 12px; color: var(--ink);
+  }
+  .step p { color: var(--ink-dim); font-size: 14.5px; margin-bottom: 16px; }
+
+  /* ---------- final cta ---------- */
+  .final {
+    text-align: center; padding: clamp(72px, 12vh, 140px) 0;
+    border-top: 1px solid var(--line);
+    background: linear-gradient(180deg, transparent, var(--halo-1));
+  }
+  .final .mark-bg {
+    width: 110px; height: 110px; margin: 0 auto 28px;
+    color: var(--ink-faint);
+    opacity: 0.4;
+  }
+  .final h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(2rem, 4.8vw, 3.4rem); line-height: 1.05; letter-spacing: -0.02em;
+    margin-bottom: 18px; max-width: 18ch; margin-inline: auto;
+  }
+  .final h2 em { font-style: italic; color: var(--ink-dim); }
+  .final p {
+    color: var(--ink-dim); max-width: 50ch; margin: 0 auto 32px;
+    font-size: 1.0625rem;
+  }
+
+  /* ---------- footer ---------- */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 36px 0;
+    font-size: 13px; color: var(--ink-mute);
+  }
+  footer .row {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap;
+  }
+  footer .links { display: flex; gap: 22px; }
+  footer .links a:hover { color: var(--ink); }
+  footer .word { height: 11px; color: var(--ink-mute); opacity: 0.7; }
+</style>
+</head>
+
+<body>
+
+<!-- ============== NAV ============== -->
+<nav>
+  <div class="wrap row">
+    <a href="#top" class="brand" aria-label="genkettle home">
+      <img src="assets/genkettle-mark.svg" alt="" class="mark" id="nav-mark" />
+      <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" id="nav-word" />
+    </a>
+    <div class="nav-links">
+      <a href="#compare">compare</a>
+      <a href="#why">why</a>
+      <a href="#features">features</a>
+      <a href="#install">install</a>
+      <button class="theme-toggle" aria-label="toggle theme" id="theme-toggle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <a class="nav-cta" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        GitHub
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============== HERO ============== -->
+<header class="hero" id="top">
+  <div class="wrap">
+    <img src="assets/genkettle-lockup.svg" alt="genkettle" class="lockup" style="filter: invert(1);" id="lockup" />
+    <h1>Cost-aware image &amp; TTS, <em>behind one interface.</em></h1>
+    <p class="lede">
+      Six providers. <strong>One budget.</strong> One ledger. Zero lock-in.
+      Generate images and voice with cloud or local models, with hard pre-call
+      caps, sidecar reproducibility, and a <strong>$0/call local escape hatch</strong>
+      that just works.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install">
+        Install in two commands
+        <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        View on GitHub
+      </a>
+    </div>
+
+    <div class="meta-strip">
+      <span>6 providers</span>
+      <span>MIT licensed</span>
+      <span>v0.8.7</span>
+      <span>$0/call local</span>
+      <span>MCP-native</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============== COMPARE ============== -->
+<section id="compare">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">how it compares</span>
+      <h2 class="section-title">A thin wrapper leaves the <em>cross-cutting work</em> to you.</h2>
+      <p class="section-lede">There are plenty of MCP servers that wrap one vendor. This one wraps six, and adds the concerns a thin wrapper leaves on the floor.</p>
+    </div>
+
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="us">genkettle</th>
+            <th>Raw OpenAI / Gemini</th>
+            <th>ElevenLabs sub</th>
+            <th>guinacio's claude-image-gen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Multi-provider behind one interface</td>
+            <td class="us yes">6 providers</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">OpenAI only</td>
+          </tr>
+          <tr>
+            <td>Pre-call budget enforcement</td>
+            <td class="us yes">daily / weekly / monthly</td>
+            <td class="no">—</td>
+            <td class="partial">plan limits</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Per-call + per-session cost ledger</td>
+            <td class="us yes">JSON + CSV export</td>
+            <td class="no">—</td>
+            <td class="partial">dashboard</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Batch mode (50% off where supported)</td>
+            <td class="us yes">image + TTS</td>
+            <td class="partial">manual</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Reproducible sidecar / regenerate</td>
+            <td class="us yes"><code>.regenerate.json</code></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Local $0/call escape hatch</td>
+            <td class="us yes">Voicebox + Kokoro + 4 more</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Voice cloning</td>
+            <td class="us yes">local + ElevenLabs IDs</td>
+            <td class="no">n/a</td>
+            <td class="yes">yes</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Long-text TTS auto-chunk + stitch</td>
+            <td class="us yes">sentence-aware, reactive</td>
+            <td class="partial">manual</td>
+            <td class="partial">partial</td>
+            <td class="no">n/a</td>
+          </tr>
+          <tr>
+            <td>Provider failover on rate-limit / 5xx</td>
+            <td class="us yes">logged cost delta</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== WHY / PILLARS ============== -->
+<section id="why">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">why this MCP is different</span>
+      <h2 class="section-title">One knob spans every provider. <em>Cost-aware from the first call.</em></h2>
+    </div>
+
+    <div class="pillars">
+      <article class="pillar">
+        <span class="num">01</span>
+        <h3>One knob per call</h3>
+        <p><code>small | mid | pro</code> spans every provider. Code written for Gemini runs unchanged against OpenAI or a local Kokoro model — swap <code>--provider</code> and the call still works. No per-vendor quirks in your prompt code.</p>
+      </article>
+
+      <article class="pillar">
+        <span class="num">02</span>
+        <h3>Cost-aware, pre-call</h3>
+        <p>Per-call, session, and per-project ledgers. Hard daily/weekly/monthly caps enforced <strong style="color:var(--ink)">before</strong> you spend. Dry-run <code>estimate_cost</code> ranks every provider/tier combo. A $0 cache for identical repeats.</p>
+      </article>
+
+      <article class="pillar">
+        <span class="num">03</span>
+        <h3>Reproducibility built in</h3>
+        <p>Every output gets a hidden <code>.regenerate.json</code> sidecar with prompt, model, tier, params, lineage. <code>regenerate</code> re-runs it; <code>iterate</code> threads parent → child. Prompts never get lost in chat history.</p>
+      </article>
+
+      <article class="pillar">
+        <span class="num">04</span>
+        <h3>Cross-cutting work, once</h3>
+        <p>Provider failover with logged cost delta. Batch mode where the vendor offers it. Long-text TTS auto-chunked at sentence boundaries — including <strong style="color:var(--ink)">reactive</strong> chunking when a provider rejects a single call as too long.</p>
+      </article>
+
+      <article class="pillar">
+        <span class="num">05</span>
+        <h3>Free local escape hatch</h3>
+        <p>Same plugin, same skills, same sidecars, no API key, no network, no bill. Route to Kokoro-FastAPI, Speaches, Orpheus, Chatterbox, or Voicebox. The local provider is a first-class citizen, not a bolt-on.</p>
+      </article>
+
+      <article class="pillar">
+        <span class="num">06</span>
+        <h3>MCP-native UX</h3>
+        <p>Elicitation when ≥2 prompts queued. Sampling for prompt rewrites. Notifications on batch completion. Resources for the asset panel. Structured errors everywhere — no raw provider blobs.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== LOCAL ============== -->
+<section>
+  <div class="wrap">
+    <div class="local">
+      <div>
+        <span class="eyebrow">$0 / call</span>
+        <h2>Run it 100% local. <em>Zero API keys.</em></h2>
+        <p>
+          Point genkettle at any OpenAI-compatible local server and generate images
+          or speech without a key, network round-trip, or dollar spent. Sidecars,
+          cache, regenerate, iterate, post-processing — everything just works.
+        </p>
+        <p style="font-size: 14px;">
+          The local provider is <strong style="color:var(--ink)">auto-detected at startup</strong> since v0.8.5 — if <code>LOCAL_BASE_URL/models</code> responds, it joins the failover chain automatically.
+        </p>
+        <div class="cta-row" style="justify-content: flex-start;">
+          <a class="btn btn-ghost" href="https://github.com/remsky/Kokoro-FastAPI" target="_blank" rel="noopener">Kokoro-FastAPI</a>
+          <a class="btn btn-ghost" href="https://voicebox.sh" target="_blank" rel="noopener">Voicebox</a>
+        </div>
+      </div>
+
+      <div class="code">
+        <div class="head">
+          <span>shell</span>
+          <button class="copy-btn" data-copy="local">copy</button>
+        </div>
+<pre class="body" id="code-local"><span class="c"># start a local TTS backend (example: Kokoro)</span>
+docker run -p 8880:8880 \
+  ghcr.io/remsky/kokoro-fastapi-cpu:latest
+
+<span class="c"># auto-detected on startup, but you can confirm</span>
+node mcp-server/dist/cli.js <span class="k">--check-local</span>
+
+<span class="c"># generate against the local server</span>
+node mcp-server/dist/cli.js <span class="k">--speech</span> \
+  -p <span class="s">"hello world"</span> \
+  <span class="k">--provider</span> local <span class="k">--model</span> kokoro</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== FEATURES ============== -->
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">surface area</span>
+      <h2 class="section-title">Everything you need, <em>nothing you don't.</em></h2>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></div>
+        <h4>6 providers, one tier knob</h4>
+        <p>Google Gemini, OpenAI, OpenRouter, ElevenLabs, Voicebox, and any OpenAI-compatible local server.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M12 22v-6M2 12h6M22 12h-6M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2M5.6 18.4l4.2-4.2M14.2 9.8l4.2-4.2"/></svg></div>
+        <h4>14-model pricing table</h4>
+        <p>Versioned JSON with batch (50% off) rates and a 30-day staleness warning.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg></div>
+        <h4>Per-project tracking</h4>
+        <p>cwd-hashed ledgers, CSV / JSON receipt export, <code>session_spend --project</code>.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg></div>
+        <h4>Batch mode</h4>
+        <p>50% off with ≤24h turnaround on every provider that supports it. Image and TTS.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/><path d="M12 7v5l3 2"/></svg></div>
+        <h4>Long-text TTS</h4>
+        <p>Sentence-aware chunking, ffmpeg stitch, reactive retry on <code>INPUT_TOO_LONG</code> — voice and cache stay stable.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></div>
+        <h4>Zero-shot voice cloning</h4>
+        <p><code>--reference-audio my.wav</code> against local Chatterbox / XTTS, or pass an ElevenLabs voice ID.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.4 2.6"/><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.4-2.6"/><path d="M21 4v5h-5M3 20v-5h5"/></svg></div>
+        <h4>Provider failover</h4>
+        <p>Automatic on rate-limit / 5xx / timeout, with logged cost delta and a stable cache key.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7l4 5 4-5v10"/></svg></div>
+        <h4>SRT / VTT captions</h4>
+        <p>Generated from ElevenLabs word-level timestamps — single-chunk today.</p>
+      </div>
+      <div class="feature">
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
+        <h4>Image post-processing</h4>
+        <p>OG, Twitter, favicon, app icon, LinkedIn, Instagram presets. Optional webp. Background removal cascades.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== INSTALL ============== -->
+<section id="install">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">install</span>
+      <h2 class="section-title">Two commands inside Claude Code. <em>No clone, no build.</em></h2>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <span class="step-no">marketplace</span>
+        <h4>Add the marketplace and install the plugin.</h4>
+        <p>The plugin registers slash commands (<code>/gen-image</code>, <code>/gen-speech</code>, …) and MCP tools automatically on enable.</p>
+        <div class="code">
+          <div class="head">
+            <span>claude code session</span>
+            <button class="copy-btn" data-copy="install">copy</button>
+          </div>
+<pre class="body" id="code-install">/plugin marketplace add sherifButt/claude-image-tts-gen
+/plugin install claude-image-tts-gen@claude-image-tts-gen-marketplace</pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-no">configure</span>
+        <h4>Export at least one API key, or run a local server.</h4>
+        <p>Grab a free Gemini key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--ink);text-decoration:underline;text-underline-offset:3px;">aistudio.google.com/apikey</a>. Add to <code>~/.zshrc</code> for persistence across sessions.</p>
+        <div class="code">
+          <div class="head">
+            <span>~/.zshrc</span>
+            <button class="copy-btn" data-copy="env">copy</button>
+          </div>
+<pre class="body" id="code-env"><span class="c"># required: at least one provider key OR a local server</span>
+<span class="k">export</span> GEMINI_API_KEY=<span class="s">'your-key'</span>
+<span class="k">export</span> OPENAI_API_KEY=<span class="s">'your-key'</span>
+
+<span class="c"># optional: per-provider default voices</span>
+<span class="k">export</span> GEMINI_DEFAULT_VOICE=<span class="s">Charon</span>
+<span class="k">export</span> OPENAI_DEFAULT_VOICE=<span class="s">onyx</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FINAL CTA ============== -->
+<section class="final">
+  <div class="wrap">
+    <img src="assets/genkettle-mark.svg" alt="" class="mark-bg" style="filter: invert(1);" id="final-mark" aria-hidden="true" />
+    <h2>Stop paying for <em>identical regenerations.</em></h2>
+    <p>genkettle is MIT-licensed, semver'd, and shipping. Open an issue, send a PR, or just install it and ship a feature with $5/day worth of cloud spend you can actually account for.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        Star on GitHub
+        <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/sherifButt/claude-image-tts-gen/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
+        Read the changelog
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer>
+  <div class="wrap row">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" style="filter: invert(1) opacity(0.7);" id="footer-word" />
+      <span style="color: var(--ink-faint);">·</span>
+      <span>MIT · v0.8.7</span>
+    </div>
+    <div class="links">
+      <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/blob/main/README.md" target="_blank" rel="noopener">README</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/issues" target="_blank" rel="noopener">Issues</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/releases" target="_blank" rel="noopener">Releases</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // theme toggle
+  var btn = document.getElementById('theme-toggle');
+  function updateLogos() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var inverted = ['lockup', 'final-mark', 'nav-mark', 'nav-word'];
+    inverted.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.style.filter = isDark ? 'invert(1)' : 'none';
+    });
+    var fw = document.getElementById('footer-word');
+    if (fw) fw.style.filter = isDark ? 'invert(1) opacity(0.7)' : 'opacity(0.6)';
+  }
+  btn.addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('gk-theme', next);
+    updateLogos();
+  });
+  updateLogos();
+
+  // copy buttons
+  document.querySelectorAll('.copy-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var id = 'code-' + b.getAttribute('data-copy');
+      var el = document.getElementById(id);
+      if (!el) return;
+      var text = el.innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        var prev = b.textContent;
+        b.textContent = 'copied';
+        setTimeout(function () { b.textContent = prev; }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

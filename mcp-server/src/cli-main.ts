@@ -15,6 +15,7 @@ import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { exportSpend } from "./tools/export-spend.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
+import { generateVideo, type GenerateVideoArgs } from "./tools/generate-video.js";
 import { healthCheck } from "./tools/health-check.js";
 import { iterate } from "./tools/iterate.js";
 import { pickVariant } from "./tools/pick-variant.js";
@@ -32,7 +33,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.8.10";
+const VERSION = "0.9.0";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`
@@ -41,6 +42,7 @@ claude-image-tts-gen-cli v${VERSION}
 Usage:
   cli [options]                            # generate image (default)
   cli --speech -p "..." [options]          # generate TTS audio
+  cli --video -p "..." --image frame.png [options]   # image-to-video (grok-imagine-video-1.5)
 
 Options:
   -p, --prompt <text>      Prompt (image) or text (speech). Required for generation.
@@ -52,7 +54,10 @@ Options:
   -o, --output <path>      Output file path (auto-generated if omitted)
   -d, --output-dir <dir>   Output directory (image: ${imageOutputDir}, audio: ${audioOutputDir})
       --speech             Generate speech audio instead of an image
-      --list-providers <m> List declared providers for modality m (image|tts)
+      --video              Generate video (image-to-video) instead of an image
+      --image <path>       Input frame for --video (required for video)
+      --duration <n>       Video clip length in seconds (1–15, default 5)
+      --list-providers <m> List declared providers for modality m (image|tts|video)
       --check-voicebox     Probe Voicebox server: profiles, engines, capabilities (tags / cloning / instruct)
       --session-spend      Show running spend totals (today/week/month/all-time)
   -R, --regenerate <path>  Re-run a prior generation from its sidecar or output path
@@ -100,6 +105,7 @@ Environment:
   OPENAI_API_KEY           Required for openai provider
   OPENROUTER_API_KEY       Required for openrouter provider (image only)
   ELEVENLABS_API_KEY       Required for elevenlabs provider (TTS only)
+  REPLICATE_API_TOKEN      Required for replicate provider (video only)
   REWRITE_PROMPTS          true (default) | false  — opt out of MCP-sampling prompt rewrite
   AUTOPLAY                 false (default) | true  — afplay TTS output (macOS)
   STATE_DIR                ~/.claude-image-tts-gen (default)
@@ -117,14 +123,15 @@ function isProvider(s: string | undefined): s is ProviderId {
     s === "openrouter" ||
     s === "elevenlabs" ||
     s === "local" ||
-    s === "voicebox"
+    s === "voicebox" ||
+    s === "replicate"
   );
 }
 function isTier(s: string | undefined): s is Tier {
   return s === "small" || s === "mid" || s === "pro";
 }
 function isModality(s: string | undefined): s is Modality {
-  return s === "image" || s === "tts";
+  return s === "image" || s === "tts" || s === "video";
 }
 
 async function main(): Promise<void> {
@@ -140,6 +147,9 @@ async function main(): Promise<void> {
         output: { type: "string", short: "o" },
         "output-dir": { type: "string", short: "d" },
         speech: { type: "boolean", default: false },
+        video: { type: "boolean", default: false, description: "Generate video (image-to-video)" },
+        image: { type: "string", description: "Input frame path for --video" },
+        duration: { type: "string", description: "Video clip length in seconds (1–15, default 5)" },
         "list-providers": { type: "string" },
         "session-spend": { type: "boolean", default: false },
         "project-spend": { type: "boolean", default: false, description: "With --session-spend, scope to current project" },
@@ -193,7 +203,10 @@ async function main(): Promise<void> {
       ...(values["output-dir"] && values.speech
         ? { AUDIO_OUTPUT_DIR: values["output-dir"] }
         : {}),
-      ...(values["output-dir"] && !values.speech
+      ...(values["output-dir"] && values.video
+        ? { VIDEO_OUTPUT_DIR: values["output-dir"] }
+        : {}),
+      ...(values["output-dir"] && !values.speech && !values.video
         ? { IMAGE_OUTPUT_DIR: values["output-dir"] }
         : {}),
     });
@@ -276,10 +289,11 @@ async function main(): Promise<void> {
     }
 
     if (values["estimate-cost"]) {
-      const modality = values.speech ? "tts" : "image";
+      const modality = values.video ? "video" : values.speech ? "tts" : "image";
       const result = estimateCostDryRun({
         modality,
         text: modality === "tts" ? values.prompt : undefined,
+        seconds: modality === "video" && values.duration ? Number(values.duration) : undefined,
         provider: values.provider as ProviderId | undefined,
         tier: values.tier as Tier | undefined,
       });
@@ -459,7 +473,24 @@ async function main(): Promise<void> {
 
     const emitSidecar = values["no-sidecar"] ? false : undefined;
     const outputDir = values["output-dir"];
-    const result = values.speech
+    const result = values.video
+      ? await generateVideo(
+          {
+            prompt: values.prompt,
+            imagePath: values.image ?? "",
+            referenceImagePaths: values.reference,
+            duration: values.duration ? Number(values.duration) : undefined,
+            provider: values.provider as ProviderId | undefined,
+            tier: values.tier as Tier | undefined,
+            model: values.model,
+            aspectRatio: values["aspect-ratio"] as GenerateVideoArgs["aspectRatio"],
+            outputPath: values.output,
+            outputDir,
+            sidecar: emitSidecar,
+          },
+          config,
+        )
+      : values.speech
       ? await generateSpeech(
           {
             text: values.prompt,

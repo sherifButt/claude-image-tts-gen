@@ -6,7 +6,8 @@
     "https://openai.com/api/pricing/",
     "https://platform.openai.com/docs/pricing",
     "https://openrouter.ai/models",
-    "https://elevenlabs.io/pricing"
+    "https://elevenlabs.io/pricing",
+    "https://replicate.com/xai/grok-imagine-video-1.5"
   ],
   "models": {
     "google/gemini-2.5-flash-image": {
@@ -195,6 +196,22 @@
         "standard": 0.0
       },
       "notes": "Local Voicebox server (voicebox.sh) — $0/call. Engine + model_size selected per profile or via params; no API cost."
+    },
+    "replicate/xai/grok-imagine-video-1.5:480p": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.08
+      },
+      "notes": "xAI Grok Imagine Video 1.5 at 480p, billed per second of output (1–15s). Image-to-video only; audio synthesized free. Image input adds ~$0.01/image (not modeled — dominated by per-second). Verify on replicate.com/xai/grok-imagine-video-1.5."
+    },
+    "replicate/xai/grok-imagine-video-1.5:720p": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.14
+      },
+      "notes": "xAI Grok Imagine Video 1.5 at 720p, billed per second of output (1–15s). Image-to-video only; audio synthesized free. Verify on replicate.com/xai/grok-imagine-video-1.5."
     }
   }
 }

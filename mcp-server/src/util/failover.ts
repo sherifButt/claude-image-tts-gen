@@ -6,6 +6,9 @@ import { isStructuredError, mapProviderError, StructuredError } from "./errors.j
 const DEFAULT_ORDER: Record<Modality, ProviderId[]> = {
   image: ["google", "openai", "openrouter"],
   tts: ["openai", "google", "elevenlabs"],
+  // Video has a single provider today; the generate_video tool calls it
+  // directly rather than through withFailover, but the map must be total.
+  video: ["replicate"],
 };
 
 const RETRYABLE_CODES = new Set(["RATE_LIMIT", "PROVIDER_ERROR", "PROVIDER_TIMEOUT"]);
@@ -26,6 +29,10 @@ function hasKeyFor(providerId: ProviderId, config: Config): boolean {
     case "voicebox":
       // No API key required (local Voicebox server). Opt-in via VOICEBOX_ENABLED.
       return config.voiceboxEnabled;
+    case "replicate":
+      // Video-only; never part of the image/tts failover chains, but the
+      // switch must stay exhaustive over ProviderId.
+      return Boolean(config.replicateApiToken);
   }
 }
 
@@ -56,6 +63,8 @@ export function envVarNameFor(providerId: ProviderId): string {
       return "LOCAL_ENABLED (opt-in) / LOCAL_BASE_URL";
     case "voicebox":
       return "VOICEBOX_ENABLED (opt-in) / VOICEBOX_BASE_URL";
+    case "replicate":
+      return "REPLICATE_API_TOKEN";
   }
 }
 

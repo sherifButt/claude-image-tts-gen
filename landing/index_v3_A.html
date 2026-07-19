@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>genkettle — variant A · bigger and bolder</title>
+<meta name="description" content="Hero treatment A — lockup as the primary visual." />
+<link rel="icon" href="assets/genkettle-mark.svg" type="image/svg+xml" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<script>
+  (function () {
+    var stored = localStorage.getItem('gk-theme-v3');
+    document.documentElement.setAttribute('data-theme', stored || 'dark');
+  })();
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  :root,
+  [data-theme="dark"] {
+    --bg: #0a0a0a; --bg-elev: #111111; --bg-hi: #161616; --bg-low: #0d0d0d;
+    --line: #1d1d1c; --line-hi: #2c2c2a; --line-faint: #161615;
+    --ink: #e8e6e1; --ink-dim: #a09e96; --ink-mute: #6c6a64; --ink-faint: #3e3d39;
+    --accent: #f0a06a; --accent-dim: #a26944; --accent-ink: #15110d;
+    --invert: 1;
+  }
+  [data-theme="light"] {
+    --bg: #efece4; --bg-elev: #f7f5ef; --bg-hi: #e6e3da; --bg-low: #e8e5dc;
+    --line: #cfccc1; --line-hi: #b3b0a5; --line-faint: #dbd8cd;
+    --ink: #14110e; --ink-dim: #4a4842; --ink-mute: #807e76; --ink-faint: #b1afa6;
+    --accent: #b85a26; --accent-dim: #7a3e1c; --accent-ink: #f7f5ef;
+    --invert: 0;
+  }
+  :root {
+    --serif: 'Newsreader', 'Times New Roman', Georgia, serif;
+    --mono:  'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    --max:   1180px;
+    --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--mono); font-weight: 400;
+    font-size: 14px; line-height: 1.6;
+    overflow-x: hidden;
+    transition: background-color .25s ease, color .25s ease;
+  }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
+
+  /* nav */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .row {
+    display: grid; grid-template-columns: auto 1fr auto;
+    align-items: center; height: 56px; gap: 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .word { height: 12px; color: var(--ink); filter: invert(var(--invert)); }
+  .brand .vchip {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+    color: var(--ink-mute);
+    border: 1px solid var(--line);
+    padding: 2px 6px; border-radius: 3px;
+    margin-left: 4px;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  a.vchip:hover { color: var(--accent); border-color: var(--accent); }
+  .nav-status {
+    justify-self: center; display: none;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  .nav-status .pip {
+    display: inline-block; width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%;
+    margin-right: 8px; vertical-align: 1px;
+  }
+  @media (min-width: 920px) { .nav-status { display: block; } }
+  .nav-links {
+    justify-self: end;
+    display: flex; align-items: center; gap: 22px;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 11px;
+    background: var(--ink); color: var(--bg);
+    border-radius: 4px;
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    transition: transform .15s ease;
+  }
+  .nav-cta:hover { color: var(--bg); transform: translateY(-1px); }
+  .theme-toggle {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 4px;
+    color: var(--ink-dim); cursor: pointer; transition: all .15s;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--line-hi); }
+  @media (max-width: 760px) {
+    .nav-links a:not(.nav-cta) { display: none; }
+  }
+
+  /* ==== VARIANT A — bigger and bolder ====
+     Lockup is the dominant visual. No eyebrow above it. Lockup
+     scales to clamp(280px, 50vw, 480px) — almost half the viewport
+     on tablet, ~480px ceiling on desktop. H1 sits underneath as
+     supporting copy at slightly reduced scale to let the brand mark
+     carry the hero. */
+  .hero {
+    padding: clamp(72px, 13vh, 140px) 0 clamp(48px, 7vh, 80px);
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-lockup {
+    width: clamp(280px, 50vw, 480px);
+    height: auto;
+    color: var(--ink);
+    margin: 0 auto 56px;
+    display: block;
+    filter: invert(var(--invert));
+  }
+  .hero h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.8rem, 4.6vw, 3.4rem);
+    line-height: 1.04;
+    letter-spacing: -0.022em;
+    max-width: 22ch;
+    margin: 0 auto 28px;
+    color: var(--ink);
+    font-variation-settings: "opsz" 36;
+  }
+  .hero h1 em { font-style: italic; color: var(--ink-dim); font-weight: 500; }
+  .hero h1 .accent { color: var(--accent); font-style: italic; }
+  .hero .lede {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--ink-dim);
+    max-width: 60ch;
+    margin: 0 auto 36px;
+    line-height: 1.7;
+  }
+  .hero .lede strong { color: var(--ink); font-weight: 500; }
+
+  .cta-row {
+    display: inline-flex; gap: 10px; flex-wrap: wrap;
+    justify-content: center; align-items: center;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px; border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12.5px; font-weight: 500;
+    letter-spacing: 0.02em;
+    transition: transform .15s ease;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-ghost {
+    color: var(--ink); border-color: var(--line-hi);
+    background: transparent;
+  }
+  .btn-ghost:hover { background: var(--bg-hi); }
+  .btn .arrow { transition: transform .15s ease; }
+  .btn:hover .arrow { transform: translateX(2px); }
+
+  .hero-foot {
+    margin-top: 56px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-foot div {
+    padding: 16px 14px;
+    text-align: left;
+    border-right: 1px solid var(--line);
+    font-family: var(--mono);
+  }
+  .hero-foot div:last-child { border-right: 0; }
+  .hero-foot .k {
+    display: block;
+    font-size: 10px; letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .hero-foot .v {
+    display: block;
+    font-size: 14px; color: var(--ink);
+    font-weight: 500; letter-spacing: -0.01em;
+  }
+  .hero-foot .v.amber { color: var(--accent); }
+  @media (max-width: 720px) {
+    .hero-foot { grid-template-columns: repeat(2, 1fr); }
+    .hero-foot div { border-bottom: 1px solid var(--line); }
+    .hero-foot div:nth-child(2) { border-right: 0; }
+    .hero-foot div:nth-last-child(-n+2) { border-bottom: 0; }
+  }
+
+  /* variant marker — a small label so we can identify the file at a glance */
+  .variant-tag {
+    position: fixed;
+    bottom: 18px; left: 18px;
+    z-index: 100;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 4px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  /* ==== FINAL CTA — shared across variants ====
+     Mirrors the production v3 final block. Kettle mark sits on the
+     right, copy on the left, single accent on the italic emphasis. */
+  .final {
+    padding: clamp(64px, 11vh, 130px) 0 clamp(48px, 7vh, 88px);
+    border-top: 1px solid var(--line);
+  }
+  .final-grid {
+    display: grid; grid-template-columns: 1.2fr 0.8fr;
+    gap: clamp(32px, 5vw, 80px);
+    align-items: end;
+  }
+  @media (max-width: 760px) { .final-grid { grid-template-columns: 1fr; } }
+  .final .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .final .eyebrow .bar {
+    display: inline-block; width: 18px; height: 1px;
+    background: var(--line-hi);
+  }
+  .final h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(1.9rem, 4.4vw, 3.2rem);
+    line-height: 1.02; letter-spacing: -0.022em;
+    margin-bottom: 20px; max-width: 18ch;
+    color: var(--ink);
+    font-variation-settings: "opsz" 36;
+  }
+  .final h2 em { font-style: italic; color: var(--accent); font-weight: 500; }
+  .final p {
+    color: var(--ink-dim); max-width: 56ch;
+    font-size: 13.5px; line-height: 1.7;
+    margin-bottom: 26px; font-family: var(--mono);
+  }
+  .final-mark {
+    width: 100%; max-width: 200px;
+    margin-left: auto; display: block;
+    color: var(--ink); opacity: 0.85;
+    filter: invert(var(--invert));
+  }
+
+  /* footer */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 22px 0;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  footer .row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 14px;
+  }
+  footer .links { display: flex; gap: 22px; }
+  footer .links a:hover { color: var(--ink); }
+  footer .word {
+    height: 10px; color: var(--ink-mute);
+    opacity: 0.75; filter: invert(var(--invert));
+  }
+  footer .left { display: flex; align-items: center; gap: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<span class="variant-tag">variant A · bigger + bolder</span>
+
+<nav>
+  <div class="wrap row">
+    <span class="brand">
+      <a href="index_v3.html" aria-label="genkettle home" style="display: inline-flex; align-items: center;">
+        <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      </a>
+      <a href="changelog.html#v0-8-7" class="vchip">v0.8.7</a>
+    </span>
+    <span class="nav-status"><span class="pip"></span>variant A · lockup-led</span>
+    <div class="nav-links">
+      <a href="index_v3.html">v3</a>
+      <a href="index_v3_B.html">B</a>
+      <a href="index_v3_C.html">C</a>
+      <a href="index_v3_D.html">D</a>
+      <a href="index_v3_E.html">E</a>
+      <button class="theme-toggle" aria-label="toggle theme" id="theme-toggle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <a class="nav-cta" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">github</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <!-- VARIANT A: lockup is hero-sized, no eyebrow above it -->
+    <img src="assets/genkettle-lockup.svg" alt="genkettle" class="hero-lockup" />
+
+    <h1>
+      The <span class="accent">ledger</span>
+      for image and TTS <em>in Claude Code.</em>
+    </h1>
+
+    <p class="lede">
+      Six providers behind one tier knob. <strong>One ledger.</strong>
+      <strong>One budget cap.</strong> Hard-enforced before the call,
+      sidecar-tracked after, with a <strong>$0/call local escape hatch</strong>
+      that just works.
+    </p>
+
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#">
+        install in two commands
+        <svg class="arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="#">view source</a>
+    </div>
+
+    <div class="hero-foot">
+      <div><span class="k">providers</span><span class="v">6</span></div>
+      <div><span class="k">default cap</span><span class="v amber">$5 / day</span></div>
+      <div><span class="k">local cost</span><span class="v">$0.00 / call</span></div>
+      <div><span class="k">license</span><span class="v">MIT · semver</span></div>
+    </div>
+  </div>
+</header>
+
+<section class="final">
+  <div class="wrap">
+    <div class="final-grid">
+      <div>
+        <span class="eyebrow"><span class="bar"></span>ship something</span>
+        <h2>Stop paying for <em>identical regenerations.</em></h2>
+        <p>
+          MIT-licensed, semver'd, and shipping. Open an issue, send a PR,
+          or just install it and ship a feature with $5/day worth of
+          cloud spend you can actually account for.
+        </p>
+        <div class="cta-row" style="justify-content: flex-start;">
+          <a class="btn btn-primary" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+            star on github
+            <svg class="arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </a>
+          <a class="btn btn-ghost" href="changelog.html">read the changelog</a>
+        </div>
+      </div>
+      <div>
+        <img src="assets/genkettle-mark.svg" alt="" class="final-mark" aria-hidden="true" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap row">
+    <div class="left">
+      <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      <span style="color: var(--ink-faint);">·</span>
+      <span>MIT · v0.8.7 · 2026 · variant A</span>
+    </div>
+    <div class="links">
+      <a href="index_v3.html">home</a>
+      <a href="changelog.html">changelog</a>
+      <a href="blog/index.html">blog</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">github</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('gk-theme-v3', next);
+  });
+</script>
+</body>
+</html>

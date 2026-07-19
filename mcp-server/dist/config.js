@@ -1,3 +1,4 @@
+import { StructuredError } from "./util/errors.js";
 export function loadConfig(env = process.env) {
     const logLevel = (env.LOG_LEVEL ?? "info").toLowerCase();
     const validLog = ["error", "warn", "info", "debug"].includes(logLevel)
@@ -9,6 +10,7 @@ export function loadConfig(env = process.env) {
         openaiApiKey: env.OPENAI_API_KEY,
         openrouterApiKey: env.OPENROUTER_API_KEY,
         elevenlabsApiKey: env.ELEVENLABS_API_KEY,
+        replicateApiToken: env.REPLICATE_API_TOKEN,
         // Default http://localhost:8880/v1 (Kokoro-FastAPI's default port) since
         // that's the recommended local backend. Users running Orpheus-FastAPI
         // (:5005), Speaches (:8000), LM Studio (:1234), etc. can override with
@@ -24,6 +26,7 @@ export function loadConfig(env = process.env) {
         geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
         imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
         audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",
+        videoOutputDir: env.VIDEO_OUTPUT_DIR ?? sharedDir ?? "./generated-videos",
         logLevel: validLog,
         autoplay: ["true", "1", "yes", "on"].includes((env.AUTOPLAY ?? "").toLowerCase()),
         // Default true per CLAUDE.md decision (opt-out via REWRITE_PROMPTS=false).
@@ -38,9 +41,6 @@ export function loadConfig(env = process.env) {
 }
 function requireKey(envName, providerLabel, value) {
     if (!value) {
-        // Imported lazily to avoid a circular import (errors.ts → util/output → config).
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { StructuredError } = require("./util/errors.js");
         throw new StructuredError("CONFIG_ERROR", `${envName} is required for the ${providerLabel} provider`, `Set ${envName}=... in your shell, or via the plugin's user_config.`);
     }
     return value;
@@ -56,4 +56,7 @@ export function requireOpenRouterKey(config) {
 }
 export function requireElevenLabsKey(config) {
     return requireKey("ELEVENLABS_API_KEY", "elevenlabs", config.elevenlabsApiKey);
+}
+export function requireReplicateToken(config) {
+    return requireKey("REPLICATE_API_TOKEN", "replicate", config.replicateApiToken);
 }

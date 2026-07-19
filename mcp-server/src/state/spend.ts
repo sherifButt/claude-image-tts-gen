@@ -67,7 +67,7 @@ export function renderSpendText(summary: SpendSummary): string {
     for (const call of summary.recentCalls) {
       lines.push(
         `  ${call.ts}  ${call.provider}/${call.tier}  ${call.model}  ` +
-          `${call.units}${call.unit === "image" ? "img" : "ch"}  ${c} ${call.cost.toFixed(4)}` +
+          `${call.units}${call.unit === "image" ? "img" : call.unit === "second" ? "s" : "ch"}  ${c} ${call.cost.toFixed(4)}` +
           `${call.isBatchPrice ? " [batch]" : ""}` +
           `${call.cached ? " [cache]" : ""}`,
       );

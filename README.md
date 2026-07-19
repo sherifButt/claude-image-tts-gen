@@ -27,7 +27,7 @@ your code knowing which one ran.
 
 ## Why this MCP is different
 
-There are plenty of MCP servers that wrap one vendor. This one wraps **six** (Google Gemini, OpenAI, OpenRouter, ElevenLabs, [Voicebox](https://voicebox.sh), and any OpenAI-compatible local server) behind a consistent interface, and adds the cross-cutting concerns that a thin wrapper leaves to you:
+There are plenty of MCP servers that wrap one vendor. This one wraps **seven** (Google Gemini, OpenAI, OpenRouter, ElevenLabs, [Voicebox](https://voicebox.sh), Replicate for video, and any OpenAI-compatible local server) behind a consistent interface, and adds the cross-cutting concerns that a thin wrapper leaves to you:
 
 - **One knob (`small | mid | pro`) spans every provider.** Code written for Gemini works unchanged against OpenAI or a local Kokoro model — swap `--provider` and the call still runs. No per-vendor quirks in your prompt code.
 - **Cost-aware from the first call.** Per-call + session + per-project ledgers, hard daily/weekly/monthly budget caps enforced *pre-call* (not after the charge), dry-run `estimate_cost` that ranks every provider/tier combo, and a $0 cache for identical repeats. You know what a generation costs before you spend, and after.
@@ -77,14 +77,16 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **six** (Go
 ## Features
 
 ### Generation
-- **6 providers** behind a single tier abstraction (`small | mid | pro`):
+- **7 providers** behind a single tier abstraction (`small | mid | pro`):
   - **Google Gemini** (image: 2.5 Flash + 3.1 Flash Preview ("Nano Banana 2") + Imagen 4, TTS declared)
   - **OpenAI** (image: gpt-image-2 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough: 2.5-flash-image, 3.1-flash-image-preview, 3-pro-image-preview)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
+  - **🎬 Replicate (`provider: replicate`)** — video (image-to-video) via `xai/grok-imagine-video-1.5`. Tier = resolution (small=480p, mid=720p), 1–15s clips billed per second, audio synthesized free.
   - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
   - **🎙 Voicebox (`provider: voicebox`)** — local-first voice studio ([voicebox.sh](https://voicebox.sh)) with 7 TTS engines (Qwen3-TTS, Chatterbox, Kokoro, ...), zero-shot cloning, 23 languages. $0/call, no API key.
 - **Image-to-image edits** via reference image input (gpt-image-2, Gemini multimodal, local server if it supports `/v1/images/edits`). **Multi-reference composition** (v0.8.8) — pass an array of inputs to gpt-image-2 or gemini-3.1-flash-image-preview via `referenceImagePaths[]` (MCP) or repeated `--reference` flags (CLI)
+- **🎬 Image-to-video** (v0.9.0) via Replicate `grok-imagine-video-1.5` — feed a still frame + a motion prompt to `generate_video` (CLI: `--video -p "..." --image frame.png`). 1–15s clips at 480p/720p, per-second billing, synchronized audio. Same cache / sidecar / budget / regenerate machinery as image + TTS. Needs `REPLICATE_API_TOKEN`.
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg. Triggers both pre-emptively (text > provider's `maxCharsPerCall`) *and* reactively (provider rejects a shorter input as too long for output-duration / token reasons — a new `INPUT_TOO_LONG` code catches that and retries with chunking on the same provider, preserving voice)
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
@@ -93,7 +95,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **six** (Go
 - **`voiceDefaulted` signal** on every TTS response — when you didn't spec a voice, the response says so, letting Claude catch mismatches before spending on a long run
 
 ### Cost awareness
-- **22-model pricing table** with batch (50% off) rates and 30-day staleness warning
+- **24-model pricing table** with batch (50% off) rates and 30-day staleness warning
 - **Per-call cost** in every tool response; **session ledger** persisted to `~/.claude-image-tts-gen/session.json`
 - **Per-project tracking** (cwd-hashed) — `session_spend --project`
 - **Budget caps** (daily / weekly / monthly) — soft warn at 80%, hard block at 100%
@@ -340,4 +342,4 @@ Known deferred items:
 - **Multi-chunk TTS captions** — single-chunk only (multi-chunk timestamp-offset math deferred).
 - **Quality fallback** for low-tier text rendering — needs an OCR heuristic.
 - **`userConfig` install prompt** — will re-introduce once Claude Code fixes the `${user_config.*}` → MCP-server spawn silent failure.
-- **Video modality (HeyGen + Synthesia)** — coming in v0.8.0 as native provider adapters, not passthrough, so video inherits the same cost / sidecar / failover machinery.
+- **Video modality** — ✅ shipped in v0.9.0 via Replicate `grok-imagine-video-1.5` (image-to-video), inheriting the same cost / sidecar / cache / budget machinery. More video providers (text-to-video, HeyGen / Synthesia avatars) can slot into the same `video` modality next.

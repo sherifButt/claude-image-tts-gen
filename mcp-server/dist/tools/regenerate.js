@@ -2,6 +2,7 @@ import { dirname } from "node:path";
 import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
 import { generateImage } from "./generate-image.js";
 import { generateSpeech } from "./generate-speech.js";
+import { generateVideo } from "./generate-video.js";
 export async function regenerate(args, config) {
     if (!args.path) {
         throw new Error("path is required (sidecar .regenerate.json or original output file)");
@@ -29,6 +30,21 @@ export async function regenerate(args, config) {
             text: input.text,
             voice: input.voice,
             referenceAudioPath: input.referenceAudioPath,
+            provider: meta.provider,
+            tier: meta.tier,
+            model: meta.model,
+            outputPath: args.outputPath,
+            outputDir: args.outputPath ? undefined : originalDir,
+        }, config, { parentSidecar: sidecarPath });
+    }
+    if (meta.tool === "generate_video") {
+        const input = meta.input;
+        return await generateVideo({
+            prompt: input.prompt,
+            imagePath: input.imagePath,
+            referenceImagePaths: input.referenceImagePaths,
+            duration: input.durationSeconds,
+            aspectRatio: input.aspectRatio,
             provider: meta.provider,
             tier: meta.tier,
             model: meta.model,

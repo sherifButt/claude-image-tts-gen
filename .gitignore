@@ -1,6 +1,7 @@
 node_modules/
 generated-images/
 generated-audio/
+generated-videos/
 
 CLAUDE.md
 

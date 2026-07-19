@@ -5,6 +5,7 @@ import type {
   SidecarImageInput,
   SidecarMetadata,
   SidecarSpeechInput,
+  SidecarVideoInput,
 } from "../sidecar/types.js";
 import { StructuredError } from "../util/errors.js";
 import {
@@ -15,6 +16,10 @@ import {
   generateSpeech,
   type GenerateSpeechOutput,
 } from "./generate-speech.js";
+import {
+  generateVideo,
+  type GenerateVideoOutput,
+} from "./generate-video.js";
 
 export interface IterateArgs {
   path: string;
@@ -23,7 +28,10 @@ export interface IterateArgs {
   outputPath?: string;
 }
 
-export type IterateOutput = GenerateImageOutput | GenerateSpeechOutput;
+export type IterateOutput =
+  | GenerateImageOutput
+  | GenerateSpeechOutput
+  | GenerateVideoOutput;
 
 export async function iterate(
   args: IterateArgs,
@@ -77,6 +85,27 @@ export async function iterate(
         text: newText,
         voice: input.voice,
         referenceAudioPath: input.referenceAudioPath,
+        provider: meta.provider,
+        tier: meta.tier,
+        model: meta.model,
+        outputPath: args.outputPath,
+        outputDir: args.outputPath ? undefined : originalDir,
+      },
+      config,
+      { parentSidecar: sidecarPath },
+    );
+  }
+
+  if (meta.tool === "generate_video") {
+    const input = meta.input as SidecarVideoInput;
+    const newPrompt = mode === "replace" ? args.adjustment : `${input.prompt}, ${args.adjustment}`;
+    return await generateVideo(
+      {
+        prompt: newPrompt,
+        imagePath: input.imagePath,
+        referenceImagePaths: input.referenceImagePaths,
+        duration: input.durationSeconds,
+        aspectRatio: input.aspectRatio,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,

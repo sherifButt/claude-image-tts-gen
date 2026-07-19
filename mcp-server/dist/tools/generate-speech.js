@@ -88,7 +88,8 @@ export async function generateSpeech(args, config, opts = {}) {
             case "voicebox":
                 return config.voiceboxDefaultVoice;
             case "openrouter":
-                // OpenRouter doesn't implement TTS — no default voice axis needed.
+            case "replicate":
+                // Neither implements TTS — no default voice axis needed.
                 return undefined;
         }
     };

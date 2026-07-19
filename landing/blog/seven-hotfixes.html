@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Seven hotfixes to ship a Claude Code plugin — genkettle blog</title>
+<meta name="description" content="v0.7.0 set out to add an install-time prompt for API keys. Eight releases later, we deleted the feature. The chain of silent failures that got us there." />
+<meta property="og:title" content="Seven hotfixes to ship a Claude Code plugin" />
+<meta property="og:description" content="v0.7.0 set out to add an install-time prompt for API keys. Eight releases later, we deleted the feature." />
+<link rel="icon" href="../assets/genkettle-mark.svg" type="image/svg+xml" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<script>
+  (function () {
+    var stored = localStorage.getItem('gk-theme-v3');
+    document.documentElement.setAttribute('data-theme', stored || 'dark');
+  })();
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  :root,
+  [data-theme="dark"] {
+    --bg: #0a0a0a; --bg-elev: #111111; --bg-hi: #161616; --bg-low: #0d0d0d;
+    --line: #1d1d1c; --line-hi: #2c2c2a; --line-faint: #161615;
+    --ink: #e8e6e1; --ink-dim: #a09e96; --ink-mute: #6c6a64; --ink-faint: #3e3d39;
+    --accent: #f0a06a; --accent-dim: #a26944; --accent-ink: #15110d;
+    --invert: 1;
+  }
+  [data-theme="light"] {
+    --bg: #efece4; --bg-elev: #f7f5ef; --bg-hi: #e6e3da; --bg-low: #e8e5dc;
+    --line: #cfccc1; --line-hi: #b3b0a5; --line-faint: #dbd8cd;
+    --ink: #14110e; --ink-dim: #4a4842; --ink-mute: #807e76; --ink-faint: #b1afa6;
+    --accent: #b85a26; --accent-dim: #7a3e1c; --accent-ink: #f7f5ef;
+    --invert: 0;
+  }
+  :root {
+    --serif: 'Newsreader', 'Times New Roman', Georgia, serif;
+    --mono:  'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    --max:   1180px;
+    --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--mono); font-weight: 400;
+    font-size: 14px; line-height: 1.6;
+    overflow-x: hidden;
+    transition: background-color .25s ease, color .25s ease;
+  }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
+  hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* ============== NAV ============== */
+  /* scope sticky nav to the SITE nav (direct child of body) so the
+     <nav class="crumbs"> breadcrumbs don't inherit position:sticky and
+     stack on top of it at the viewport edge during scrolling. */
+  body > nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  body > nav .row {
+    display: grid; grid-template-columns: auto 1fr auto;
+    align-items: center; height: 56px; gap: 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .word { height: 12px; color: var(--ink); filter: invert(var(--invert)); }
+  .brand .vchip {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+    color: var(--ink-mute);
+    border: 1px solid var(--line);
+    padding: 2px 6px; border-radius: 3px;
+    margin-left: 4px;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  a.vchip:hover { color: var(--accent); border-color: var(--accent); }
+  .nav-status {
+    justify-self: center; display: none;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  .nav-status .pip {
+    display: inline-block; width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%;
+    margin-right: 8px; vertical-align: 1px;
+  }
+  @media (min-width: 920px) { .nav-status { display: block; } }
+  .nav-links {
+    justify-self: end;
+    display: flex; align-items: center; gap: 22px;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-links a.active { color: var(--ink); }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 11px;
+    background: var(--ink); color: var(--bg);
+    border-radius: 4px;
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    transition: transform .15s ease;
+  }
+  .nav-cta:hover { color: var(--bg); transform: translateY(-1px); }
+  .theme-toggle {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 4px;
+    color: var(--ink-dim); cursor: pointer; transition: all .15s;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--line-hi); }
+  @media (max-width: 760px) {
+    .nav-links a:not(.nav-cta):not(.theme-toggle-wrap a) { display: none; }
+  }
+
+  /* ============== POST HEAD ============== */
+  .crumbs {
+    padding: 28px 0 0;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .crumbs a {
+    color: var(--ink-dim);
+    border-bottom: 1px solid transparent;
+    transition: color .15s, border-color .15s;
+  }
+  .crumbs a:hover { color: var(--ink); border-color: var(--accent); }
+  .crumbs .sep { color: var(--ink-faint); margin: 0 8px; }
+
+  .post-head {
+    padding: clamp(36px, 6vh, 60px) 0 clamp(20px, 3vh, 32px);
+  }
+  .post-head .meta-top {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+  .post-head .meta-top .sep { color: var(--ink-faint); }
+  .post-head .meta-top .cat { color: var(--accent); font-weight: 600; }
+  .post-head .meta-top .author { color: var(--ink); }
+  .post-head h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(2rem, 5.4vw, 3.6rem);
+    line-height: 1.04;
+    letter-spacing: -0.024em;
+    color: var(--ink);
+    font-variation-settings: "opsz" 60;
+    margin-bottom: 22px;
+    max-width: 24ch;
+  }
+  .post-head h1 em { font-style: italic; color: var(--ink-dim); font-weight: 500; }
+  .post-head .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: clamp(1.15rem, 2vw, 1.4rem);
+    line-height: 1.4;
+    color: var(--ink-dim);
+    max-width: 60ch;
+    font-variation-settings: "opsz" 28;
+  }
+
+  /* ============== HERO ART (inline SVG) ==============
+     Custom-built editorial illustration. Theme-aware via CSS vars,
+     so it inverts cleanly with the light/dark toggle. Vector — sharp
+     at any size — and reused as a thumbnail on the blog index. */
+  .post-hero {
+    margin: clamp(28px, 4vh, 44px) 0 clamp(40px, 6vh, 60px);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg-elev);
+    overflow: hidden;
+  }
+  .post-hero svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .post-hero .caption {
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-low);
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .post-hero .caption .id { color: var(--accent); font-weight: 600; }
+
+  /* SVG element styling for the inline hero art */
+  .gk-axis { stroke: var(--line-hi); }
+  .gk-pill-bg { fill: var(--bg); }
+  .gk-pill-stroke { stroke: var(--line-hi); fill: none; }
+  .gk-pill-shipped { fill: var(--accent); stroke: var(--accent); }
+  .gk-pill-faded { stroke: var(--line); fill: none; }
+  .gk-mono { font-family: var(--mono), monospace; }
+
+  /* ============== POST LAYOUT ============== */
+  .post-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: clamp(28px, 5vw, 64px);
+    align-items: start;
+    padding-bottom: clamp(64px, 10vh, 120px);
+  }
+  @media (max-width: 920px) {
+    .post-layout { grid-template-columns: 1fr; }
+  }
+
+  /* ============== TOC ============== */
+  .toc {
+    position: sticky;
+    top: 86px;
+    align-self: start;
+    border-left: 1px solid var(--line);
+    padding-left: 14px;
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-hi) transparent;
+  }
+  .toc::-webkit-scrollbar { width: 5px; }
+  .toc::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 3px; }
+  @media (max-width: 920px) {
+    .toc {
+      position: static; max-height: none;
+      border-left: 0; padding-left: 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 0; margin-bottom: 32px;
+    }
+  }
+  .toc-label {
+    display: block;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .toc ol {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column;
+    counter-reset: toc;
+  }
+  .toc li {
+    counter-increment: toc;
+    margin-bottom: 2px;
+  }
+  .toc li a {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 6px;
+    padding: 6px 0;
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink-dim);
+    line-height: 1.4;
+    transition: color .15s ease;
+  }
+  .toc li a::before {
+    content: counter(toc, decimal-leading-zero);
+    color: var(--ink-mute);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+  .toc li a:hover { color: var(--ink); }
+  .toc li a.active { color: var(--accent); }
+  .toc li a.active::before { color: var(--accent); }
+
+  /* ============== POST BODY ============== */
+  .post-main { min-width: 0; }
+
+  .post {
+    max-width: 680px;
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    color: var(--ink-dim);
+    font-variation-settings: "opsz" 18;
+  }
+  .post > p,
+  .post > ul,
+  .post > ol,
+  .post > blockquote,
+  .post > pre,
+  .post > h2,
+  .post > h3,
+  .post > .version-stack,
+  .post > hr.in-post { margin-bottom: 22px; }
+  .post p { font-size: 1.0625rem; }
+  .post p strong { color: var(--ink); font-weight: 600; }
+  .post p em { font-style: italic; }
+  .post p a, .post li a {
+    color: var(--ink);
+    border-bottom: 1px solid var(--accent-dim);
+    transition: border-color .15s ease;
+  }
+  .post p a:hover, .post li a:hover { border-color: var(--accent); }
+  .post h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.4rem, 2.8vw, 1.7rem);
+    line-height: 1.2;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    margin-top: 48px;
+    font-variation-settings: "opsz" 28;
+    scroll-margin-top: 100px;
+  }
+  .post h2 em { font-style: italic; color: var(--ink-dim); }
+  .post h3 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: 36px;
+    scroll-margin-top: 100px;
+  }
+  .post code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-hi);
+    border: 1px solid var(--line-faint);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+  .post pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    background: #050505;
+    color: #e0ddd6;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  [data-theme="light"] .post pre { background: #14110e; border-color: #14110e; }
+  .post pre .c { color: #6a6862; font-style: italic; }
+  .post pre .k { color: #f0a06a; }
+  .post pre .s { color: #c8c5be; }
+  .post pre .p { color: #e0ddd6; font-weight: 600; }
+  .post ul, .post ol {
+    padding-left: 22px;
+    color: var(--ink-dim);
+  }
+  .post li { margin-bottom: 8px; }
+  .post blockquote {
+    border-left: 2px solid var(--accent);
+    padding: 6px 0 6px 20px;
+    font-style: italic;
+    color: var(--ink);
+    font-size: 1.2rem;
+    line-height: 1.5;
+    font-variation-settings: "opsz" 24;
+  }
+  .post blockquote .cite {
+    display: block;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .post hr.in-post {
+    border: 0; height: 1px;
+    background: var(--line);
+    margin: 40px 0;
+    width: 60px;
+    margin-left: 0;
+  }
+
+  /* version-stack inline aside */
+  .post .version-stack {
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    background: var(--bg-elev);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-dim);
+  }
+  .post .version-stack .v { color: var(--ink); font-weight: 600; }
+  .post .version-stack .vs-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 14px;
+    padding: 4px 0;
+  }
+  .post .version-stack .vs-row .desc { color: var(--ink-dim); }
+
+  /* ============== VERTICAL SHARE RAIL ==============
+     Fixed to the right edge of the viewport, vertically centered.
+     Fades in only when the post body is in view — invisible on the
+     hero/title and again on the nav/footer below. Hidden on viewports
+     narrow enough that it'd overlap the content (≤1280px). */
+  .share-rail {
+    position: fixed;
+    top: 50%;
+    right: clamp(14px, 2vw, 28px);
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 30;
+    padding: 8px 5px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    font-family: var(--mono);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .share-rail.in-view {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .share-rail .label {
+    font-size: 8.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    text-align: center;
+    padding: 4px 0 6px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+  }
+  .share-rail a, .share-rail button {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    color: var(--ink-mute);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color .15s ease, background .15s ease;
+    position: relative;
+  }
+  .share-rail a:hover, .share-rail button:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .share-rail svg { width: 13px; height: 13px; }
+  .share-rail .copied-flash {
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .15s ease;
+    pointer-events: none;
+  }
+  .share-rail button.copied .copied-flash { opacity: 1; }
+  @media (max-width: 1280px) { .share-rail { display: none; } }
+
+  /* ============== SHARE ROW ============== */
+  .share {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    margin-bottom: 32px;
+  }
+  .share .label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-right: 8px;
+  }
+  .share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--line-hi);
+    border-radius: 3px;
+    color: var(--ink-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    background: transparent;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .share-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .share-btn svg {
+    width: 11px; height: 11px;
+    flex-shrink: 0;
+  }
+  .share-btn.copied { color: var(--accent); border-color: var(--accent); }
+  .share .spacer { flex: 1; }
+  .share .pageviews {
+    font-size: 10px;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .share.bottom {
+    margin-top: 48px;
+    margin-bottom: 28px;
+  }
+
+  /* ============== AUTHOR CARD ============== */
+  .author-card {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 18px;
+    padding: 24px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 32px;
+  }
+  .author-card .avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 1px solid var(--line-hi);
+    background: var(--bg-elev);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 26px;
+    color: var(--ink);
+    font-variation-settings: "opsz" 28;
+  }
+  .author-card .meta {
+    min-width: 0;
+  }
+  .author-card .label {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-mute);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .author-card .name {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 1.2rem;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-variation-settings: "opsz" 22;
+  }
+  .author-card .name em { font-style: italic; color: var(--ink-dim); }
+  .author-card .bio {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-dim);
+    line-height: 1.6;
+  }
+  .author-card .links {
+    display: inline-flex; gap: 12px;
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mute);
+  }
+  .author-card .links a {
+    border-bottom: 1px solid var(--line-hi);
+    padding-bottom: 1px;
+    transition: color .15s, border-color .15s;
+  }
+  .author-card .links a:hover { color: var(--ink); border-color: var(--accent); }
+
+  /* ============== NEWSLETTER ============== */
+  .newsletter {
+    margin-top: 32px;
+    padding: clamp(28px, 4vh, 40px);
+    border: 1px solid var(--line);
+    background: var(--bg-elev);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .newsletter::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 30%, transparent 70%);
+  }
+  .newsletter .label {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .newsletter h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.4rem, 2.8vw, 1.8rem);
+    line-height: 1.15;
+    letter-spacing: -0.014em;
+    color: var(--ink);
+    margin-bottom: 10px;
+    max-width: 22ch;
+    font-variation-settings: "opsz" 28;
+  }
+  .newsletter h3 em { font-style: italic; color: var(--ink-dim); }
+  .newsletter p {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-dim);
+    max-width: 52ch;
+    margin-bottom: 22px;
+  }
+  .newsletter form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    max-width: 480px;
+  }
+  @media (max-width: 540px) {
+    .newsletter form { grid-template-columns: 1fr; }
+  }
+  .newsletter input[type="email"] {
+    appearance: none;
+    border: 1px solid var(--line-hi);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 11px 14px;
+    border-radius: 4px;
+    transition: border-color .15s ease;
+  }
+  .newsletter input[type="email"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .newsletter input[type="email"]::placeholder {
+    color: var(--ink-mute);
+  }
+  .newsletter button {
+    appearance: none; cursor: pointer;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 11px 18px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: transform .15s ease;
+  }
+  .newsletter button:hover { transform: translateY(-1px); }
+  .newsletter .fineprint {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  .newsletter .ok {
+    color: var(--accent);
+    font-weight: 600;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    margin-top: 10px;
+    display: none;
+  }
+  .newsletter.submitted .ok { display: block; }
+  .newsletter.submitted form { display: none; }
+
+  /* ============== POST NAV ============== */
+  .post-nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    padding: clamp(40px, 6vh, 60px) 0 clamp(48px, 8vh, 96px);
+    border-top: 1px solid var(--line);
+  }
+  @media (max-width: 640px) { .post-nav { grid-template-columns: 1fr; } }
+  .post-nav a {
+    display: block; padding: 18px 0;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink-dim);
+    transition: color .15s ease;
+  }
+  .post-nav a .label {
+    display: block; font-size: 10px;
+    color: var(--ink-mute);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .post-nav a .title {
+    display: block;
+    font-family: var(--serif); font-style: italic;
+    font-size: 1.1rem; color: var(--ink);
+    line-height: 1.3;
+    font-variation-settings: "opsz" 22;
+  }
+  .post-nav a:hover { color: var(--ink); }
+  .post-nav a:hover .title { color: var(--accent); }
+  .post-nav a.right { text-align: right; }
+
+  /* ============== FOOTER ============== */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 22px 0;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  footer .row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 14px;
+  }
+  footer .links { display: flex; gap: 22px; }
+  footer .links a:hover { color: var(--ink); }
+  footer .word {
+    height: 10px; color: var(--ink-mute);
+    opacity: 0.75; filter: invert(var(--invert));
+  }
+  footer .left { display: flex; align-items: center; gap: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<nav>
+  <div class="wrap row">
+    <span class="brand">
+      <a href="../index_v3.html" aria-label="genkettle home" style="display: inline-flex; align-items: center;">
+        <img src="../assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      </a>
+      <a href="../changelog.html#v0-7-8" class="vchip" aria-label="related changelog entry">v0.7.8</a>
+    </span>
+    <span class="nav-status"><span class="pip"></span>post-mortem · 12 min read</span>
+    <div class="nav-links">
+      <a href="../index_v3.html#tiers">tiers</a>
+      <a href="../index_v3.html#install">install</a>
+      <a href="../changelog.html">changelog</a>
+      <a href="index.html" class="active">blog</a>
+      <button class="theme-toggle" aria-label="toggle theme" id="theme-toggle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <a class="nav-cta" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        github
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <nav class="crumbs" aria-label="breadcrumb">
+    <a href="index.html">blog</a><span class="sep">/</span><span>seven hotfixes to ship a claude code plugin</span>
+  </nav>
+
+  <header class="post-head">
+    <div class="meta-top">
+      <span class="cat">post-mortem</span>
+      <span class="sep">·</span>
+      <span class="author">by Sherif Butt</span>
+      <span class="sep">·</span>
+      <span>2026-04-21</span>
+      <span class="sep">·</span>
+      <span>12 min read</span>
+      <span class="sep">·</span>
+      <span>v0.7.0 → v0.7.8</span>
+    </div>
+    <h1>Seven hotfixes to ship <em>a Claude Code plugin.</em></h1>
+    <p class="dek">
+      v0.7.0 set out to add an install-time prompt for API keys.
+      Eight releases later, we deleted the feature. This is the
+      chain of silent failures that got us there — and why "revert"
+      is a feature, not a defeat.
+    </p>
+  </header>
+
+  <!-- ============== HERO ART ==============
+       The release stack. Eight pills, one per release in the v0.7.x line.
+       The first seven are bone-outlined "× attempt N." The eighth is amber-
+       filled "✓ shipped" — the revert that actually worked. -->
+  <figure class="post-hero">
+    <svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" aria-label="release stack — v0.7.x">
+      <!-- subtle dot grid background -->
+      <defs>
+        <pattern id="dotgrid-h1" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill="var(--ink-faint)" opacity="0.4" />
+        </pattern>
+      </defs>
+      <rect width="1600" height="900" fill="url(#dotgrid-h1)" />
+
+      <!-- eyebrow -->
+      <text x="800" y="86" text-anchor="middle" class="gk-mono"
+            font-size="15" letter-spacing="5" fill="var(--ink-mute)">RELEASE SEQUENCE — V0.7.X</text>
+
+      <!-- timeline axis -->
+      <line x1="320" y1="140" x2="320" y2="780" class="gk-axis" stroke-width="1" stroke-dasharray="3 6" />
+      <circle cx="320" cy="140" r="3" fill="var(--ink-mute)" />
+      <circle cx="320" cy="780" r="4" fill="var(--accent)" />
+
+      <!-- pills: 8 of them, 70px stride -->
+      <!-- pill template: x=360, w=920, h=58, rx=6 -->
+      <!-- y values: 152, 222, 292, 362, 432, 502, 572, 642 -->
+
+      <!-- v0.7.0 — userConfig schema introduced -->
+      <g transform="translate(360, 152)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.0</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">userConfig schema introduced — install-time prompt for keys</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <!-- connector tick -->
+      <line x1="320" y1="181" x2="360" y2="181" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.1 — manifest validation -->
+      <g transform="translate(360, 222)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.1</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">add type + title to userConfig fields — manifest validation</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <line x1="320" y1="251" x2="360" y2="251" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.2 — fallback syntax -->
+      <g transform="translate(360, 292)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.2</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">${user_config.foo:-default} fallback syntax</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <line x1="320" y1="321" x2="360" y2="321" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.3 — moved mcpServers to .mcp.json -->
+      <g transform="translate(360, 362)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.3</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">moved mcpServers into separate .mcp.json file</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <line x1="320" y1="391" x2="360" y2="391" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.4 — required:true -->
+      <g transform="translate(360, 432)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.4</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">marked gemini_api_key required:true — install prompt fires</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <line x1="320" y1="461" x2="360" y2="461" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.5 — explicit pointer -->
+      <g transform="translate(360, 502)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.5</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">explicit "mcpServers": "./.mcp.json" pointer in plugin.json</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <line x1="320" y1="531" x2="360" y2="531" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.6 — renamed file to avoid collision -->
+      <g transform="translate(360, 572)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.6</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">renamed to plugin-mcp.json — avoid project-MCP collision</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <line x1="320" y1="601" x2="360" y2="601" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.7 — moved back inline -->
+      <g transform="translate(360, 642)">
+        <rect width="920" height="58" rx="6" class="gk-pill-stroke" stroke-width="1" />
+        <text x="22" y="36" class="gk-mono" font-size="15" font-weight="600" fill="var(--ink)">v0.7.7</text>
+        <text x="120" y="36" class="gk-mono" font-size="13" fill="var(--ink-dim)">moved mcpServers back inline in plugin.json</text>
+        <text x="900" y="36" text-anchor="end" class="gk-mono" font-size="11" fill="var(--ink-mute)" letter-spacing="2">× FAILED</text>
+      </g>
+      <line x1="320" y1="671" x2="360" y2="671" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- v0.7.8 — the working revert, amber filled -->
+      <g transform="translate(360, 712)">
+        <rect width="920" height="62" rx="6" class="gk-pill-shipped" stroke-width="1" />
+        <text x="22" y="38" class="gk-mono" font-size="16" font-weight="700" fill="var(--accent-ink)">v0.7.8</text>
+        <text x="120" y="38" class="gk-mono" font-size="13" font-weight="500" fill="var(--accent-ink)">reverted to 0.6.x shell-env pattern — kept all v0.7.0 code</text>
+        <text x="900" y="38" text-anchor="end" class="gk-mono" font-size="11" font-weight="700" fill="var(--accent-ink)" letter-spacing="2">✓ SHIPPED</text>
+      </g>
+      <line x1="320" y1="743" x2="360" y2="743" stroke="var(--accent)" stroke-width="2" />
+
+      <!-- summary footer -->
+      <text x="320" y="830" class="gk-mono" font-size="13" fill="var(--ink-mute)">7 attempts</text>
+      <text x="800" y="830" text-anchor="middle" class="gk-mono" font-size="13" fill="var(--ink-mute)">→</text>
+      <text x="1280" y="830" text-anchor="end" class="gk-mono" font-size="13" font-weight="600" fill="var(--accent)">1 working revert</text>
+    </svg>
+    <figcaption class="caption">
+      <span><span class="id">FIG. 01</span> · v0.7.x release sequence — bone outlines = failed; amber = shipped.</span>
+      <span>2026-04-21</span>
+    </figcaption>
+  </figure>
+
+  <!-- ============== TWO-COLUMN LAYOUT ============== -->
+  <div class="post-layout">
+
+    <!-- ============== TOC ============== -->
+    <aside class="toc" aria-label="table of contents">
+      <span class="toc-label">contents</span>
+      <ol>
+        <li><a href="#day-one" data-href="#day-one">Day one — the obvious failures</a></li>
+        <li><a href="#auto-discovery" data-href="#auto-discovery">The auto-discovery rabbit hole</a></li>
+        <li><a href="#silent-spawn" data-href="#silent-spawn">The silent spawn-time failure</a></li>
+        <li><a href="#the-revert" data-href="#the-revert">The revert</a></li>
+        <li><a href="#lessons" data-href="#lessons">Lessons</a></li>
+      </ol>
+    </aside>
+
+    <!-- ============== POST MAIN ============== -->
+    <div class="post-main">
+
+      <!-- top share -->
+      <div class="share top">
+        <span class="label">share</span>
+        <a class="share-btn" href="https://twitter.com/intent/tweet?text=Seven%20hotfixes%20to%20ship%20a%20Claude%20Code%20plugin&url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html" target="_blank" rel="noopener" aria-label="share on x/twitter">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21.5L14.36 10.42L22.75 22h-6.94l-5.43-7.34L4.18 22H.92l7.62-9.0L0 2h7.07l4.91 6.69L18.244 2zm-2.43 18.18h1.86L7.32 3.72H5.32l10.494 16.46z"/></svg>
+          x / twitter
+        </a>
+        <a class="share-btn" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html" target="_blank" rel="noopener" aria-label="share on linkedin">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18V10H5.67v8h2.67zM7 8.94c.86 0 1.55-.7 1.55-1.55a1.55 1.55 0 1 0-3.1 0c0 .85.69 1.55 1.55 1.55zM18.34 18v-4.4c0-2.36-1.27-3.45-2.96-3.45-1.36 0-1.97.75-2.31 1.27V10h-2.67v8h2.67v-4.46c0-.24.02-.47.09-.64.18-.47.61-.96 1.34-.96.94 0 1.32.72 1.32 1.78V18h2.67z"/></svg>
+          linkedin
+        </a>
+        <a class="share-btn" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html&t=Seven%20hotfixes%20to%20ship%20a%20Claude%20Code%20plugin" target="_blank" rel="noopener" aria-label="share on hacker news">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h18v18H3V3zm9 11.21L7.79 7H6.5l5.5 9.5V21h2v-4.5L19.5 7h-1.29L13 14.21z"/></svg>
+          hacker news
+        </a>
+        <button class="share-btn" id="copy-link-btn" type="button" aria-label="copy link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="copy-text">copy link</span>
+        </button>
+        <span class="spacer"></span>
+        <span class="pageviews">12 min · v0.7.x</span>
+      </div>
+
+      <article class="post">
+        <p>
+          The premise was small. When a user installs a Claude Code plugin, the
+          runtime can prompt them for configuration — API keys, defaults, paths
+          — and stash the answers somewhere safe. Sensitive values land in the
+          system keychain. Non-sensitive values live in
+          <code>~/.claude/settings.json</code> under
+          <code>pluginConfigs[&lt;plugin-id&gt;].options</code>. The plugin's
+          manifest declares the schema with a
+          <code>userConfig</code> block, and references the values inside its
+          <code>mcpServers.env</code> block as <code>${user_config.foo}</code>.
+        </p>
+
+        <p>
+          For genkettle, this would have been a meaningful UX improvement.
+          Before v0.7.0, users had to set <code>GEMINI_API_KEY</code> as a shell
+          env var <em>before</em> launching Claude Code, get the timing wrong,
+          kill the session, and retry. Plenty of plugins ship with the
+          install-prompt pattern; chrome-devtools-mcp does. So we set out to
+          do the same.
+        </p>
+
+        <p>
+          What followed was a chain of seven releases over a single afternoon,
+          each fixing the previous one's failure mode and uncovering a deeper
+          one. Then we reverted the whole thing.
+        </p>
+
+        <h2 id="day-one">Day one: <em>the obvious failures.</em></h2>
+
+        <p>
+          The first three failures were ordinary configuration bugs. They were
+          fast to diagnose and didn't shake confidence in the approach.
+        </p>
+
+        <div class="version-stack">
+          <div class="vs-row">
+            <span class="v">v0.7.1</span>
+            <span class="desc">manifest validation rejected the new <code>userConfig</code> fields — missing <code>type</code> and <code>title</code> keys.</span>
+          </div>
+          <div class="vs-row">
+            <span class="v">v0.7.2</span>
+            <span class="desc">plugin refused to enable when fields were left empty — bare <code>${user_config.foo}</code> made every reference required.</span>
+          </div>
+          <div class="vs-row">
+            <span class="v">v0.7.3</span>
+            <span class="desc">moved <code>mcpServers</code> into a separate <code>.mcp.json</code>; bare <code>${user_config.foo}</code> resolved there.</span>
+          </div>
+          <div class="vs-row">
+            <span class="v">v0.7.4</span>
+            <span class="desc">install completed silently with no prompt — every field was optional, so Claude Code skipped the prompt entirely.</span>
+          </div>
+        </div>
+
+        <p>
+          Each one was a real fix. v0.7.4, in particular, taught us a
+          legibility lesson that would echo through the rest of the day:
+          <strong>"the install completed and showed no error" is the worst
+          possible failure mode.</strong> The plugin landed unconfigured. The
+          user pasted a slash command. Nothing happened. No suggestion of why.
+        </p>
+
+        <p>
+          We marked <code>gemini_api_key</code> as <code>required: true</code>
+          and pushed v0.7.4. The install prompt appeared. We tabbed through it,
+          pasted a key, hit enter. <code>/plugin install</code> reported
+          success. We typed <code>/gen-image -p "a teal cube"</code>.
+        </p>
+
+        <p>
+          Nothing.
+        </p>
+
+        <h2 id="auto-discovery">The auto-discovery rabbit hole.</h2>
+
+        <p>
+          <code>claude mcp list</code> showed no MCP server for the plugin.
+          <code>claude plugin list --json</code> showed it loaded fine,
+          configuration values populated. The
+          <code>mcpServers</code> definition was sitting in
+          <code>.mcp.json</code> at the plugin root, exactly where the
+          reference plugins put theirs.
+        </p>
+
+        <blockquote>
+          The install completed. The configuration was loaded. The MCP server
+          never existed. There was no error to grep for.
+          <span class="cite">— field notes, 2026-04-21</span>
+        </blockquote>
+
+        <p>
+          v0.7.5 added an explicit <code>"mcpServers": "./.mcp.json"</code>
+          pointer to <code>plugin.json</code>, hypothesizing that under Claude
+          Code 2.1.112, the auto-discovery for plugin-root <code>.mcp.json</code>
+          had regressed. The pointer made <code>claude plugin list</code>
+          acknowledge the file. The MCP server still didn't spawn.
+        </p>
+
+        <p>
+          v0.7.6 was the moment the diagnosis got interesting. <code>.mcp.json</code>
+          at a directory root is also Claude Code's project-MCP discovery
+          filename. When you launch Claude Code <em>inside the plugin's source
+          repo</em> — which we, as the plugin's authors, were doing — Claude
+          Code finds <code>.mcp.json</code> first as a project config, where
+          <code>${CLAUDE_PLUGIN_ROOT}</code> doesn't resolve. The plugin
+          registers as a project-scoped MCP, fails to spawn, never recovers.
+        </p>
+
+        <p>
+          Renaming the file to <code>plugin-mcp.json</code> killed the
+          collision. We pushed v0.7.6. The MCP server still didn't spawn.
+        </p>
+
+        <h3>v0.7.7 — when the rename also failed</h3>
+
+        <p>
+          Same configuration, this time read from
+          <code>plugin-mcp.json</code> via the explicit pointer. <code>claude
+          plugin list --json</code> reported the config loaded correctly.
+          <code>claude mcp list</code>: no entry.
+        </p>
+
+        <p>
+          v0.6.0 — still running on machines that had installed it weeks
+          earlier — used the exact same <code>${CLAUDE_PLUGIN_ROOT}</code>
+          pattern with no issues. The difference was where the
+          <code>mcpServers</code> block lived: 0.6.0 had it
+          <em>inline</em> in <code>plugin.json</code>. We had moved it out
+          in 0.7.3 because the bare <code>${user_config.foo}</code>
+          substitution didn't work inline.
+        </p>
+
+        <p>
+          v0.7.7 moved <code>mcpServers</code> back inline. The MCP server
+          still didn't spawn. By this point the suspicion was crystallizing:
+          it wasn't the file location. It was the substitution.
+        </p>
+
+        <h2 id="silent-spawn">The silent <em>spawn-time</em> failure.</h2>
+
+        <p>
+          <code>${user_config.foo}</code> references in
+          <code>mcpServers.env</code> resolved fine for the
+          <code>claude plugin list</code> machinery — that machinery reads the
+          manifest in-process and substitutes from the in-memory config. But at
+          MCP-server <em>spawn</em> time, a different code path interpolates
+          the env block before launching the child process. That second path,
+          under the version of Claude Code we were targeting, didn't resolve
+          <code>${user_config.foo}</code> references. It got a literal string
+          with the brace syntax in it. The spawn aborted. No error surfaced.
+        </p>
+
+        <p>
+          The spawn path <em>did</em> resolve <code>${SHELL_VAR:-default}</code>
+          shell-style references — which is exactly what 0.6.x had used. So
+          0.6.x ran cleanly; 0.7.x didn't; the only difference at the
+          manifest layer was the substitution pattern.
+        </p>
+
+        <h2 id="the-revert">The revert.</h2>
+
+        <p>
+          We had two options. Option one: keep the <code>userConfig</code>
+          schema, ship a workaround that wrote shell-env exports into a file
+          the plugin could source at startup, document the keychain limitation,
+          and hope a Claude Code release fixed the spawn-path substitution.
+          Option two: delete the feature.
+        </p>
+
+        <p>
+          v0.7.8 deleted the feature.
+        </p>
+
+        <p>
+          The <code>userConfig</code> schema was removed from
+          <code>plugin.json</code>. The
+          <code>mcpServers.env</code> block went back to the proven 0.6.x
+          pattern: <code>${SHELL_VAR:-default}</code> shell-style
+          interpolation, no install-time prompt, configuration via
+          <code>~/.zshrc</code> exports.
+        </p>
+
+        <p>
+          Every code change from v0.7.0 was kept. The reactive
+          <code>INPUT_TOO_LONG</code> chunking, the
+          <code>voiceDefaulted</code> signal, the per-provider default-voice
+          env vars, the <code>debug: true</code> chunk-debugging flag — all
+          shipped, all in production. <strong>Only the manifest surface
+          reverted.</strong> Users who had populated values via the doomed
+          <code>userConfig</code> prompt were given a migration note pointing
+          at <code>~/.claude/settings.json</code> and the keychain.
+        </p>
+
+        <h2 id="lessons">Lessons.</h2>
+
+        <h3>Silent failures are worse than loud ones</h3>
+
+        <p>
+          The hardest bug to fix is the one that produces zero output.
+          <code>claude mcp list</code> being empty looks identical whether the
+          plugin doesn't exist, the plugin failed to register, or the plugin
+          registered but failed to spawn. We lost three releases bisecting
+          between those states because we couldn't tell them apart from the
+          command line. Diagnostic output — even noisy diagnostic output — is
+          a feature.
+        </p>
+
+        <h3>Runtime substitution paths are sharp edges</h3>
+
+        <p>
+          Anywhere a runtime reads a config and substitutes values into it,
+          ask: does this same substitution path get re-invoked on every
+          relevant code path? In our case, <code>claude plugin list</code> and
+          <code>claude mcp spawn</code> were two different code paths reading
+          the same manifest with different substitution capabilities. The
+          surface contract — "the manifest is the manifest" — implied a
+          uniformity that didn't exist.
+        </p>
+
+        <h3>Revert is a feature</h3>
+
+        <p>
+          It's tempting, after seven hotfixes, to keep grinding. Each one is
+          cheap. Each one feels close. None of them work. The discipline of
+          saying <em>this isn't going to land in this iteration; revert and
+          keep what works</em> took longer than it should have, but it's what
+          shipped a working plugin in v0.7.8. The
+          <code>userConfig</code> schema can come back when the upstream
+          substitution-path bug is fixed. Until then, shell env vars work, and
+          working beats elegant.
+        </p>
+
+        <h3>Working in your own repo is a hazard</h3>
+
+        <p>
+          We were testing a plugin from inside the plugin's own source
+          directory. Claude Code's project-level <code>.mcp.json</code>
+          auto-discovery treated our plugin manifest as a project MCP, and the
+          collision masked the real bug. Plugin authors should test from a
+          neutral directory. The default development environment — your own
+          repo — has the most configuration overlap with the runtime you're
+          trying to integrate with. That's where false positives breed.
+        </p>
+
+        <hr class="in-post" />
+
+        <p>
+          The full timeline lives in <a href="../changelog.html#v0-7-0">the
+          changelog</a>, one entry per release, with the diagnostic threading
+          through. v0.7.0 introduces the feature. v0.7.1 through v0.7.7 try to
+          make it work. v0.7.8 reverts and keeps the engineering. v0.8.0 ships
+          Voicebox + the visual asset suite on the working manifest. The
+          install prompt is on the deferred list and will return.
+        </p>
+
+        <p>
+          Until then: <code>export GEMINI_API_KEY=...</code>, append to
+          <code>~/.zshrc</code>, ship features.
+        </p>
+      </article>
+
+      <!-- bottom share -->
+      <div class="share bottom">
+        <span class="label">if this helped</span>
+        <a class="share-btn" href="https://twitter.com/intent/tweet?text=Seven%20hotfixes%20to%20ship%20a%20Claude%20Code%20plugin&url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html" target="_blank" rel="noopener" aria-label="share on x/twitter">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21.5L14.36 10.42L22.75 22h-6.94l-5.43-7.34L4.18 22H.92l7.62-9.0L0 2h7.07l4.91 6.69L18.244 2zm-2.43 18.18h1.86L7.32 3.72H5.32l10.494 16.46z"/></svg>
+          post on x
+        </a>
+        <a class="share-btn" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html" target="_blank" rel="noopener" aria-label="share on linkedin">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18V10H5.67v8h2.67zM7 8.94c.86 0 1.55-.7 1.55-1.55a1.55 1.55 0 1 0-3.1 0c0 .85.69 1.55 1.55 1.55zM18.34 18v-4.4c0-2.36-1.27-3.45-2.96-3.45-1.36 0-1.97.75-2.31 1.27V10h-2.67v8h2.67v-4.46c0-.24.02-.47.09-.64.18-.47.61-.96 1.34-.96.94 0 1.32.72 1.32 1.78V18h2.67z"/></svg>
+          share on linkedin
+        </a>
+        <a class="share-btn" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html&t=Seven%20hotfixes%20to%20ship%20a%20Claude%20Code%20plugin" target="_blank" rel="noopener" aria-label="submit to hacker news">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h18v18H3V3zm9 11.21L7.79 7H6.5l5.5 9.5V21h2v-4.5L19.5 7h-1.29L13 14.21z"/></svg>
+          submit to HN
+        </a>
+      </div>
+
+      <!-- ============== AUTHOR CARD ============== -->
+      <aside class="author-card" aria-label="author">
+        <div class="avatar" aria-hidden="true">SB</div>
+        <div class="meta">
+          <div class="label">written by</div>
+          <div class="name">Sherif Butt <em>— maintainer of genkettle.</em></div>
+          <p class="bio">Building cost-aware tooling for Claude Code. Writes post-mortems on the failures worth remembering. Probably has too many tabs open.</p>
+          <span class="links">
+            <a href="https://github.com/sherifButt" target="_blank" rel="noopener">github.com/sherifButt</a>
+            <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">repo</a>
+          </span>
+        </div>
+      </aside>
+
+      <!-- ============== NEWSLETTER ============== -->
+      <section class="newsletter" id="newsletter">
+        <div class="label">join the list</div>
+        <h3>Get a note when something <em>interesting ships.</em></h3>
+        <p>
+          One short email per release. Post-mortems, design notes, and the
+          occasional "we ripped this out and shipped half the dist size."
+          No marketing. No drip campaigns. Unsubscribe in one click.
+        </p>
+        <form id="newsletter-form" novalidate>
+          <input type="email" name="email" placeholder="you@domain.com" autocomplete="email" required aria-label="email address" />
+          <button type="submit">
+            subscribe
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </button>
+        </form>
+        <p class="ok">✓ Got it — you're on the list.</p>
+        <p class="fineprint">Plain-text emails. No tracking pixels. ~1 message a month, if that.</p>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="post-nav">
+    <a href="esbuild-to-tsc.html" class="left">
+      <span class="label">← newer post</span>
+      <span class="title">The 3,700 bytes that broke our CI for two weeks.</span>
+    </a>
+    <a href="index.html" class="right">
+      <span class="label">all posts</span>
+      <span class="title">back to the blog index →</span>
+    </a>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap row">
+    <div class="left">
+      <img src="../assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      <span style="color: var(--ink-faint);">·</span>
+      <span>MIT · v0.8.7 · 2026</span>
+    </div>
+    <div class="links">
+      <a href="../index_v3.html">home</a>
+      <a href="index.html">blog</a>
+      <a href="../changelog.html">changelog</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">github</a>
+    </div>
+  </div>
+</footer>
+
+<aside class="share-rail" id="share-rail" aria-label="share this post">
+  <span class="label">share</span>
+  <a href="https://twitter.com/intent/tweet?text=Seven%20hotfixes%20to%20ship%20a%20Claude%20Code%20plugin&url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html" target="_blank" rel="noopener" aria-label="share on x/twitter" title="x / twitter">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21.5L14.36 10.42L22.75 22h-6.94l-5.43-7.34L4.18 22H.92l7.62-9.0L0 2h7.07l4.91 6.69L18.244 2zm-2.43 18.18h1.86L7.32 3.72H5.32l10.494 16.46z"/></svg>
+  </a>
+  <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html" target="_blank" rel="noopener" aria-label="share on linkedin" title="linkedin">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18V10H5.67v8h2.67zM7 8.94c.86 0 1.55-.7 1.55-1.55a1.55 1.55 0 1 0-3.1 0c0 .85.69 1.55 1.55 1.55zM18.34 18v-4.4c0-2.36-1.27-3.45-2.96-3.45-1.36 0-1.97.75-2.31 1.27V10h-2.67v8h2.67v-4.46c0-.24.02-.47.09-.64.18-.47.61-.96 1.34-.96.94 0 1.32.72 1.32 1.78V18h2.67z"/></svg>
+  </a>
+  <a href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fseven-hotfixes.html&t=Seven%20hotfixes%20to%20ship%20a%20Claude%20Code%20plugin" target="_blank" rel="noopener" aria-label="share on hacker news" title="hacker news">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h18v18H3V3zm9 11.21L7.79 7H6.5l5.5 9.5V21h2v-4.5L19.5 7h-1.29L13 14.21z"/></svg>
+  </a>
+  <button id="rail-copy-btn" type="button" aria-label="copy link" title="copy link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+    <span class="copied-flash">copied</span>
+  </button>
+</aside>
+
+<script>
+  // theme toggle
+  document.getElementById('theme-toggle').addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('gk-theme-v3', next);
+  });
+
+  // copy link
+  (function () {
+    var btn = document.getElementById('copy-link-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(location.href).then(function () {
+        btn.classList.add('copied');
+        var span = btn.querySelector('.copy-text');
+        var prev = span.textContent;
+        span.textContent = 'copied';
+        setTimeout(function () {
+          btn.classList.remove('copied');
+          span.textContent = prev;
+        }, 1600);
+      });
+    });
+  })();
+
+  // newsletter — stub: no backend wired, captures + acks. Replace the
+  // POST in the submit handler when you have a list provider.
+  (function () {
+    var form = document.getElementById('newsletter-form');
+    var box = document.getElementById('newsletter');
+    if (!form || !box) return;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = form.elements.email.value.trim();
+      if (!email || email.indexOf('@') === -1) {
+        form.elements.email.focus();
+        return;
+      }
+      // TODO: POST to your list provider here.
+      box.classList.add('submitted');
+    });
+  })();
+
+  // share rail — fade in only while the post body is in view, fade out
+  // on hero/title and on nav/footer below
+  (function () {
+    var rail = document.getElementById('share-rail');
+    var anchor = document.querySelector('.post');
+    if (!rail || !anchor) return;
+    if (!('IntersectionObserver' in window)) {
+      rail.classList.add('in-view');
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        rail.classList.toggle('in-view', e.isIntersecting);
+      });
+    }, { threshold: 0 });
+    io.observe(anchor);
+  })();
+
+  // rail copy button — flashes "copied" tooltip on the left of the icon
+  (function () {
+    var btn = document.getElementById('rail-copy-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(location.href).then(function () {
+        btn.classList.add('copied');
+        setTimeout(function () { btn.classList.remove('copied'); }, 1600);
+      });
+    });
+  })();
+
+  // TOC active-section observer
+  (function () {
+    var toc = document.querySelectorAll('.toc a[data-href]');
+    if (!toc.length || !('IntersectionObserver' in window)) return;
+    var byId = {};
+    toc.forEach(function (a) {
+      var id = a.getAttribute('data-href').slice(1);
+      byId[id] = a;
+    });
+    var headings = document.querySelectorAll('.post h2[id]');
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          toc.forEach(function (a) { a.classList.remove('active'); });
+          var a = byId[e.target.id];
+          if (a) a.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-100px 0px -65% 0px', threshold: 0 });
+    headings.forEach(function (h) { io.observe(h); });
+  })();
+</script>
+</body>
+</html>

@@ -24,12 +24,23 @@ export interface SidecarSpeechInput {
   referenceAudioPath?: string;
 }
 
-export type SidecarInput = SidecarImageInput | SidecarSpeechInput;
+export interface SidecarVideoInput {
+  prompt: string;
+  /** Path to the input frame animated into video (image-to-video). */
+  imagePath: string;
+  /** Additional reference image paths passed alongside `imagePath`. */
+  referenceImagePaths?: string[];
+  /** Requested clip length in seconds. */
+  durationSeconds: number;
+  aspectRatio?: import("../util/aspect.js").AspectRatio;
+}
+
+export type SidecarInput = SidecarImageInput | SidecarSpeechInput | SidecarVideoInput;
 
 export interface SidecarMetadata {
   version: 1;
   createdAt: string;
-  tool: "generate_image" | "generate_speech";
+  tool: "generate_image" | "generate_speech" | "generate_video";
   modality: Modality;
   provider: ProviderId;
   model: string;

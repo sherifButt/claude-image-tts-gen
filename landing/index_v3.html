@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>genkettle — the ledger for image, TTS &amp; video in Claude Code.</title>
+<meta name="description" content="A cost-aware MCP plugin. Seven providers, one tier knob, one ledger, hard pre-call budget caps, $0/call local escape hatch. Image, TTS, and image-to-video. MIT licensed." />
+<meta property="og:title" content="genkettle — the ledger for image, TTS &amp; video in Claude Code." />
+<meta property="og:description" content="Seven providers behind one tier knob. One ledger. Zero lock-in." />
+<link rel="icon" href="assets/genkettle-mark.svg" type="image/svg+xml" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<script>
+  (function () {
+    var stored = localStorage.getItem('gk-theme-v3');
+    document.documentElement.setAttribute('data-theme', stored || 'dark');
+  })();
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  /* ============== TOKENS ==============
+     Black & bone preset (warm). Single amber accent, used only for:
+     - cost numerals
+     - the primary CTA
+     - ::selection
+     - the manifest "OK" status pip
+     Everything else is bone-on-black, with weight + size for hierarchy.
+     Light theme is a deliberate inversion (bone on warm-white) so the
+     accent role stays identical when toggled. */
+  :root,
+  [data-theme="dark"] {
+    --bg:        #0a0a0a;     /* warm black, not pure */
+    --bg-elev:   #111111;
+    --bg-hi:     #161616;
+    --bg-low:    #0d0d0d;
+    --line:      #1d1d1c;
+    --line-hi:   #2c2c2a;
+    --line-faint:#161615;
+    --ink:       #e8e6e1;     /* bone, not pure white */
+    --ink-dim:   #a09e96;
+    --ink-mute:  #6c6a64;
+    --ink-faint: #3e3d39;
+    --accent:    #f0a06a;     /* amber */
+    --accent-dim:#a26944;     /* same hue, halved chroma — for hover/seconds */
+    --accent-ink:#15110d;
+    --invert:    1;
+  }
+
+  [data-theme="light"] {
+    --bg:        #efece4;     /* warm bone canvas */
+    --bg-elev:   #f7f5ef;
+    --bg-hi:     #e6e3da;
+    --bg-low:    #e8e5dc;
+    --line:      #cfccc1;
+    --line-hi:   #b3b0a5;
+    --line-faint:#dbd8cd;
+    --ink:       #14110e;
+    --ink-dim:   #4a4842;
+    --ink-mute:  #807e76;
+    --ink-faint: #b1afa6;
+    --accent:    #b85a26;     /* amber, anchored for paper */
+    --accent-dim:#7a3e1c;
+    --accent-ink:#f7f5ef;
+    --invert:    0;
+  }
+
+  :root {
+    --serif: 'Newsreader', 'Times New Roman', Georgia, serif;
+    --mono:  'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    --max:   1180px;
+    --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-x: hidden;
+    transition: background-color .25s ease, color .25s ease;
+  }
+
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  a { color: inherit; text-decoration: none; }
+  a:hover { color: var(--ink); }
+
+  /* ============== LAYOUT PRIMITIVES ============== */
+  .wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
+  hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* manifest header — used between sections, replaces section eyebrows.
+     A tiny mono key | value | meta strip that signals "spec-sheet voice." */
+  .manifest {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 18px;
+    align-items: baseline;
+    padding: 14px 0 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: clamp(28px, 4vh, 44px);
+  }
+  .manifest .id {
+    color: var(--ink-dim); font-weight: 600;
+  }
+  .manifest .name {
+    color: var(--ink);
+    letter-spacing: 0.04em;
+  }
+  .manifest .meta { color: var(--ink-mute); white-space: nowrap; }
+  @media (max-width: 640px) {
+    .manifest { grid-template-columns: auto 1fr; }
+    .manifest .meta { grid-column: 1 / -1; text-align: left; }
+  }
+
+  /* ============== NAV ============== */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    height: 56px; gap: 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .word { height: 12px; color: var(--ink); filter: invert(var(--invert)); }
+  .brand .vchip {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+    color: var(--ink-mute);
+    border: 1px solid var(--line);
+    padding: 2px 6px; border-radius: 3px;
+    margin-left: 4px;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  a.vchip:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .nav-status {
+    justify-self: center;
+    display: none;
+    font-family: var(--mono);
+    font-size: 11px; color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  .nav-status .pip {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%;
+    margin-right: 8px; vertical-align: 1px;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+    animation: gk-pulse 2s ease-out infinite;
+  }
+  @keyframes gk-pulse {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); }
+    70%  { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @media (min-width: 920px) { .nav-status { display: block; } }
+
+  .nav-links {
+    justify-self: end;
+    display: flex; align-items: center; gap: 22px;
+    font-family: var(--mono);
+    font-size: 12px; color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 11px;
+    background: var(--ink); color: var(--bg);
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 500;
+    transition: transform .15s ease;
+  }
+  .nav-cta:hover { color: var(--bg); transform: translateY(-1px); }
+  .theme-toggle {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 4px;
+    color: var(--ink-dim); cursor: pointer; transition: all .15s;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--line-hi); }
+  @media (max-width: 760px) {
+    .nav-links a:not(.nav-cta):not(.theme-toggle-wrap a) { display: none; }
+  }
+
+  /* ============== HERO ==============
+     Center-stacked. The lockup is the punctuation; one bold serif sentence
+     underneath does all the persuasion. Mono lede + mono CTA row keeps the
+     spec-sheet voice consistent. No demo widget — that's section 02. */
+  .hero {
+    padding: clamp(56px, 11vh, 120px) 0 clamp(40px, 7vh, 80px);
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-id {
+    font-family: var(--mono);
+    font-size: 11px; letter-spacing: 0.18em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    margin-bottom: 36px;
+    display: inline-flex; align-items: center; gap: 14px;
+  }
+  .hero-id .bar {
+    display: inline-block;
+    width: 28px; height: 1px;
+    background: var(--line-hi);
+  }
+  .hero-lockup {
+    width: clamp(220px, 36vw, 360px);
+    height: auto;
+    color: var(--ink);
+    margin: 0 auto 44px;
+    display: block;
+    filter: invert(var(--invert));
+  }
+  .hero h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(2rem, 5.6vw, 4rem);
+    line-height: 1.04;
+    letter-spacing: -0.022em;
+    max-width: 22ch;
+    margin: 0 auto 28px;
+    color: var(--ink);
+    font-variation-settings: "opsz" 36;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--ink-dim);
+    font-weight: 500;
+  }
+  .hero h1 .accent {
+    color: var(--accent);
+    font-style: italic;
+  }
+  .hero .lede {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--ink-dim);
+    max-width: 60ch;
+    margin: 0 auto 36px;
+    line-height: 1.7;
+  }
+  .hero .lede strong { color: var(--ink); font-weight: 500; }
+
+  .cta-row {
+    display: inline-flex; gap: 10px; flex-wrap: wrap;
+    justify-content: center; align-items: center;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px; border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 12.5px; font-weight: 500;
+    letter-spacing: 0.02em;
+    transition: transform .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { color: var(--accent-ink); transform: translateY(-1px); background: var(--accent); }
+  .btn-ghost {
+    color: var(--ink); border-color: var(--line-hi);
+    background: transparent;
+  }
+  .btn-ghost:hover { background: var(--bg-hi); color: var(--ink); }
+  .btn .arrow { transition: transform .15s ease; }
+  .btn:hover .arrow { transform: translateX(2px); }
+
+  .hero-foot {
+    margin-top: 48px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-foot div {
+    padding: 16px 14px;
+    text-align: left;
+    border-right: 1px solid var(--line);
+    font-family: var(--mono);
+    min-width: 0;
+  }
+  .hero-foot div:last-child { border-right: 0; }
+  .hero-foot .k {
+    display: block;
+    font-size: 10px; letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .hero-foot .v {
+    display: block;
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .hero-foot .v.amber { color: var(--accent); }
+  @media (max-width: 720px) {
+    .hero-foot { grid-template-columns: repeat(2, 1fr); }
+    .hero-foot div { border-bottom: 1px solid var(--line); }
+    .hero-foot div:nth-child(2) { border-right: 0; }
+    .hero-foot div:nth-last-child(-n+2) { border-bottom: 0; }
+  }
+
+  /* ============== SECTION PRIMITIVES ============== */
+  section { padding: clamp(56px, 9vh, 100px) 0; }
+  .section-head { margin-bottom: 40px; max-width: 880px; }
+  .section-title {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.7rem, 3.8vw, 2.6rem);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    max-width: 24ch;
+    margin-bottom: 14px;
+    color: var(--ink);
+    font-variation-settings: "opsz" 28;
+  }
+  .section-title em { font-style: italic; color: var(--ink-dim); font-weight: 500; }
+  .section-title .accent { color: var(--accent); font-style: italic; }
+  .section-lede {
+    color: var(--ink-dim);
+    max-width: 64ch;
+    font-size: 13.5px;
+    line-height: 1.7;
+    font-family: var(--mono);
+  }
+  .section-lede strong { color: var(--ink); font-weight: 500; }
+  .section-lede code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 6px; border-radius: 3px; color: var(--ink);
+  }
+
+  /* ============== TIER MATRIX (section 01) ==============
+     The defining signature for v3. Seven providers × three tiers, rendered
+     as a dense grid. Each cell shows the model that fulfills that slot,
+     with mono labels. Empty cells are honest dashes — never a fake "yes."
+  */
+  .matrix-wrap {
+    overflow-x: auto;
+    margin: 0 calc(var(--gutter) * -1);
+    padding: 0 var(--gutter);
+  }
+  .matrix {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  .matrix th, .matrix td {
+    padding: 14px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    color: var(--ink-dim);
+  }
+  .matrix th {
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line-hi);
+  }
+  .matrix th:first-child {
+    color: var(--ink); font-size: 11px;
+  }
+  .matrix tr:last-child td { border-bottom: 0; }
+  .matrix .prov {
+    color: var(--ink); font-weight: 500;
+    width: 22%;
+  }
+  .matrix .prov .sub {
+    display: block;
+    font-size: 11px;
+    color: var(--ink-mute);
+    font-weight: 400;
+    margin-top: 2px;
+    letter-spacing: 0;
+  }
+  .matrix .cell {
+    color: var(--ink); font-weight: 400;
+  }
+  .matrix .cell .price {
+    display: block;
+    font-size: 10.5px;
+    color: var(--accent);
+    margin-top: 3px;
+    letter-spacing: 0;
+  }
+  .matrix .cell .price.zero { color: var(--ink-mute); }
+  .matrix .cell.empty { color: var(--ink-faint); }
+  .matrix .modality {
+    color: var(--ink-mute); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    width: 11%;
+  }
+  .matrix tr.section-row td {
+    background: var(--bg-low);
+    border-bottom: 1px solid var(--line-hi);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    padding: 10px 14px;
+  }
+
+  /* ============== LEDGER DEMO (section 02) ============== */
+  .ledger-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.05fr;
+    gap: clamp(24px, 5vw, 56px);
+    align-items: stretch;
+  }
+  @media (max-width: 920px) {
+    .ledger-grid { grid-template-columns: 1fr; }
+  }
+  .ledger-copy h2 { margin-bottom: 16px; }
+  .ledger-copy p {
+    color: var(--ink-dim); margin-bottom: 16px;
+    font-size: 13.5px; line-height: 1.7;
+  }
+  .ledger-copy p strong { color: var(--ink); font-weight: 500; }
+  .ledger-copy p code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 6px; border-radius: 3px; color: var(--ink);
+  }
+  .ledger-copy .scenario {
+    margin-top: 22px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    background: var(--bg-elev);
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    line-height: 1.65;
+  }
+  .ledger-copy .scenario strong {
+    display: block;
+    color: var(--ink); font-weight: 600;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  /* the live ledger pane */
+  .pane {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    display: flex; flex-direction: column;
+  }
+  .pane .head {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-low);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    font-size: 10.5px; letter-spacing: 0.08em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+  }
+  .pane .head .dots { display: inline-flex; gap: 5px; }
+  .pane .head .dots i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--line-hi); display: inline-block;
+  }
+  .pane .head .pane-title {
+    color: var(--ink); letter-spacing: 0.06em;
+    text-align: left;
+  }
+  .pane .head .replay {
+    background: transparent;
+    border: 1px solid var(--line-hi);
+    border-radius: 3px;
+    color: var(--ink-mute);
+    font-family: var(--mono); font-size: 9.5px;
+    padding: 2px 7px; cursor: pointer;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 5px;
+    transition: all .15s;
+  }
+  .pane .head .replay:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  .demo-stream {
+    flex: 1;
+    min-height: 380px;
+    overflow-y: auto;
+    padding: 14px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-hi) transparent;
+  }
+  .demo-stream::-webkit-scrollbar { width: 6px; }
+  .demo-stream::-webkit-scrollbar-thumb {
+    background: var(--line-hi); border-radius: 3px;
+  }
+  .demo-line {
+    white-space: pre-wrap; word-break: break-word;
+    color: var(--ink-dim);
+    margin-bottom: 2px;
+  }
+  .demo-line.tag {
+    color: var(--ink-mute);
+    font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 14px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .demo-line.tag:first-child { margin-top: 0; }
+  .demo-line.user { color: var(--ink); margin-top: 8px; font-weight: 500; }
+  .demo-line.user::before { content: '$ '; color: var(--accent); font-weight: 600; }
+  .demo-line.tool { color: var(--ink-dim); padding-left: 0; }
+  .demo-line.tool::before { content: '↳ '; color: var(--ink-mute); }
+  .demo-line.note { color: var(--ink-mute); padding-left: 16px; font-size: 11.5px; }
+  .demo-line.row {
+    color: var(--ink-dim);
+    padding-left: 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+  .demo-line.row .desc { color: var(--ink); }
+  .demo-line.row .cost { color: var(--accent); font-weight: 600; text-align: right; white-space: nowrap; }
+  .demo-line.row .cost.zero { color: var(--ink-mute); font-weight: 500; }
+  .demo-line.row.total {
+    color: var(--ink); font-weight: 600;
+    border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px;
+  }
+  .demo-line.block {
+    color: var(--ink);
+    padding: 8px 12px;
+    margin: 6px 0 0 16px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+  }
+  .demo-line.block .label {
+    color: var(--accent); font-weight: 700; letter-spacing: 0.04em;
+  }
+  .demo-cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--accent);
+    vertical-align: -2px; margin-left: 2px;
+    animation: gk-blink 1s steps(2, end) infinite;
+  }
+  @keyframes gk-blink { 50% { opacity: 0; } }
+
+  .pane-foot {
+    padding: 9px 14px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-low);
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .pane-foot .ok::before {
+    content: '●'; color: var(--accent); margin-right: 6px;
+    font-size: 9px; vertical-align: 1px;
+  }
+  .pane-foot .step { color: var(--ink); }
+
+  /* ============== SPEC SHEET (section 03 — features) ==============
+     Two-column dense list. No icons, no cards. Each entry is a numbered
+     spec row: heading + body, with the heading in serif italic for voice
+     and the body in mono for technical density.
+  */
+  .spec {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: clamp(32px, 5vw, 72px);
+    row-gap: 0;
+  }
+  @media (max-width: 760px) { .spec { grid-template-columns: 1fr; } }
+  .spec-row {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 16px;
+    padding: 22px 0;
+    border-top: 1px solid var(--line);
+    align-items: baseline;
+  }
+  .spec > .spec-row:nth-child(2),
+  .spec > .spec-row:first-child { border-top: 1px solid var(--line); }
+  .spec-row .num {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.08em;
+    color: var(--ink-mute);
+    padding-top: 6px;
+  }
+  .spec-row h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 1.25rem;
+    line-height: 1.2;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    margin-bottom: 8px;
+    font-variation-settings: "opsz" 24;
+  }
+  .spec-row h3 em { font-style: italic; color: var(--ink-dim); }
+  .spec-row p {
+    color: var(--ink-dim);
+    font-size: 12.5px;
+    line-height: 1.65;
+    font-family: var(--mono);
+  }
+  .spec-row p strong { color: var(--ink); font-weight: 500; }
+  .spec-row p code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 5px; border-radius: 3px; color: var(--ink);
+  }
+
+  /* ============== LOCAL ============== */
+  .local-grid {
+    display: grid;
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: clamp(24px, 5vw, 56px);
+    align-items: start;
+  }
+  @media (max-width: 860px) { .local-grid { grid-template-columns: 1fr; } }
+  .local-grid h2 { margin-bottom: 16px; }
+  .local-grid p {
+    color: var(--ink-dim); margin-bottom: 14px;
+    font-size: 13.5px; line-height: 1.7;
+  }
+  .local-grid p strong { color: var(--ink); font-weight: 500; }
+  .local-grid p code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 6px; border-radius: 3px; color: var(--ink);
+  }
+
+  .receipt-line {
+    margin-top: 22px;
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 12px; align-items: baseline;
+    padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  .receipt-line .desc { color: var(--ink); }
+  .receipt-line .cost { color: var(--accent); font-weight: 600; }
+  .receipt-line .t {
+    color: var(--ink-mute); font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .local-tags {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-top: 22px;
+  }
+  .local-tag {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-dim);
+    border: 1px solid var(--line-hi);
+    padding: 4px 10px; border-radius: 3px;
+    transition: all .15s;
+    letter-spacing: 0.02em;
+  }
+  .local-tag:hover {
+    background: var(--bg-hi);
+    border-color: var(--ink-faint);
+    color: var(--ink);
+  }
+
+  /* code block (terminal) */
+  .code {
+    background: #050505;
+    color: #e0ddd6;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  [data-theme="light"] .code {
+    background: #14110e;
+    border-color: #14110e;
+  }
+  .code .head {
+    padding: 8px 13px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px; align-items: center;
+    font-size: 10px; color: #888581;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .code .head .dots { display: inline-flex; gap: 4px; }
+  .code .head .dots i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #2a2823; display: inline-block;
+  }
+  .code .head .label {
+    color: #c8c5be;
+    text-align: left;
+  }
+  .code .body {
+    padding: 14px 16px;
+    white-space: pre;
+    overflow-x: auto;
+    color: #e0ddd6;
+  }
+  .code .body .c { color: #6a6862; font-style: italic; }
+  .code .body .k { color: #f0a06a; }
+  .code .body .s { color: #c8c5be; }
+  .code .body .p { color: #e0ddd6; font-weight: 600; }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid #2a2823; border-radius: 3px;
+    color: #888581;
+    font-family: var(--mono); font-size: 9.5px;
+    padding: 2px 7px; cursor: pointer; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: all .15s;
+  }
+  .copy-btn:hover { color: #e0ddd6; border-color: #3a3833; }
+
+  /* ============== COMPARE ============== */
+  .compare-wrap {
+    overflow-x: auto;
+    margin: 0 calc(var(--gutter) * -1);
+    padding: 0 var(--gutter);
+  }
+  .compare {
+    width: 100%; min-width: 720px;
+    border-collapse: separate; border-spacing: 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  .compare th, .compare td {
+    text-align: left;
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-dim);
+    vertical-align: top;
+  }
+  .compare th:first-child, .compare td:first-child {
+    color: var(--ink); width: 32%;
+    font-family: var(--mono); font-size: 12.5px;
+  }
+  .compare thead th {
+    font-family: var(--mono); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--ink-mute); font-weight: 500;
+    border-bottom: 1px solid var(--line-hi);
+    padding-bottom: 14px;
+  }
+  .compare thead th.us {
+    color: var(--ink); position: relative;
+  }
+  .compare thead th.us::after {
+    content: ''; position: absolute; bottom: -1px; left: 14px; right: 14px;
+    height: 2px; background: var(--accent);
+  }
+  .compare td.us { color: var(--ink); }
+  .compare td.us .yes::before {
+    content: '✓ '; color: var(--accent); font-weight: 700;
+  }
+  .compare .no { color: var(--ink-faint); }
+  .compare .partial { color: var(--ink-mute); font-style: italic; font-size: 12px; }
+  .compare tr:last-child td { border-bottom: 0; }
+
+  /* ============== INSTALL ============== */
+  .install-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: clamp(24px, 4vw, 48px);
+  }
+  @media (max-width: 760px) { .install-grid { grid-template-columns: 1fr; } }
+  .step {
+    border-top: 1px solid var(--line);
+    padding-top: 26px;
+  }
+  .step .step-no {
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink-mute); letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .step .step-no .dot {
+    width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%;
+    display: inline-block;
+  }
+  .step h4 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 1.4rem; line-height: 1.2;
+    letter-spacing: -0.012em;
+    margin-bottom: 12px; color: var(--ink);
+    font-variation-settings: "opsz" 24;
+  }
+  .step h4 em { font-style: italic; color: var(--ink-dim); }
+  .step p {
+    color: var(--ink-dim); font-size: 12.5px;
+    margin-bottom: 16px; line-height: 1.65;
+    max-width: 50ch; font-family: var(--mono);
+  }
+  .step p a {
+    color: var(--ink); text-decoration: underline;
+    text-underline-offset: 3px; text-decoration-color: var(--line-hi);
+  }
+  .step p a:hover { text-decoration-color: var(--accent); }
+  .step p code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 5px; border-radius: 3px; color: var(--ink);
+  }
+
+  /* ============== FINAL CTA ============== */
+  .final {
+    padding: clamp(72px, 12vh, 140px) 0 clamp(56px, 8vh, 96px);
+    border-top: 1px solid var(--line);
+  }
+  .final-grid {
+    display: grid; grid-template-columns: 1.2fr 0.8fr;
+    gap: clamp(32px, 5vw, 80px);
+    align-items: end;
+  }
+  @media (max-width: 760px) { .final-grid { grid-template-columns: 1fr; } }
+  .final h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(1.9rem, 4.4vw, 3.2rem);
+    line-height: 1.02; letter-spacing: -0.022em;
+    margin-bottom: 22px; max-width: 18ch;
+    font-variation-settings: "opsz" 36;
+  }
+  .final h2 em { font-style: italic; color: var(--accent); font-weight: 500; }
+  .final p {
+    color: var(--ink-dim); max-width: 56ch;
+    font-size: 13.5px; line-height: 1.7;
+    margin-bottom: 28px; font-family: var(--mono);
+  }
+  .final-mark {
+    width: 100%; max-width: 200px;
+    margin-left: auto; display: block;
+    color: var(--ink); opacity: 0.85;
+    filter: invert(var(--invert));
+  }
+
+  /* ============== FOOTER ============== */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 22px 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  footer .row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 14px;
+  }
+  footer .links { display: flex; gap: 22px; }
+  footer .links a:hover { color: var(--ink); }
+  footer .word {
+    height: 10px; color: var(--ink-mute);
+    opacity: 0.75; filter: invert(var(--invert));
+  }
+  footer .left { display: flex; align-items: center; gap: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ============== NAV ============== -->
+<nav>
+  <div class="wrap row">
+    <span class="brand">
+      <a href="#top" aria-label="genkettle home" style="display: inline-flex; align-items: center;">
+        <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      </a>
+      <a href="changelog.html#v0-8-7" class="vchip" aria-label="view v0.8.7 changelog entry">v0.8.7</a>
+    </span>
+    <span class="nav-status"><span class="pip"></span>budget · $5/day · 0% used</span>
+    <div class="nav-links">
+      <a href="#tiers">tiers</a>
+      <a href="#ledger">ledger</a>
+      <a href="#spec">spec</a>
+      <a href="#install">install</a>
+      <a href="changelog.html">changelog</a>
+      <a href="blog/index.html">blog</a>
+      <button class="theme-toggle" aria-label="toggle theme" id="theme-toggle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <a class="nav-cta" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        github
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============== HERO ============== -->
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-id">
+      <span class="bar"></span>
+      <span>MCP plugin · Claude Code · v0.8.7</span>
+      <span class="bar"></span>
+    </div>
+
+    <img src="assets/genkettle-lockup.svg" alt="genkettle" class="hero-lockup" />
+
+    <h1>
+      The <span class="accent">ledger</span>
+      for image, TTS &amp; video <em>in Claude Code.</em>
+    </h1>
+
+    <p class="lede">
+      Seven providers behind one tier knob. <strong>One ledger.</strong>
+      <strong>One budget cap.</strong> Hard-enforced before the call,
+      sidecar-tracked after, with a <strong>$0/call local escape hatch</strong>
+      that just works. Generate without the bill being a surprise.
+    </p>
+
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install">
+        install in two commands
+        <svg class="arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        view source
+      </a>
+    </div>
+
+    <div class="hero-foot">
+      <div>
+        <span class="k">providers</span>
+        <span class="v">6</span>
+      </div>
+      <div>
+        <span class="k">default cap</span>
+        <span class="v amber">$5 / day</span>
+      </div>
+      <div>
+        <span class="k">local cost</span>
+        <span class="v">$0.00 / call</span>
+      </div>
+      <div>
+        <span class="k">license</span>
+        <span class="v">MIT · semver</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============== TIER MATRIX ============== -->
+<section id="tiers">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 01</span>
+      <span class="name">tier matrix · provider × modality × slot</span>
+      <span class="meta">single source · registry.ts</span>
+    </div>
+
+    <div class="section-head">
+      <h2 class="section-title">One knob — <em>small | mid | pro</em> — that <span class="accent">spans every provider.</span></h2>
+      <p class="section-lede">
+        Code written for Gemini runs unchanged against OpenAI or a local
+        Kokoro model — swap <code>--provider</code> and the call still
+        runs. No per-vendor quirks in your prompt code, no special-casing
+        voice IDs. Empty cells are honest: that slot just isn't shipped.
+      </p>
+    </div>
+
+    <div class="matrix-wrap">
+      <table class="matrix" aria-label="provider tier matrix">
+        <thead>
+          <tr>
+            <th>provider</th>
+            <th>modality</th>
+            <th>small</th>
+            <th>mid</th>
+            <th>pro</th>
+            <th>batch</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="section-row"><td colspan="6">cloud · image</td></tr>
+          <tr>
+            <td class="prov">Google Gemini<span class="sub">default · cheapest</span></td>
+            <td class="modality">image</td>
+            <td class="cell">flash-image<span class="price">$0.0039</span></td>
+            <td class="cell empty">—</td>
+            <td class="cell">imagen 4<span class="price">$0.040</span></td>
+            <td class="cell">flash · 50%</td>
+          </tr>
+          <tr>
+            <td class="prov">OpenAI<span class="sub">gpt-image-1 ×3</span></td>
+            <td class="modality">image</td>
+            <td class="cell">low<span class="price">$0.011</span></td>
+            <td class="cell">medium<span class="price">$0.042</span></td>
+            <td class="cell">high<span class="price">$0.167</span></td>
+            <td class="cell">yes · 50%</td>
+          </tr>
+          <tr>
+            <td class="prov">OpenRouter<span class="sub">passthrough</span></td>
+            <td class="modality">image</td>
+            <td class="cell">passthrough</td>
+            <td class="cell">passthrough</td>
+            <td class="cell">passthrough</td>
+            <td class="cell empty">—</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="6">cloud · tts</td></tr>
+          <tr>
+            <td class="prov">Google Gemini<span class="sub">flash · studio</span></td>
+            <td class="modality">tts</td>
+            <td class="cell">flash tts</td>
+            <td class="cell empty">—</td>
+            <td class="cell">studio voices</td>
+            <td class="cell">yes · 50%</td>
+          </tr>
+          <tr>
+            <td class="prov">OpenAI<span class="sub">tts-1 ··· hd</span></td>
+            <td class="modality">tts</td>
+            <td class="cell">tts-1</td>
+            <td class="cell">gpt-4o-mini-tts</td>
+            <td class="cell">tts-1-hd</td>
+            <td class="cell empty">—</td>
+          </tr>
+          <tr>
+            <td class="prov">ElevenLabs<span class="sub">+ word timestamps</span></td>
+            <td class="modality">tts</td>
+            <td class="cell">turbo</td>
+            <td class="cell">multilingual v2</td>
+            <td class="cell empty">—</td>
+            <td class="cell empty">—</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="6">cloud · video</td></tr>
+          <tr>
+            <td class="prov">Replicate<span class="sub">grok-imagine-video · per sec</span></td>
+            <td class="modality">video</td>
+            <td class="cell">480p<span class="price">$0.08/s</span></td>
+            <td class="cell">720p<span class="price">$0.14/s</span></td>
+            <td class="cell empty">—</td>
+            <td class="cell empty">—</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="6">local · $0 · auto-detected</td></tr>
+          <tr>
+            <td class="prov">Local server<span class="sub">openai-compatible</span></td>
+            <td class="modality">i · t</td>
+            <td class="cell">--model &lt;id&gt;<span class="price zero">$0.0000</span></td>
+            <td class="cell">--model &lt;id&gt;<span class="price zero">$0.0000</span></td>
+            <td class="cell">--model &lt;id&gt;<span class="price zero">$0.0000</span></td>
+            <td class="cell empty">—</td>
+          </tr>
+          <tr>
+            <td class="prov">Voicebox<span class="sub">7 engines · cloning</span></td>
+            <td class="modality">tts</td>
+            <td class="cell">kokoro · piper<span class="price zero">$0.0000</span></td>
+            <td class="cell">orpheus · qwen3<span class="price zero">$0.0000</span></td>
+            <td class="cell">chatterbox · xtts<span class="price zero">$0.0000</span></td>
+            <td class="cell empty">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== LEDGER DEMO ============== -->
+<section id="ledger">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 02</span>
+      <span class="name">live ledger · pre-call enforcement</span>
+      <span class="meta">5-beat replay · auto-loops</span>
+    </div>
+
+    <div class="ledger-grid">
+      <div class="ledger-copy">
+        <h2 class="section-title">A $5 daily cap means <em>$5</em>. <span class="accent">Enforced</span> before the API call.</h2>
+        <p>
+          Per-call, session, and per-project ledgers, all written through
+          <code>state/store.ts</code> with a lockfile so parallel calls
+          don't race. Hard caps fire <strong>pre-call</strong>, not after
+          the charge — the budget guard returns a structured
+          <code>BUDGET_EXCEEDED</code> with a suggested fix. Identical
+          repeats hit the cache and return at <strong>$0</strong>.
+        </p>
+        <p>
+          <code>estimate_cost</code> ranks every implemented (provider,
+          tier) combo as a dry-run before you spend. CSV / JSON receipts
+          export by month. Pricing lives in a versioned JSON with a 30-day
+          staleness warning surfaced by <code>health_check</code>.
+        </p>
+
+        <div class="scenario">
+          <strong>scenario · the demo on the right</strong>
+          A $0.05 daily cap. One image (gemini · flash · $0.0039). One
+          long TTS via Voicebox ($0.0000). The ledger reveals the running
+          total. The next image is <em>blocked pre-call</em> — no
+          provider hit, no spend.
+        </div>
+      </div>
+
+      <aside class="pane" aria-label="genkettle live demo transcript">
+        <div class="head">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="pane-title">claude code · genkettle.log</span>
+          <button class="replay" id="replay-btn" type="button" aria-label="replay demo">
+            <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4v4h4"/><path d="M2.6 10.5A6 6 0 1 0 4 5.5L2 8"/></svg>
+            replay
+          </button>
+        </div>
+        <div class="demo-stream" id="demo-stream" role="log" aria-live="polite"></div>
+        <div class="pane-foot">
+          <span class="ok" id="demo-status">starting · 5-beat demo</span>
+          <span class="step" id="demo-step">— · —</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== SPEC SHEET ============== -->
+<section id="spec">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 03</span>
+      <span class="name">spec sheet · the cross-cutting work</span>
+      <span class="meta">8 entries</span>
+    </div>
+
+    <div class="section-head">
+      <h2 class="section-title">Eight things <em>most provider wrappers leave to you.</em></h2>
+      <p class="section-lede">
+        Plenty of MCP servers wrap a vendor. genkettle wraps six and adds
+        the cross-cutting work that, without it, lands on the caller:
+        budgets, ledger, sidecars, failover, chunking, batch, captions,
+        cloning.
+      </p>
+    </div>
+
+    <div class="spec">
+      <article class="spec-row">
+        <span class="num">01</span>
+        <div>
+          <h3>Cost-aware <em>before</em> the call.</h3>
+          <p>Per-call, session, and per-project ledgers. Hard daily / weekly / monthly caps enforced <strong>pre-call</strong>, not after the charge. Dry-run <code>estimate_cost</code> ranks every (provider, tier). A $0 cache returns identical repeats for free.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">02</span>
+        <div>
+          <h3>Reproducibility <em>in the file system.</em></h3>
+          <p>Every output writes a hidden <code>.regenerate.json</code> sidecar — prompt, provider, model, tier, params, lineage. <code>regenerate</code> re-runs the brief; <code>iterate</code> adds a tweak and threads parent → child.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">03</span>
+        <div>
+          <h3>Long-text TTS, <em>chunked when it has to be.</em></h3>
+          <p>Sentence-aware splitter, ffmpeg stitch, single deliverable. Triggers pre-emptively (text > slot max) and <strong>reactively</strong> when a provider rejects shorter input as too long — <code>INPUT_TOO_LONG</code> retries on the same provider so voice + cache stay stable.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">04</span>
+        <div>
+          <h3>Provider failover, <em>with a paper trail.</em></h3>
+          <p>Automatic on rate-limit, 5xx, or timeout. Each retry logs its cost delta. Voice cloning <strong>pins</strong> to the preferred provider so the reference isn't silently dropped when a non-cloning backend would have been chosen.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">05</span>
+        <div>
+          <h3>Free local <em>escape hatch.</em></h3>
+          <p>Same plugin, same skills, same sidecars, no API key, no network, no bill. Route to Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, or Voicebox. <strong>Auto-detected</strong> at startup since v0.8.5.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">06</span>
+        <div>
+          <h3>Batch mode where the <em>vendor supports it.</em></h3>
+          <p>50% off, &le; 24h. <code>batch_submit</code> queues, <code>batch_status</code> polls and fires <code>notifications/message</code> on completion. Image batch on Gemini Flash + OpenAI; TTS batch on Gemini.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">07</span>
+        <div>
+          <h3>Captions, <em>without a stitcher.</em></h3>
+          <p>SRT / VTT exported from ElevenLabs word-level timestamps. Image post-processing presets ship the share-target sizes (<code>og</code>, <code>twitter</code>, <code>favicon</code>, <code>linkedin</code>, <code>instagram-square</code>) plus a local ONNX background remover.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">08</span>
+        <div>
+          <h3>MCP-native UX <em>you'd expect.</em></h3>
+          <p>Elicitation when ≥2 prompts queue (batch vs. sync). Sampling for the prompt rewriter. Resources for recent outputs in the asset panel. Structured errors with <code>code</code>, <code>message</code>, <code>suggestedFix</code> — never raw provider blobs.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== LOCAL ============== -->
+<section id="local">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 04</span>
+      <span class="name">local · openai-compatible · $0/call</span>
+      <span class="meta">auto-detected · v0.8.5+</span>
+    </div>
+
+    <div class="local-grid">
+      <div>
+        <h2 class="section-title">Run it 100% local. <span class="accent">Zero keys.</span></h2>
+        <p>
+          Point genkettle at any OpenAI-compatible local server and
+          generate images or speech without a key, network round-trip, or
+          dollar spent. Sidecars, cache, regenerate, iterate,
+          post-processing — everything keeps working.
+        </p>
+        <p>
+          <strong>Auto-detected at startup</strong> since v0.8.5. If
+          <code>LOCAL_BASE_URL/models</code> responds, the local provider
+          joins the failover chain automatically. Set
+          <code>LOCAL_ENABLED=false</code> only to force-exclude a
+          reachable server. Same logic applies to Voicebox via
+          <code>/health</code>.
+        </p>
+
+        <div class="receipt-line">
+          <span class="t">receipt</span>
+          <span class="desc">tts · local · kokoro · 4 chunks · stitched</span>
+          <span class="cost">$0.0000</span>
+        </div>
+
+        <div class="local-tags">
+          <a class="local-tag" href="https://github.com/remsky/Kokoro-FastAPI" target="_blank" rel="noopener">Kokoro-FastAPI</a>
+          <a class="local-tag" href="https://github.com/speaches-ai/speaches" target="_blank" rel="noopener">Speaches</a>
+          <a class="local-tag" href="https://github.com/Lex-au/Orpheus-FastAPI" target="_blank" rel="noopener">Orpheus-FastAPI</a>
+          <a class="local-tag" href="https://github.com/travisvn/chatterbox-tts-api" target="_blank" rel="noopener">Chatterbox</a>
+          <a class="local-tag" href="https://voicebox.sh" target="_blank" rel="noopener">Voicebox</a>
+        </div>
+      </div>
+
+      <div class="code">
+        <div class="head">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="label">shell · zsh · local-tts.sh</span>
+          <button class="copy-btn" data-copy="local">copy</button>
+        </div>
+<pre class="body" id="code-local"><span class="c"># 1. start a local TTS backend (Kokoro-FastAPI shown)</span>
+docker run -p 8880:8880 \
+  ghcr.io/remsky/kokoro-fastapi-cpu:latest
+
+<span class="c"># 2. confirm reachable + which models loaded</span>
+node mcp-server/dist/cli.js <span class="k">--check-local</span>
+
+<span class="c"># 3. generate against the local server, $0/call</span>
+node mcp-server/dist/cli.js <span class="k">--speech</span> \
+  -p <span class="s">"hello world"</span> \
+  <span class="k">--provider</span> local <span class="k">--model</span> kokoro
+
+<span class="c"># 4. zero-shot voice cloning (Chatterbox / XTTS backend)</span>
+<span class="k">export</span> LOCAL_BASE_URL=<span class="s">http://localhost:4123/v1</span>
+node mcp-server/dist/cli.js <span class="k">--speech</span> \
+  -p <span class="s">"read this in my voice"</span> \
+  <span class="k">--provider</span> local <span class="k">--model</span> chatterbox \
+  <span class="k">--reference-audio</span> ~/voice-samples/me.wav</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== COMPARE ============== -->
+<section id="compare">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 05</span>
+      <span class="name">balance sheet · what's in the box</span>
+      <span class="meta">no editorializing</span>
+    </div>
+
+    <div class="section-head">
+      <h2 class="section-title">Same modalities. <em>Different bill of materials.</em></h2>
+      <p class="section-lede">A side-by-side that doesn't editorialize. Either the row ships, or it doesn't.</p>
+    </div>
+
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="us">genkettle</th>
+            <th>raw OpenAI / Gemini</th>
+            <th>ElevenLabs sub</th>
+            <th>guinacio's claude-image-gen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>multi-provider · one interface</td>
+            <td class="us"><span class="yes">7 providers</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="partial">OpenAI only</td>
+          </tr>
+          <tr>
+            <td>pre-call budget enforcement</td>
+            <td class="us"><span class="yes">daily / weekly / monthly</span></td>
+            <td class="no">—</td>
+            <td class="partial">plan limits</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>per-call + per-session ledger</td>
+            <td class="us"><span class="yes">JSON + CSV export</span></td>
+            <td class="no">—</td>
+            <td class="partial">dashboard</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>batch mode (50% off)</td>
+            <td class="us"><span class="yes">image + TTS</span></td>
+            <td class="partial">manual</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>sidecar / regenerate</td>
+            <td class="us"><span class="yes">.regenerate.json</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>local $0/call escape hatch</td>
+            <td class="us"><span class="yes">Voicebox + Kokoro + 4 more</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>voice cloning</td>
+            <td class="us"><span class="yes">local + ElevenLabs IDs</span></td>
+            <td class="no">n/a</td>
+            <td class="partial">subscription</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>long-text TTS auto-chunk</td>
+            <td class="us"><span class="yes">sentence-aware · reactive</span></td>
+            <td class="partial">manual</td>
+            <td class="partial">partial</td>
+            <td class="no">n/a</td>
+          </tr>
+          <tr>
+            <td>provider failover</td>
+            <td class="us"><span class="yes">logged cost delta</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>license</td>
+            <td class="us"><span class="yes">MIT · semver · changelog</span></td>
+            <td class="partial">vendor terms</td>
+            <td class="partial">vendor terms</td>
+            <td class="partial">MIT</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== INSTALL ============== -->
+<section id="install">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 06</span>
+      <span class="name">install · two commands · no clone</span>
+      <span class="meta">claude code session</span>
+    </div>
+
+    <div class="section-head">
+      <h2 class="section-title">Two commands. <em>No clone, no build.</em></h2>
+      <p class="section-lede">Inside an existing Claude Code session. The plugin registers slash commands and MCP tools automatically on enable.</p>
+    </div>
+
+    <div class="install-grid">
+      <div class="step">
+        <span class="step-no"><span class="dot"></span>step 01 · marketplace</span>
+        <h4>Add the marketplace and <em>install.</em></h4>
+        <p>You'll get the slash commands (<code>/gen-image</code>, <code>/gen-speech</code>, <code>/gen-cost</code>, <code>/gen-budget</code>, <code>/gen-batch-status</code>, <code>/gen-presets</code>, <code>/gen-health</code>) and the MCP tool surface in one go.</p>
+        <div class="code">
+          <div class="head">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="label">claude code prompt</span>
+            <button class="copy-btn" data-copy="install">copy</button>
+          </div>
+<pre class="body" id="code-install"><span class="p">/plugin marketplace add</span> sherifButt/claude-image-tts-gen
+<span class="p">/plugin install</span> claude-image-tts-gen@claude-image-tts-gen-marketplace</pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-no"><span class="dot"></span>step 02 · configure</span>
+        <h4>Export at least one key, <em>or run a local server.</em></h4>
+        <p>Grab a free Gemini key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Append to <code>~/.zshrc</code> for persistence — new terminals + sessions inherit it.</p>
+        <div class="code">
+          <div class="head">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="label">~/.zshrc</span>
+            <button class="copy-btn" data-copy="env">copy</button>
+          </div>
+<pre class="body" id="code-env"><span class="c"># required: at least one provider key OR a local server</span>
+<span class="k">export</span> GEMINI_API_KEY=<span class="s">'your-key'</span>
+<span class="k">export</span> OPENAI_API_KEY=<span class="s">'your-key'</span>
+
+<span class="c"># optional: per-provider default voices</span>
+<span class="k">export</span> GEMINI_DEFAULT_VOICE=<span class="s">Charon</span>
+<span class="k">export</span> OPENAI_DEFAULT_VOICE=<span class="s">onyx</span>
+<span class="k">export</span> ELEVENLABS_DEFAULT_VOICE=<span class="s">'&lt;voice-id&gt;'</span>
+
+<span class="c"># optional: local server (auto-detected since v0.8.5)</span>
+<span class="k">export</span> LOCAL_BASE_URL=<span class="s">http://localhost:8880/v1</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FINAL ============== -->
+<section class="final">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 07</span>
+      <span class="name">end of manifest · ship something</span>
+      <span class="meta">MIT · semver · v0.8.7</span>
+    </div>
+
+    <div class="final-grid">
+      <div>
+        <h2>Stop paying for <em>identical regenerations.</em></h2>
+        <p>
+          MIT-licensed, semver'd, and shipping. Open an issue, send a PR,
+          or just install it and ship a feature with $5/day worth of
+          cloud spend you can actually account for.
+        </p>
+        <div class="cta-row" style="justify-content: flex-start;">
+          <a class="btn btn-primary" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+            star on github
+            <svg class="arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </a>
+          <a class="btn btn-ghost" href="changelog.html">
+            read the changelog
+            <svg class="arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+      <div>
+        <img src="assets/genkettle-mark.svg" alt="" class="final-mark" aria-hidden="true" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer>
+  <div class="wrap row">
+    <div class="left">
+      <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      <span style="color: var(--ink-faint);">·</span>
+      <span>MIT · v0.8.7 · 2026</span>
+    </div>
+    <div class="links">
+      <a href="blog/index.html">blog</a>
+      <a href="changelog.html">changelog</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">github</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/blob/main/README.md" target="_blank" rel="noopener">readme</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/issues" target="_blank" rel="noopener">issues</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/releases" target="_blank" rel="noopener">releases</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // theme toggle — persists per landing variant
+  var btn = document.getElementById('theme-toggle');
+  btn.addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('gk-theme-v3', next);
+  });
+
+  // copy buttons
+  document.querySelectorAll('.copy-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var id = 'code-' + b.getAttribute('data-copy');
+      var el = document.getElementById(id);
+      if (!el) return;
+      navigator.clipboard.writeText(el.innerText).then(function () {
+        var prev = b.textContent;
+        b.textContent = 'copied';
+        setTimeout(function () { b.textContent = prev; }, 1400);
+      });
+    });
+  });
+
+  /* ============== LEDGER DEMO ANIMATION ============== */
+  (function () {
+    var stream = document.getElementById('demo-stream');
+    var status = document.getElementById('demo-status');
+    var stepEl = document.getElementById('demo-step');
+    var replay = document.getElementById('replay-btn');
+    if (!stream) return;
+
+    var BEATS = [
+      {
+        label: 'budget',
+        statusText: 'set_budget · daily=$0.05',
+        prompt: 'Set my daily budget to $0.05.',
+        lines: [
+          { kind: 'tag',  html: 'beat 01 · budget' },
+          { kind: 'tool', html: 'set_budget · daily=<b>$0.05</b> · weekly=$5.00 · monthly=$20.00' },
+          { kind: 'note', html: 'budget updated · 0% used' }
+        ],
+        pauseAfter: 700
+      },
+      {
+        label: 'image',
+        statusText: 'generate_image · gemini · flash',
+        prompt: 'Generate a hero image — minimalist line art, 16:9.',
+        lines: [
+          { kind: 'tag',  html: 'beat 02 · image' },
+          { kind: 'tool', html: 'generate_image · gemini · flash · 1024² · small' },
+          { kind: 'row',  desc: './generated-images/hero-1.png', cost: '$0.0039' },
+          { kind: 'note', html: 'sidecar · .regenerate.json · written' }
+        ],
+        pauseAfter: 800
+      },
+      {
+        label: 'tts',
+        statusText: 'generate_speech · voicebox · kokoro',
+        prompt: 'Using Voicebox, read that headline aloud.',
+        lines: [
+          { kind: 'tag',  html: 'beat 03 · long-text tts' },
+          { kind: 'tool', html: 'generate_speech · voicebox · kokoro · 4 chunks · stitched' },
+          { kind: 'row',  desc: './generated-audio/headline.mp3', cost: '$0.0000', costClass: 'zero' },
+          { kind: 'note', html: '$0/call · no provider spend · 78% of cap used' }
+        ],
+        pauseAfter: 800
+      },
+      {
+        label: 'ledger',
+        statusText: 'session_spend · today',
+        prompt: "What's my session spend?",
+        lines: [
+          { kind: 'tag',  html: 'beat 04 · ledger' },
+          { kind: 'tool', html: 'session_spend' },
+          { kind: 'row',  desc: 'image · gemini · flash',    cost: '$0.0039' },
+          { kind: 'row',  desc: 'tts · voicebox · kokoro',   cost: '$0.0000', costClass: 'zero' },
+          { kind: 'row total', desc: 'total · 2 calls · today', cost: '$0.0039' }
+        ],
+        pauseAfter: 1100
+      },
+      {
+        label: 'guard',
+        statusText: 'BUDGET_EXCEEDED · pre-call',
+        prompt: 'Another version — same prompt, light background.',
+        lines: [
+          { kind: 'tag',  html: 'beat 05 · guard fires' },
+          { kind: 'tool', html: 'generate_image · gemini · flash · estimated $0.0039' },
+          { kind: 'block', html: '<span class="label">✕ BUDGET_EXCEEDED</span> · daily cap $0.05 reached' },
+          { kind: 'note', html: 'pre-call check · no provider call · nothing spent' }
+        ],
+        pauseAfter: 1600
+      }
+    ];
+
+    var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var running = false;
+    var cancelled = false;
+
+    function sleep(ms) {
+      return new Promise(function (res) {
+        if (cancelled) return res();
+        setTimeout(res, ms);
+      });
+    }
+
+    function autoScroll() {
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendLine(kind) {
+      var el = document.createElement('div');
+      el.className = 'demo-line ' + kind;
+      stream.appendChild(el);
+      autoScroll();
+      return el;
+    }
+
+    function appendRow(opts) {
+      var el = document.createElement('div');
+      el.className = 'demo-line ' + (opts.cls || 'row');
+      var d = document.createElement('span'); d.className = 'desc'; d.textContent = opts.desc;
+      var c = document.createElement('span'); c.className = 'cost' + (opts.costClass ? ' ' + opts.costClass : ''); c.textContent = opts.cost;
+      el.appendChild(d); el.appendChild(c);
+      stream.appendChild(el);
+      autoScroll();
+      return el;
+    }
+
+    async function typeInto(el, text) {
+      var cursor = document.createElement('span');
+      cursor.className = 'demo-cursor';
+      el.appendChild(cursor);
+      var i = 0;
+      while (i < text.length) {
+        if (cancelled) return;
+        var ch = text.charAt(i);
+        cursor.insertAdjacentText('beforebegin', ch);
+        i += 1;
+        var delay = ch === ' ' ? 38 : (20 + Math.random() * 18);
+        await sleep(delay);
+        autoScroll();
+      }
+      cursor.remove();
+    }
+
+    async function playBeat(beat, idx, total) {
+      if (cancelled) return;
+      stepEl.textContent = (idx + 1) + ' / ' + total + ' · ' + beat.label;
+      status.textContent = beat.statusText;
+
+      var p = appendLine('user');
+      await typeInto(p, beat.prompt);
+      await sleep(380);
+
+      for (var i = 0; i < beat.lines.length; i++) {
+        if (cancelled) return;
+        var line = beat.lines[i];
+        if (line.kind === 'row' || line.kind === 'row total') {
+          appendRow({ desc: line.desc, cost: line.cost, costClass: line.costClass, cls: line.kind });
+        } else {
+          var el = appendLine(line.kind);
+          el.innerHTML = line.html;
+        }
+        autoScroll();
+        await sleep(170 + Math.random() * 120);
+      }
+      await sleep(beat.pauseAfter || 800);
+    }
+
+    async function play() {
+      if (running) return;
+      running = true;
+      cancelled = false;
+      stream.innerHTML = '';
+      stream.scrollTop = 0;
+
+      if (prefersReduced) {
+        for (var i = 0; i < BEATS.length; i++) {
+          var b = BEATS[i];
+          var p = appendLine('user'); p.textContent = b.prompt;
+          for (var j = 0; j < b.lines.length; j++) {
+            var line = b.lines[j];
+            if (line.kind === 'row' || line.kind === 'row total') {
+              appendRow({ desc: line.desc, cost: line.cost, costClass: line.costClass, cls: line.kind });
+            } else {
+              var el = appendLine(line.kind);
+              el.innerHTML = line.html;
+            }
+          }
+        }
+        stepEl.textContent = BEATS.length + ' / ' + BEATS.length + ' · done';
+        status.textContent = 'demo · static (reduced motion)';
+        running = false;
+        return;
+      }
+
+      for (var i = 0; i < BEATS.length; i++) {
+        if (cancelled) break;
+        await playBeat(BEATS[i], i, BEATS.length);
+      }
+
+      if (!cancelled) {
+        status.textContent = 'demo complete · looping in 4s';
+        await sleep(4000);
+      }
+      running = false;
+      if (!cancelled) play();
+    }
+
+    function restart() {
+      cancelled = true;
+      setTimeout(function () { cancelled = false; play(); }, 30);
+    }
+
+    if (replay) replay.addEventListener('click', restart);
+
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            io.disconnect();
+            play();
+          }
+        });
+      }, { threshold: 0.25 });
+      io.observe(stream);
+    } else {
+      play();
+    }
+  })();
+</script>
+</body>
+</html>

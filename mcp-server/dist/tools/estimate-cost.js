@@ -5,7 +5,9 @@ export function estimateCostDryRun(args) {
     if (units <= 0) {
         throw new Error(args.modality === "image"
             ? "count must be > 0 for image (default 1)"
-            : "text or chars must be provided for tts");
+            : args.modality === "video"
+                ? "seconds must be > 0 for video (default 5)"
+                : "text or chars must be provided for tts");
     }
     const slots = listAvailable(args.modality).filter((s) => {
         if (args.provider && s.provider !== args.provider)
@@ -27,6 +29,10 @@ export function estimateCostDryRun(args) {
         // We pass empty params here; the tier discrimination is encoded in slot.model + the param-by-tier mapping below.
         if (slot.provider === "openai" && args.modality === "image") {
             params.quality = slot.tier === "small" ? "low" : slot.tier === "mid" ? "medium" : "high";
+        }
+        // Replicate video price varies by resolution, which the registry maps to tier.
+        if (slot.provider === "replicate" && args.modality === "video") {
+            params.resolution = slot.tier === "small" ? "480p" : "720p";
         }
         const standard = estimateCost({ provider: slot.provider, model: slot.model, modality: args.modality, params }, units);
         currency = standard.currency;
@@ -73,6 +79,8 @@ export function estimateCostDryRun(args) {
 function resolveUnits(args) {
     if (args.modality === "image")
         return args.count ?? 1;
+    if (args.modality === "video")
+        return args.seconds ?? 5;
     if (args.chars !== undefined)
         return args.chars;
     if (args.text !== undefined)
@@ -80,7 +88,11 @@ function resolveUnits(args) {
     return 0;
 }
 function renderText(modality, units, rows, currency, cheapest, cheapestBatch) {
-    const unitLabel = modality === "image" ? `${units} image${units === 1 ? "" : "s"}` : `${units} chars`;
+    const unitLabel = modality === "image"
+        ? `${units} image${units === 1 ? "" : "s"}`
+        : modality === "video"
+            ? `${units}s of video`
+            : `${units} chars`;
     const lines = [`Cost estimate for ${unitLabel} (${currency}):`, ""];
     for (const r of rows) {
         const batchPart = r.totalBatch !== null ? `  batch ${r.totalBatch.toFixed(4)}` : r.batchAvailable === false ? "  (no batch)" : "";

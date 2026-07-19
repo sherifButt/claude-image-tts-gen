@@ -6,6 +6,7 @@ const PROVIDER_GUIDANCE = {
     elevenlabs: "(no image rewrites for elevenlabs)",
     local: "Local server — keep it simple and direct. Local image models (Stable Diffusion variants) prefer subject + style + medium tags.",
     voicebox: "(no image rewrites for voicebox — TTS-only)",
+    replicate: "grok-imagine-video-1.5 (image-to-video): describe the MOTION — how the subject and camera move, pacing, and any ambient sound. The still frame already sets the scene; focus the prompt on what changes over time.",
 };
 const SamplingResultSchema = z.object({
     role: z.string().optional(),

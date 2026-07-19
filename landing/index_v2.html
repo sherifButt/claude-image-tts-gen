@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>genkettle — every call, on the books.</title>
+<meta name="description" content="A cost-aware MCP plugin for image and TTS generation. Six providers, one ledger, hard pre-call budget caps, and a $0/call local escape hatch." />
+<meta property="og:title" content="genkettle — every call, on the books." />
+<meta property="og:description" content="Six providers behind one tier knob. One ledger. Zero lock-in." />
+<link rel="icon" href="assets/genkettle-mark.svg" type="image/svg+xml" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<script>
+  (function () {
+    var stored = localStorage.getItem('gk-theme-v2');
+    var sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', stored || sys);
+  })();
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  /* ============== TOKENS ==============
+     Light is default — paper / receipt aesthetic.
+     Accent is reserved for: cost figures, the primary CTA, and ::selection.
+     That restraint is the principle (color: restrain, then accent).
+  */
+  :root,
+  [data-theme="light"] {
+    --bg:        #f7f6f1;
+    --bg-elev:   #ffffff;
+    --bg-hi:     #ecebe5;
+    --bg-low:    #efeee8;
+    --line:      #d8d6cc;
+    --line-hi:   #b8b6ac;
+    --line-faint:#e8e6dd;
+    --ink:       #0c0c0d;
+    --ink-dim:   #4a4a50;
+    --ink-mute:  #828289;
+    --ink-faint: #aaa9a0;
+    --accent:    #4a6a14;     /* deep olive — the chartreuse, anchored for paper */
+    --accent-hi: #c8e85c;     /* the lime, used only inside the ledger panel chip */
+    --accent-ink:#fbfbf9;
+    --invert:    0;
+  }
+
+  [data-theme="dark"] {
+    --bg:        #0b0b0c;
+    --bg-elev:   #121214;
+    --bg-hi:     #18181c;
+    --bg-low:    #0f0f11;
+    --line:      #1f1f24;
+    --line-hi:   #2c2c33;
+    --line-faint:#16161a;
+    --ink:       #ededee;
+    --ink-dim:   #a3a3a8;
+    --ink-mute:  #6b6b72;
+    --ink-faint: #3d3d44;
+    --accent:    #c8e85c;
+    --accent-hi: #c8e85c;
+    --accent-ink:#0a0a0b;
+    --invert:    1;
+  }
+
+  :root {
+    --serif: 'Instrument Serif', 'Times New Roman', serif;
+    --sans:  'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:  'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    --max:   1180px;
+    --gutter: clamp(1.25rem, 4vw, 2.25rem);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 400;
+    font-size: 16px;
+    line-height: 1.55;
+    overflow-x: hidden;
+    transition: background-color .25s ease, color .25s ease;
+  }
+
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  a { color: inherit; text-decoration: none; }
+  a:hover { color: var(--ink); }
+
+  /* ============== LAYOUT PRIMITIVES ============== */
+  .wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
+  hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* The signature primitive: a "ledger row" — mono index | content | trailing meta.
+     Shared by hero providers list, the six-row pillar set, and compare. */
+  .row-rule {
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    gap: 24px;
+    align-items: baseline;
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+  }
+  .row-rule:last-child { border-bottom: 1px solid var(--line); }
+  .row-rule .idx {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.06em;
+  }
+  .row-rule .meta {
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* ============== NAV ============== */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    height: 60px; gap: 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .word { height: 13px; color: var(--ink); filter: invert(var(--invert)); }
+  .brand .vchip {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+    color: var(--ink-mute);
+    border: 1px solid var(--line);
+    padding: 2px 6px; border-radius: 3px;
+    margin-left: 4px;
+  }
+  .nav-links {
+    justify-self: end;
+    display: flex; align-items: center; gap: 22px;
+    font-family: var(--mono);
+    font-size: 12px; color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 11px;
+    background: var(--ink); color: var(--bg);
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 500;
+    transition: transform .15s ease;
+  }
+  .nav-cta:hover { color: var(--bg); transform: translateY(-1px); }
+  .theme-toggle {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 5px;
+    color: var(--ink-dim); cursor: pointer; transition: all .15s;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--line-hi); }
+  @media (max-width: 760px) {
+    .nav-links a:not(.nav-cta) { display: none; }
+  }
+
+  /* ============== HERO — asymmetric ledger split ============== */
+  .hero {
+    padding: clamp(56px, 9vh, 96px) 0 clamp(48px, 7vh, 80px);
+    position: relative;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: clamp(32px, 5vw, 72px);
+    align-items: start;
+  }
+  @media (max-width: 920px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+  }
+
+  /* left column — the editorial side */
+  .hero-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px; letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 28px;
+  }
+  .hero-eyebrow::before {
+    content: ''; width: 18px; height: 1px; background: var(--line-hi);
+  }
+  .hero h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(2.6rem, 6vw, 4.8rem);
+    line-height: 1.0;
+    letter-spacing: -0.025em;
+    margin-bottom: 26px;
+    color: var(--ink);
+  }
+  .hero h1 .br { display: block; }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--ink-dim);
+  }
+  .hero h1 .accent {
+    color: var(--accent);
+    font-style: italic;
+  }
+  .hero .lede {
+    font-size: 1.0625rem;
+    color: var(--ink-dim);
+    max-width: 48ch;
+    margin-bottom: 32px;
+    line-height: 1.55;
+  }
+  .hero .lede strong { color: var(--ink); font-weight: 500; }
+
+  .cta-row {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 16px; border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 13px; font-weight: 500;
+    letter-spacing: 0.01em;
+    transition: transform .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--ink); color: var(--bg); }
+  .btn-primary:hover { color: var(--bg); transform: translateY(-1px); }
+  .btn-ghost {
+    color: var(--ink); border-color: var(--line-hi);
+    background: var(--bg-elev);
+  }
+  .btn-ghost:hover { background: var(--bg-hi); color: var(--ink); }
+  .btn .arrow { transition: transform .15s ease; }
+  .btn:hover .arrow { transform: translateX(2px); }
+
+  .hero-tags {
+    margin-top: 36px; padding-top: 24px;
+    border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    font-family: var(--mono);
+    font-size: 11px; color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  .hero-tags span::before {
+    content: '— '; color: var(--accent);
+  }
+
+  /* right column — the live ledger panel */
+  .ledger {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 1px 0 var(--bg-hi);
+  }
+  .ledger .head {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-low);
+    font-size: 11px; letter-spacing: 0.06em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+  }
+  .ledger .head .dots { display: inline-flex; gap: 5px; }
+  .ledger .head .dots i {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--line-hi); display: inline-block;
+  }
+  .ledger .body { padding: 0; }
+
+  /* The animated demo transcript. Replaces the static line-items so the
+     panel shows the actual narrative: tight budget → image → free TTS →
+     ledger → guard fires. Per docs/demo/demo-script.md. */
+  .demo-stream {
+    height: 360px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px 18px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    scrollbar-width: none;
+  }
+  .demo-stream::-webkit-scrollbar { display: none; }
+
+  .demo-line {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--ink-dim);
+  }
+  .demo-line.user {
+    color: var(--ink);
+    margin-top: 10px;
+    font-weight: 500;
+  }
+  .demo-line.user:first-child { margin-top: 0; }
+  .demo-line.user::before {
+    content: '> ';
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .demo-line.tool { color: var(--ink-dim); }
+  .demo-line.tool::before { content: '↳ '; color: var(--ink-mute); }
+  .demo-line.note { color: var(--ink-mute); padding-left: 16px; }
+  .demo-line.row {
+    color: var(--ink-dim);
+    padding-left: 16px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+  .demo-line.row .desc { color: var(--ink); }
+  .demo-line.row .cost { color: var(--accent); font-weight: 600; text-align: right; white-space: nowrap; }
+  .demo-line.row .cost.zero { color: var(--ink-mute); font-weight: 500; }
+  .demo-line.row.total {
+    color: var(--ink); font-weight: 600;
+    border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 6px;
+  }
+  .demo-line.block {
+    color: var(--ink);
+    padding: 6px 10px;
+    margin: 6px 0 0 16px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+  }
+  .demo-line.block .label {
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  [data-theme="dark"] .demo-line.block { color: var(--ink); }
+
+  .demo-cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--accent);
+    vertical-align: -2px;
+    margin-left: 2px;
+    animation: gk-blink 1s steps(2, end) infinite;
+  }
+  @keyframes gk-blink { 50% { opacity: 0; } }
+
+  .replay-btn {
+    background: transparent;
+    border: 1px solid var(--line-hi);
+    border-radius: 4px;
+    color: var(--ink-mute);
+    font-family: var(--mono); font-size: 10px;
+    padding: 3px 8px; cursor: pointer; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 5px;
+    transition: all .15s;
+  }
+  .replay-btn:hover { color: var(--ink); border-color: var(--ink-faint); }
+  .replay-btn .icon { width: 8px; height: 8px; }
+
+  .ledger-foot {
+    padding: 10px 18px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-low);
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .ledger-foot .ok::before {
+    content: '●';
+    color: var(--accent);
+    margin-right: 6px;
+    font-size: 9px;
+    vertical-align: 2px;
+  }
+  .ledger-foot .step {
+    font-family: var(--mono);
+    color: var(--ink);
+  }
+
+  /* ============== SECTION PRIMITIVES ============== */
+  section { padding: clamp(64px, 9vh, 104px) 0; }
+  .section-head { margin-bottom: 44px; max-width: 880px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .eyebrow::before {
+    content: ''; width: 18px; height: 1px; background: var(--line-hi);
+  }
+  .section-title {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(1.8rem, 3.6vw, 2.8rem);
+    line-height: 1.05;
+    letter-spacing: -0.018em;
+    max-width: 22ch;
+    margin-bottom: 16px;
+  }
+  .section-title em { font-style: italic; color: var(--ink-dim); }
+  .section-lede { color: var(--ink-dim); max-width: 62ch; font-size: 1.0625rem; line-height: 1.55; }
+
+  /* ============== PROVIDERS STRIP — six line items ============== */
+  .providers .row-rule {
+    grid-template-columns: 60px minmax(160px, 1.2fr) 2fr auto;
+  }
+  .providers .name {
+    font-family: var(--serif); font-style: italic;
+    font-size: 1.5rem; line-height: 1.1; color: var(--ink);
+  }
+  .providers .desc {
+    font-size: 14px; color: var(--ink-dim); max-width: 56ch;
+  }
+  .providers .desc code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 6px; border-radius: 3px; color: var(--ink);
+  }
+  @media (max-width: 720px) {
+    .providers .row-rule {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .providers .row-rule .meta { text-align: left; }
+  }
+
+  /* ============== PROPOSITIONS — six numbered ledger rows, no icons ============== */
+  .props .row-rule {
+    grid-template-columns: 60px 1.1fr 2fr;
+    gap: 28px;
+    padding: 32px 0;
+  }
+  .props .row-rule h3 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(1.5rem, 2.4vw, 1.85rem);
+    line-height: 1.15;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+  }
+  .props .row-rule h3 em { font-style: italic; color: var(--ink-dim); }
+  .props .row-rule p { color: var(--ink-dim); font-size: 15px; line-height: 1.6; max-width: 60ch; }
+  .props .row-rule p code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 6px; border-radius: 3px; color: var(--ink);
+  }
+  .props .row-rule p strong { color: var(--ink); font-weight: 500; }
+  @media (max-width: 760px) {
+    .props .row-rule {
+      grid-template-columns: 60px 1fr; row-gap: 12px;
+    }
+    .props .row-rule p { grid-column: 2 / -1; }
+  }
+
+  /* ============== LOCAL — split panel ============== */
+  .local-grid {
+    display: grid; grid-template-columns: 1fr 1.1fr;
+    gap: clamp(24px, 4vw, 56px);
+    align-items: start;
+  }
+  @media (max-width: 860px) { .local-grid { grid-template-columns: 1fr; } }
+  .local-grid h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(1.85rem, 3.4vw, 2.4rem);
+    line-height: 1.05; letter-spacing: -0.018em;
+    margin-bottom: 18px;
+  }
+  .local-grid h2 em { font-style: italic; color: var(--accent); }
+  .local-grid p { color: var(--ink-dim); margin-bottom: 14px; font-size: 1rem; line-height: 1.6; }
+  .local-grid p strong { color: var(--ink); font-weight: 500; }
+  .local-grid .receipt-line {
+    margin-top: 22px;
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 12px; align-items: baseline;
+    padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 13px;
+  }
+  .local-grid .receipt-line .desc { color: var(--ink); }
+  .local-grid .receipt-line .cost { color: var(--accent); font-weight: 600; }
+  .local-grid .receipt-line .t { color: var(--ink-mute); font-size: 11px; letter-spacing: 0.04em; }
+  .local-tags {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 22px;
+  }
+  .local-tag {
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink); border: 1px solid var(--line-hi);
+    padding: 5px 10px; border-radius: 4px;
+    transition: background .15s, border-color .15s;
+  }
+  .local-tag:hover { background: var(--bg-elev); border-color: var(--ink-faint); color: var(--ink); }
+
+  /* code block (terminal) */
+  .code {
+    background: #0c0c0e;
+    color: #e8e8e8;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+  }
+  [data-theme="light"] .code { border-color: #1a1a1f; }
+  .code .head {
+    padding: 9px 14px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 10.5px; color: #888;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .code .head .dots { display: inline-flex; gap: 5px; }
+  .code .head .dots i { width: 8px; height: 8px; border-radius: 50%; background: #2a2a2f; display: inline-block; }
+  .code .body { padding: 16px 18px; white-space: pre; overflow-x: auto; color: #ededee; }
+  .code .body .c { color: #6b6b72; }
+  .code .body .k { color: #c8e85c; }
+  .code .body .s { color: #e8a85c; }
+  .code .body .p { color: #9ec3ff; }
+  .copy-btn {
+    background: transparent; border: 1px solid #2a2a2f; border-radius: 4px;
+    color: #888; font-family: var(--mono); font-size: 10px;
+    padding: 3px 8px; cursor: pointer; letter-spacing: 0.05em;
+    transition: all .15s;
+  }
+  .copy-btn:hover { color: #e8e8e8; border-color: #3a3a3f; }
+
+  /* ============== COMPARE — receipt-styled balance sheet ============== */
+  .compare-wrap { overflow-x: auto; margin: 0 -1rem; padding: 0 1rem; }
+  .compare {
+    width: 100%; min-width: 760px;
+    border-collapse: separate; border-spacing: 0;
+    font-size: 13.5px;
+  }
+  .compare th, .compare td {
+    text-align: left;
+    padding: 14px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-dim);
+    vertical-align: top;
+  }
+  .compare th { font-weight: 500; }
+  .compare th:first-child, .compare td:first-child {
+    color: var(--ink); width: 32%;
+    font-family: var(--sans); font-size: 14px;
+  }
+  .compare thead th {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--ink-mute); font-weight: 500;
+    border-bottom: 1px solid var(--line-hi);
+    padding-bottom: 14px;
+  }
+  .compare thead th.us {
+    color: var(--ink); position: relative;
+  }
+  .compare thead th.us::after {
+    content: ''; position: absolute; bottom: -1px; left: 14px; right: 14px;
+    height: 2px; background: var(--accent);
+  }
+  .compare td.us { color: var(--ink); }
+  .compare td.us .yes::before {
+    content: '✓ '; color: var(--accent); font-weight: 600;
+  }
+  .compare .no { color: var(--ink-faint); font-family: var(--mono); }
+  .compare .partial {
+    color: var(--ink-mute); font-size: 12.5px; font-style: italic;
+  }
+  .compare tr:last-child td { border-bottom: 0; }
+
+  /* ============== INSTALL ============== */
+  .install-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: clamp(24px, 4vw, 48px);
+  }
+  @media (max-width: 760px) { .install-grid { grid-template-columns: 1fr; } }
+  .step {
+    border-top: 1px solid var(--line);
+    padding-top: 28px;
+    position: relative;
+  }
+  .step .step-no {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .step .step-no .dot {
+    width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
+    display: inline-block;
+  }
+  .step h4 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 1.4rem; line-height: 1.2;
+    margin-bottom: 12px; color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .step p { color: var(--ink-dim); font-size: 14.5px; margin-bottom: 16px; line-height: 1.55; max-width: 50ch; }
+  .step p a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-hi); }
+  .step p a:hover { text-decoration-color: var(--ink); }
+  .step p code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--bg-hi); border: 1px solid var(--line-faint);
+    padding: 1px 5px; border-radius: 3px; color: var(--ink);
+  }
+
+  /* ============== FINAL CTA ============== */
+  .final {
+    text-align: left;
+    padding: clamp(72px, 12vh, 140px) 0 clamp(56px, 8vh, 96px);
+    border-top: 1px solid var(--line);
+  }
+  .final-grid {
+    display: grid; grid-template-columns: 1.1fr 1fr;
+    gap: clamp(32px, 5vw, 80px);
+    align-items: end;
+  }
+  @media (max-width: 760px) { .final-grid { grid-template-columns: 1fr; } }
+  .final h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(2rem, 4.6vw, 3.4rem);
+    line-height: 1.0; letter-spacing: -0.022em;
+    margin-bottom: 20px; max-width: 16ch;
+  }
+  .final h2 em { font-style: italic; color: var(--accent); }
+  .final p {
+    color: var(--ink-dim); max-width: 52ch;
+    font-size: 1.0625rem; margin-bottom: 28px; line-height: 1.55;
+  }
+  .final-mark {
+    width: 100%; max-width: 220px;
+    margin-left: auto;
+    color: var(--ink);
+    opacity: 0.9;
+    filter: invert(var(--invert));
+  }
+
+  /* ============== FOOTER ============== */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 0;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  footer .row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 14px;
+  }
+  footer .links { display: flex; gap: 22px; }
+  footer .links a:hover { color: var(--ink); }
+  footer .word {
+    height: 11px; color: var(--ink-mute);
+    opacity: 0.75;
+    filter: invert(var(--invert));
+  }
+  footer .left { display: flex; align-items: center; gap: 12px; }
+
+  /* respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ============== NAV ============== -->
+<nav>
+  <div class="wrap row">
+    <a href="#top" class="brand" aria-label="genkettle home">
+      <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" id="nav-word" />
+      <span class="vchip">v0.8.7</span>
+    </a>
+    <span></span>
+    <div class="nav-links">
+      <a href="#providers">providers</a>
+      <a href="#why">why</a>
+      <a href="#compare">compare</a>
+      <a href="#install">install</a>
+      <button class="theme-toggle" aria-label="toggle theme" id="theme-toggle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <a class="nav-cta" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        GitHub
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============== HERO ============== -->
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <!-- LEFT: editorial copy -->
+    <div>
+      <div class="hero-eyebrow">MCP plugin · Claude Code</div>
+      <h1>
+        Every call,
+        <span class="br"><em>on the books.</em></span>
+      </h1>
+      <p class="lede">
+        Six providers behind one tier knob. <strong>One ledger. One budget cap.</strong>
+        Hard-enforced before the call, sidecar-tracked after, with a
+        <strong>$0/call local escape hatch</strong> that just works. Generate
+        images and voice from Claude Code without the bill being a surprise.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#install">
+          Install in two commands
+          <svg class="arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+          View source
+        </a>
+      </div>
+      <div class="hero-tags" aria-label="key facts">
+        <span>6 providers</span>
+        <span>$5/day default</span>
+        <span>MIT licensed</span>
+        <span>local-first option</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: animated demo transcript — replays the 5-beat narrative
+         from docs/demo/demo-script.md (tight budget → image → free TTS →
+         ledger reveal → guard fires). The product story is the behavior,
+         not a snapshot. -->
+    <aside class="ledger" aria-label="genkettle live demo transcript">
+      <div class="head">
+        <span>claude code · live demo</span>
+        <button class="replay-btn" id="replay-btn" type="button" aria-label="replay demo">
+          <svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4v4h4"/><path d="M2.6 10.5A6 6 0 1 0 4 5.5L2 8"/></svg>
+          replay
+        </button>
+      </div>
+      <div class="body">
+        <div class="demo-stream" id="demo-stream" role="log" aria-live="polite"></div>
+      </div>
+      <div class="ledger-foot">
+        <span class="ok" id="demo-status">starting · 5-beat demo</span>
+        <span class="step" id="demo-step">— · —</span>
+      </div>
+    </aside>
+  </div>
+</header>
+
+<hr class="rule" />
+
+<!-- ============== PROVIDERS — line items ============== -->
+<section id="providers" class="providers">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">six providers · one tier knob</span>
+      <h2 class="section-title">Code written for one runs <em>unchanged on another.</em></h2>
+      <p class="section-lede">
+        Swap <code style="font-family:var(--mono);background:var(--bg-hi);padding:1px 5px;border-radius:3px;font-size:13.5px;">--provider</code>
+        and the call still runs. No per-vendor quirks in your prompt code, no
+        special-casing voice IDs, no rewriting the cache key for a different
+        backend.
+      </p>
+    </div>
+
+    <div class="rows">
+      <article class="row-rule">
+        <span class="idx">01</span>
+        <div>
+          <div class="name">Google Gemini</div>
+          <div class="desc">Default. Flash Image + Imagen 4 for images; Gemini Flash TTS + Studio voices for speech. Supports batch (50% off).</div>
+        </div>
+        <span class="meta">image · tts · batch</span>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">02</span>
+        <div>
+          <div class="name">OpenAI</div>
+          <div class="desc">gpt-image-1 across small/mid/pro qualities. <code>tts-1</code>, <code>gpt-4o-mini-tts</code>, <code>tts-1-hd</code>. Image batch supported.</div>
+        </div>
+        <span class="meta">image · tts · batch</span>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">03</span>
+        <div>
+          <div class="name">ElevenLabs</div>
+          <div class="desc">Turbo + Multilingual v2. Friendly voice names plus raw voice IDs. Word-level timestamps for SRT/VTT captions.</div>
+        </div>
+        <span class="meta">tts · captions</span>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">04</span>
+        <div>
+          <div class="name">OpenRouter</div>
+          <div class="desc">Image passthrough — single key, many model providers. Pricing follows OpenRouter's per-model rates.</div>
+        </div>
+        <span class="meta">image · passthrough</span>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">05</span>
+        <div>
+          <div class="name">Local · OpenAI-compatible</div>
+          <div class="desc">Any server speaking OpenAI's audio/image schema — Kokoro-FastAPI (default), Speaches, Orpheus-FastAPI, Chatterbox-TTS. Auto-detected at startup.</div>
+        </div>
+        <span class="meta">$0/call · no key</span>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">06</span>
+        <div>
+          <div class="name">Voicebox</div>
+          <div class="desc">Local-first voice studio at <code>voicebox.sh</code> — 7 TTS engines, zero-shot cloning, 23 languages. Auto-detected via <code>/health</code>.</div>
+        </div>
+        <span class="meta">$0/call · cloning</span>
+      </article>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== WHY / PROPOSITIONS ============== -->
+<section id="why" class="props">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">what a thin wrapper leaves on the floor</span>
+      <h2 class="section-title">Six things <em>most provider wrappers don't ship.</em></h2>
+      <p class="section-lede">
+        Plenty of MCP servers wrap a vendor. genkettle wraps six and adds the
+        cross-cutting work that, without it, lands on you: budgets, ledger,
+        sidecars, failover, chunking, batch.
+      </p>
+    </div>
+
+    <div class="rows">
+      <article class="row-rule">
+        <span class="idx">№ 01</span>
+        <h3>Cost-aware <em>before</em> the call.</h3>
+        <p>
+          Per-call, session, and per-project ledgers. Hard daily/weekly/monthly
+          caps enforced <strong>pre-call</strong>, not after the charge. Dry-run
+          <code>estimate_cost</code> ranks every provider/tier combo. A $0
+          cache returns identical repeats for free.
+        </p>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">№ 02</span>
+        <h3>Reproducibility <em>built into the file system.</em></h3>
+        <p>
+          Every output writes a hidden <code>.regenerate.json</code> sidecar with
+          prompt, provider, model, tier, params, lineage. <code>regenerate</code>
+          re-runs the brief; <code>iterate</code> adds a tweak and threads
+          parent → child. Prompts never get lost in chat history.
+        </p>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">№ 03</span>
+        <h3>Long-text TTS, <em>chunked when it has to be.</em></h3>
+        <p>
+          Sentence-aware splitter, ffmpeg stitch, single deliverable. Triggers
+          pre-emptively when the text exceeds the slot's max chars, and
+          <strong>reactively</strong> when a provider rejects a shorter input as
+          too long — <code>INPUT_TOO_LONG</code> retries on the same provider so
+          voice and cache stay stable.
+        </p>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">№ 04</span>
+        <h3>Provider failover, <em>with a paper trail.</em></h3>
+        <p>
+          Automatic on rate-limit, 5xx, or timeout. Each retry logs its cost
+          delta. Voice cloning pins to the preferred provider so the reference
+          isn't silently dropped when a backend without cloning would have
+          otherwise been chosen.
+        </p>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">№ 05</span>
+        <h3>Free local <em>escape hatch.</em></h3>
+        <p>
+          Same plugin, same skills, same sidecars, no API key, no network,
+          no bill. Route to Kokoro-FastAPI, Speaches, Orpheus-FastAPI,
+          Chatterbox, or Voicebox. The local provider is a first-class
+          citizen — auto-detected at startup since v0.8.5.
+        </p>
+      </article>
+
+      <article class="row-rule">
+        <span class="idx">№ 06</span>
+        <h3>MCP-native <em>UX you'd expect.</em></h3>
+        <p>
+          Elicitation when ≥2 prompts queue (batch vs. sync). Sampling for the
+          prompt rewriter. Notifications on batch completion. Resources for
+          recent outputs in the asset panel. Structured errors with
+          <code>code</code>, <code>message</code>, <code>suggestedFix</code> —
+          no raw provider blobs.
+        </p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== LOCAL ============== -->
+<section id="local">
+  <div class="wrap local-grid">
+    <div>
+      <span class="eyebrow">$0 / call</span>
+      <h2>Run it 100% local. <em>Zero API keys.</em></h2>
+      <p>
+        Point genkettle at any OpenAI-compatible local server and generate
+        images or speech without a key, network round-trip, or dollar spent.
+        Sidecars, cache, regenerate, iterate, post-processing — everything
+        keeps working.
+      </p>
+      <p>
+        The local provider is <strong>auto-detected at startup</strong> since
+        v0.8.5 — if <code>LOCAL_BASE_URL/models</code> responds, it joins the
+        failover chain automatically. Set <code>LOCAL_ENABLED=false</code> only
+        if you need to force-exclude a reachable server.
+      </p>
+
+      <div class="receipt-line">
+        <span class="t">RECEIPT</span>
+        <span class="desc">tts · local · kokoro · 4 chunks · stitched</span>
+        <span class="cost">$0.0000</span>
+      </div>
+
+      <div class="local-tags">
+        <a class="local-tag" href="https://github.com/remsky/Kokoro-FastAPI" target="_blank" rel="noopener">Kokoro-FastAPI</a>
+        <a class="local-tag" href="https://github.com/speaches-ai/speaches" target="_blank" rel="noopener">Speaches</a>
+        <a class="local-tag" href="https://github.com/Lex-au/Orpheus-FastAPI" target="_blank" rel="noopener">Orpheus-FastAPI</a>
+        <a class="local-tag" href="https://github.com/travisvn/chatterbox-tts-api" target="_blank" rel="noopener">Chatterbox</a>
+        <a class="local-tag" href="https://voicebox.sh" target="_blank" rel="noopener">Voicebox</a>
+      </div>
+    </div>
+
+    <div class="code">
+      <div class="head">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span>shell · zsh</span>
+        <button class="copy-btn" data-copy="local">copy</button>
+      </div>
+<pre class="body" id="code-local"><span class="c"># start a local TTS backend (Kokoro shown)</span>
+docker run -p 8880:8880 \
+  ghcr.io/remsky/kokoro-fastapi-cpu:latest
+
+<span class="c"># confirm it's reachable + which models loaded</span>
+node mcp-server/dist/cli.js <span class="k">--check-local</span>
+
+<span class="c"># generate against the local server, $0/call</span>
+node mcp-server/dist/cli.js <span class="k">--speech</span> \
+  -p <span class="s">"hello world"</span> \
+  <span class="k">--provider</span> local <span class="k">--model</span> kokoro
+
+<span class="c"># zero-shot voice cloning (Chatterbox / XTTS backend)</span>
+<span class="k">export</span> LOCAL_BASE_URL=<span class="s">http://localhost:4123/v1</span>
+node mcp-server/dist/cli.js <span class="k">--speech</span> \
+  -p <span class="s">"read this in my voice"</span> \
+  <span class="k">--provider</span> local <span class="k">--model</span> chatterbox \
+  <span class="k">--reference-audio</span> ~/voice-samples/me.wav</pre>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== COMPARE ============== -->
+<section id="compare">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">how it compares</span>
+      <h2 class="section-title">Same modalities. <em>Different bill of materials.</em></h2>
+      <p class="section-lede">A side-by-side that doesn't editorialize. Either the row ships in the box, or it doesn't.</p>
+    </div>
+
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="us">genkettle</th>
+            <th>Raw OpenAI / Gemini</th>
+            <th>ElevenLabs sub</th>
+            <th>guinacio's claude-image-gen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Multi-provider, one interface</td>
+            <td class="us"><span class="yes">6 providers</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">OpenAI only</td>
+          </tr>
+          <tr>
+            <td>Pre-call budget enforcement</td>
+            <td class="us"><span class="yes">daily / weekly / monthly</span></td>
+            <td class="no">—</td>
+            <td class="partial">plan limits</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Per-call + per-session ledger</td>
+            <td class="us"><span class="yes">JSON + CSV export</span></td>
+            <td class="no">—</td>
+            <td class="partial">dashboard</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Batch mode (50% off)</td>
+            <td class="us"><span class="yes">image + TTS</span></td>
+            <td class="partial">manual</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Sidecar / regenerate</td>
+            <td class="us"><span class="yes"><code style="font-family:var(--mono);background:var(--bg-hi);padding:1px 4px;border-radius:3px;">.regenerate.json</code></span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Local $0/call escape hatch</td>
+            <td class="us"><span class="yes">Voicebox + Kokoro + 4 more</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Voice cloning</td>
+            <td class="us"><span class="yes">local + ElevenLabs IDs</span></td>
+            <td class="no">n/a</td>
+            <td class="partial">subscription</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>Long-text TTS auto-chunk</td>
+            <td class="us"><span class="yes">sentence-aware, reactive</span></td>
+            <td class="partial">manual</td>
+            <td class="partial">partial</td>
+            <td class="no">n/a</td>
+          </tr>
+          <tr>
+            <td>Provider failover</td>
+            <td class="us"><span class="yes">logged cost delta</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>License</td>
+            <td class="us"><span class="yes">MIT · semver · changelog</span></td>
+            <td class="partial">vendor terms</td>
+            <td class="partial">vendor terms</td>
+            <td class="partial">MIT</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== INSTALL ============== -->
+<section id="install">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">install</span>
+      <h2 class="section-title">Two commands. <em>No clone, no build.</em></h2>
+      <p class="section-lede">Inside an existing Claude Code session. The plugin registers slash commands and MCP tools automatically on enable.</p>
+    </div>
+
+    <div class="install-grid">
+      <div class="step">
+        <span class="step-no"><span class="dot"></span>step 01 · marketplace</span>
+        <h4>Add the marketplace and install.</h4>
+        <p>You'll get the slash commands (<code>/gen-image</code>, <code>/gen-speech</code>, <code>/gen-cost</code>, <code>/gen-budget</code>, …) and the MCP tool surface in one go.</p>
+        <div class="code">
+          <div class="head">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span>claude code</span>
+            <button class="copy-btn" data-copy="install">copy</button>
+          </div>
+<pre class="body" id="code-install"><span class="p">/plugin marketplace add</span> sherifButt/claude-image-tts-gen
+<span class="p">/plugin install</span> claude-image-tts-gen@claude-image-tts-gen-marketplace</pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <span class="step-no"><span class="dot"></span>step 02 · configure</span>
+        <h4>Export at least one key, or run a local server.</h4>
+        <p>Grab a free Gemini key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Append to <code>~/.zshrc</code> for persistence — new terminals + sessions inherit it.</p>
+        <div class="code">
+          <div class="head">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span>~/.zshrc</span>
+            <button class="copy-btn" data-copy="env">copy</button>
+          </div>
+<pre class="body" id="code-env"><span class="c"># required: at least one provider key OR a local server</span>
+<span class="k">export</span> GEMINI_API_KEY=<span class="s">'your-key'</span>
+<span class="k">export</span> OPENAI_API_KEY=<span class="s">'your-key'</span>
+
+<span class="c"># optional: per-provider default voices (saves --voice each call)</span>
+<span class="k">export</span> GEMINI_DEFAULT_VOICE=<span class="s">Charon</span>
+<span class="k">export</span> OPENAI_DEFAULT_VOICE=<span class="s">onyx</span>
+<span class="k">export</span> ELEVENLABS_DEFAULT_VOICE=<span class="s">'&lt;voice-id&gt;'</span>
+
+<span class="c"># optional: local server (auto-detected since v0.8.5)</span>
+<span class="k">export</span> LOCAL_BASE_URL=<span class="s">http://localhost:8880/v1</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FINAL ============== -->
+<section class="final">
+  <div class="wrap final-grid">
+    <div>
+      <span class="eyebrow">ship something</span>
+      <h2>Stop paying for <em>identical regenerations.</em></h2>
+      <p>
+        MIT-licensed, semver'd, and shipping. Open an issue, send a PR, or just
+        install it and ship a feature with $5/day worth of cloud spend you can
+        actually account for.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+          Star on GitHub
+          <svg class="arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/sherifButt/claude-image-tts-gen/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
+          Read the changelog
+        </a>
+      </div>
+    </div>
+    <div>
+      <img src="assets/genkettle-mark.svg" alt="" class="final-mark" id="final-mark" aria-hidden="true" />
+    </div>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer>
+  <div class="wrap row">
+    <div class="left">
+      <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" id="footer-word" />
+      <span style="color: var(--ink-faint);">·</span>
+      <span>MIT · v0.8.7 · 2026</span>
+    </div>
+    <div class="links">
+      <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">github</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/blob/main/README.md" target="_blank" rel="noopener">readme</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/issues" target="_blank" rel="noopener">issues</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen/releases" target="_blank" rel="noopener">releases</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // theme toggle — persists per landing variant
+  var btn = document.getElementById('theme-toggle');
+  btn.addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('gk-theme-v2', next);
+  });
+
+  // copy buttons
+  document.querySelectorAll('.copy-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var id = 'code-' + b.getAttribute('data-copy');
+      var el = document.getElementById(id);
+      if (!el) return;
+      navigator.clipboard.writeText(el.innerText).then(function () {
+        var prev = b.textContent;
+        b.textContent = 'copied';
+        setTimeout(function () { b.textContent = prev; }, 1400);
+      });
+    });
+  });
+
+  /* ============== HERO DEMO ANIMATION ==============
+     Plays the 5-beat narrative from docs/demo/demo-script.md.
+     Each beat: user prompt is typed, then assistant tool-call lines
+     are revealed. The whole thing loops with a 4s pause. Honors
+     prefers-reduced-motion: reduce by rendering the final state once.
+  */
+  (function () {
+    var stream = document.getElementById('demo-stream');
+    var status = document.getElementById('demo-status');
+    var stepEl = document.getElementById('demo-step');
+    var replay = document.getElementById('replay-btn');
+    if (!stream) return;
+
+    var BEATS = [
+      {
+        label: 'budget',
+        statusText: 'setting daily cap',
+        prompt: 'Set my daily budget to $0.05.',
+        lines: [
+          { kind: 'tool', html: 'set_budget · daily=<b>$0.05</b> · weekly=$5.00 · monthly=$20.00' },
+          { kind: 'note', html: 'budget updated · 0% used' }
+        ],
+        pauseAfter: 700
+      },
+      {
+        label: 'image',
+        statusText: 'generating image',
+        prompt: 'Generate a hero image — minimalist line art, dark bg, 16:9.',
+        lines: [
+          { kind: 'tool', html: 'generate_image · gemini · flash · 1024² · small' },
+          { kind: 'row',  desc: './generated-images/hero-1.png', cost: '$0.0039' },
+          { kind: 'note', html: 'sidecar · .regenerate.json · written' }
+        ],
+        pauseAfter: 800
+      },
+      {
+        label: 'tts',
+        statusText: 'tts via local Voicebox',
+        prompt: 'Using Voicebox, read that headline aloud.',
+        lines: [
+          { kind: 'tool', html: 'generate_speech · voicebox · kokoro · 4 chunks · stitched' },
+          { kind: 'row',  desc: './generated-audio/headline.mp3', cost: '$0.0000', costClass: 'zero' },
+          { kind: 'note', html: '$0/call · no provider spend · 78% of $0.05 used' }
+        ],
+        pauseAfter: 800
+      },
+      {
+        label: 'ledger',
+        statusText: 'session spend so far',
+        prompt: "What's my session spend?",
+        lines: [
+          { kind: 'tool', html: 'session_spend' },
+          { kind: 'row',  desc: 'image · gemini · flash',    cost: '$0.0039' },
+          { kind: 'row',  desc: 'tts · voicebox · kokoro',   cost: '$0.0000', costClass: 'zero' },
+          { kind: 'row total', desc: 'total · 2 calls · today', cost: '$0.0039' }
+        ],
+        pauseAfter: 1100
+      },
+      {
+        label: 'block',
+        statusText: 'budget guard fires',
+        prompt: 'Another version — same prompt, light background.',
+        lines: [
+          { kind: 'tool', html: 'generate_image · gemini · flash · estimated $0.0039' },
+          { kind: 'block', html: '<span class="label">✕ BUDGET_EXCEEDED</span> · daily cap $0.05 reached' },
+          { kind: 'note', html: 'pre-call check · no provider call · nothing spent' }
+        ],
+        pauseAfter: 1600
+      }
+    ];
+
+    var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var running = false;
+    var cancelled = false;
+
+    function sleep(ms) {
+      return new Promise(function (res) {
+        if (cancelled) return res();
+        setTimeout(res, ms);
+      });
+    }
+
+    function autoScroll() {
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function appendLine(kind) {
+      var el = document.createElement('div');
+      el.className = 'demo-line ' + kind;
+      stream.appendChild(el);
+      autoScroll();
+      return el;
+    }
+
+    function appendRow(opts) {
+      var el = document.createElement('div');
+      el.className = 'demo-line ' + (opts.cls || 'row');
+      var d = document.createElement('span'); d.className = 'desc'; d.textContent = opts.desc;
+      var c = document.createElement('span'); c.className = 'cost' + (opts.costClass ? ' ' + opts.costClass : ''); c.textContent = opts.cost;
+      el.appendChild(d); el.appendChild(c);
+      stream.appendChild(el);
+      autoScroll();
+      return el;
+    }
+
+    async function typeInto(el, text) {
+      var cursor = document.createElement('span');
+      cursor.className = 'demo-cursor';
+      el.appendChild(cursor);
+      var i = 0;
+      while (i < text.length) {
+        if (cancelled) return;
+        var ch = text.charAt(i);
+        cursor.insertAdjacentText('beforebegin', ch);
+        i += 1;
+        // small natural jitter — slow for spaces, faster mid-word
+        var delay = ch === ' ' ? 40 : (22 + Math.random() * 18);
+        await sleep(delay);
+        autoScroll();
+      }
+      cursor.remove();
+    }
+
+    async function playBeat(beat, idx, total) {
+      if (cancelled) return;
+      stepEl.textContent = (idx + 1) + ' / ' + total + ' · ' + beat.label;
+      status.textContent = beat.statusText;
+
+      // user prompt — typed
+      var p = appendLine('user');
+      await typeInto(p, beat.prompt);
+      await sleep(420);
+
+      // response lines — revealed with a small stagger
+      for (var i = 0; i < beat.lines.length; i++) {
+        if (cancelled) return;
+        var line = beat.lines[i];
+        if (line.kind === 'row' || line.kind === 'row total') {
+          appendRow({ desc: line.desc, cost: line.cost, costClass: line.costClass, cls: line.kind });
+        } else {
+          var el = appendLine(line.kind);
+          el.innerHTML = line.html;
+        }
+        autoScroll();
+        await sleep(180 + Math.random() * 120);
+      }
+      await sleep(beat.pauseAfter || 800);
+    }
+
+    async function play() {
+      if (running) return;
+      running = true;
+      cancelled = false;
+      stream.innerHTML = '';
+      stream.scrollTop = 0;
+
+      if (prefersReduced) {
+        // render the whole transcript once, no animation
+        for (var i = 0; i < BEATS.length; i++) {
+          var b = BEATS[i];
+          var p = appendLine('user'); p.textContent = b.prompt;
+          for (var j = 0; j < b.lines.length; j++) {
+            var line = b.lines[j];
+            if (line.kind === 'row' || line.kind === 'row total') {
+              appendRow({ desc: line.desc, cost: line.cost, costClass: line.costClass, cls: line.kind });
+            } else {
+              var el = appendLine(line.kind);
+              el.innerHTML = line.html;
+            }
+          }
+        }
+        stepEl.textContent = BEATS.length + ' / ' + BEATS.length + ' · done';
+        status.textContent = 'demo · static (reduced motion)';
+        running = false;
+        return;
+      }
+
+      for (var i = 0; i < BEATS.length; i++) {
+        if (cancelled) break;
+        await playBeat(BEATS[i], i, BEATS.length);
+      }
+
+      if (!cancelled) {
+        status.textContent = 'demo complete · looping in 4s';
+        await sleep(4000);
+      }
+      running = false;
+      if (!cancelled) play();
+    }
+
+    function restart() {
+      cancelled = true;
+      // give in-flight awaits a tick to bail
+      setTimeout(function () { cancelled = false; play(); }, 30);
+    }
+
+    if (replay) replay.addEventListener('click', restart);
+
+    // Start when the panel is in view, not before — a hero demo that
+    // plays before the user sees it wastes the punchline.
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            io.disconnect();
+            play();
+          }
+        });
+      }, { threshold: 0.25 });
+      io.observe(stream);
+    } else {
+      play();
+    }
+  })();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import type { Modality } from "../providers/types.js";
 
-export type PriceUnit = "image" | "million_chars" | "million_tokens";
+export type PriceUnit = "image" | "million_chars" | "million_tokens" | "second";
 
 export interface UnitPricing {
   type: PriceUnit;

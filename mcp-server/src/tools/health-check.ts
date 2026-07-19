@@ -104,6 +104,20 @@ async function pingVoicebox(baseUrl: string): Promise<void> {
   }
 }
 
+async function pingReplicate(apiToken: string): Promise<void> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS);
+  try {
+    const r = await fetch("https://api.replicate.com/v1/account", {
+      headers: { Authorization: `Bearer ${apiToken}` },
+      signal: ctrl.signal,
+    });
+    if (!r.ok) throw new Error(`Replicate ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function checkProvider(
   configured: boolean,
   apiKey: string | undefined,
@@ -122,17 +136,18 @@ async function checkProvider(
 }
 
 export async function healthCheck(config: Config): Promise<HealthCheckOutput> {
-  const [google, openai, openrouter, elevenlabs, local, voicebox] = await Promise.all([
+  const [google, openai, openrouter, elevenlabs, local, voicebox, replicate] = await Promise.all([
     checkProvider(Boolean(config.geminiApiKey), config.geminiApiKey, pingGoogle),
     checkProvider(Boolean(config.openaiApiKey), config.openaiApiKey, pingOpenAI),
     checkProvider(Boolean(config.openrouterApiKey), config.openrouterApiKey, pingOpenRouter),
     checkProvider(Boolean(config.elevenlabsApiKey), config.elevenlabsApiKey, pingElevenLabs),
     checkProvider(config.localEnabled, config.localBaseUrl, pingLocal),
     checkProvider(config.voiceboxEnabled, config.voiceboxBaseUrl, pingVoicebox),
+    checkProvider(Boolean(config.replicateApiToken), config.replicateApiToken, pingReplicate),
   ]);
 
   const pricing = getStaleness();
-  const all = { google, openai, openrouter, elevenlabs, local, voicebox };
+  const all = { google, openai, openrouter, elevenlabs, local, voicebox, replicate };
   const configured = Object.values(all).filter((p) => p.configured);
   const allOk = configured.length > 0 && configured.every((p) => p.ok === true) && !pricing.isStale;
 

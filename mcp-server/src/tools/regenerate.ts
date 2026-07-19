@@ -5,16 +5,21 @@ import type {
   SidecarImageInput,
   SidecarMetadata,
   SidecarSpeechInput,
+  SidecarVideoInput,
 } from "../sidecar/types.js";
 import { generateImage, type GenerateImageOutput } from "./generate-image.js";
 import { generateSpeech, type GenerateSpeechOutput } from "./generate-speech.js";
+import { generateVideo, type GenerateVideoOutput } from "./generate-video.js";
 
 export interface RegenerateArgs {
   path: string;
   outputPath?: string;
 }
 
-export type RegenerateOutput = GenerateImageOutput | GenerateSpeechOutput;
+export type RegenerateOutput =
+  | GenerateImageOutput
+  | GenerateSpeechOutput
+  | GenerateVideoOutput;
 
 export async function regenerate(
   args: RegenerateArgs,
@@ -54,6 +59,26 @@ export async function regenerate(
         text: input.text,
         voice: input.voice,
         referenceAudioPath: input.referenceAudioPath,
+        provider: meta.provider,
+        tier: meta.tier,
+        model: meta.model,
+        outputPath: args.outputPath,
+        outputDir: args.outputPath ? undefined : originalDir,
+      },
+      config,
+      { parentSidecar: sidecarPath },
+    );
+  }
+
+  if (meta.tool === "generate_video") {
+    const input = meta.input as SidecarVideoInput;
+    return await generateVideo(
+      {
+        prompt: input.prompt,
+        imagePath: input.imagePath,
+        referenceImagePaths: input.referenceImagePaths,
+        duration: input.durationSeconds,
+        aspectRatio: input.aspectRatio,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,

@@ -26,7 +26,9 @@ export function makePriceKey(
   params?: Record<string, unknown>,
 ): string {
   const base = `${provider}/${model}`;
-  const variant = params?.quality;
+  // Image slots vary by `quality` (gpt-image-*); video slots vary by
+  // `resolution` (grok-imagine-video). Either discriminates the price key.
+  const variant = params?.quality ?? params?.resolution;
   if (typeof variant === "string" && variant.length > 0) {
     return `${base}:${variant}`;
   }
@@ -86,7 +88,12 @@ export function unknownCostEstimate(query: PriceQuery, units: number): CostEstim
   return {
     total: 0,
     currency: TABLE.currency,
-    unit: query.modality === "image" ? "image" : "million_chars",
+    unit:
+      query.modality === "image"
+        ? "image"
+        : query.modality === "video"
+          ? "second"
+          : "million_chars",
     units,
     pricePerUnit: 0,
     isBatchPrice: false,
@@ -106,6 +113,8 @@ export function estimateCost(
   let total: number;
   switch (price.unit) {
     case "image":
+    case "second":
+      // `units` = image count, or video seconds. Linear per-unit price.
       total = price.pricePerUnit * units;
       break;
     case "million_chars":
@@ -137,9 +146,15 @@ export function getStaleness(now: Date = new Date()): Staleness {
   };
 }
 
-export function unitsForModality(modality: Modality, payload: { count?: number; chars?: number }): number {
+export function unitsForModality(
+  modality: Modality,
+  payload: { count?: number; chars?: number; seconds?: number },
+): number {
   if (modality === "image") {
     return payload.count ?? 1;
+  }
+  if (modality === "video") {
+    return payload.seconds ?? 0;
   }
   return payload.chars ?? 0;
 }

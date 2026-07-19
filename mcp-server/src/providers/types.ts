@@ -1,5 +1,12 @@
-export type ProviderId = "google" | "openai" | "openrouter" | "elevenlabs" | "local" | "voicebox";
-export type Modality = "image" | "tts";
+export type ProviderId =
+  | "google"
+  | "openai"
+  | "openrouter"
+  | "elevenlabs"
+  | "local"
+  | "voicebox"
+  | "replicate";
+export type Modality = "image" | "tts" | "video";
 export type Tier = "small" | "mid" | "pro";
 
 export interface ReferenceImage {
@@ -61,9 +68,39 @@ export interface TtsGenResult {
   alignment?: WordAlignment[];
 }
 
+export interface VideoGenRequest {
+  prompt: string;
+  model: string;
+  /** Image-to-video input frame. grok-imagine-video-1.5 is image-to-video only:
+   *  every prediction needs an input image. */
+  image: ReferenceImage;
+  /** Additional reference images for composition (grok accepts up to 7 total,
+   *  including `image`). Order matters. */
+  referenceImages?: ReferenceImage[];
+  params?: Record<string, unknown>;
+  /** Requested clip length in seconds. Drives per-second cost. */
+  durationSeconds: number;
+  /** Output aspect ratio; omit for the provider's "auto". */
+  aspectRatio?: import("../util/aspect.js").AspectRatio;
+}
+
+export interface VideoGenResult {
+  mimeType: string;
+  data: Buffer;
+  modelUsed: string;
+  providerUsed: ProviderId;
+  /** Actual clip length billed, in seconds. Falls back to the requested duration. */
+  durationSeconds: number;
+}
+
 export interface ImageProvider {
   readonly id: ProviderId;
   generateImage(req: ImageGenRequest): Promise<ImageGenResult>;
+}
+
+export interface VideoProvider {
+  readonly id: ProviderId;
+  generateVideo(req: VideoGenRequest): Promise<VideoGenResult>;
 }
 
 export interface TtsProvider {

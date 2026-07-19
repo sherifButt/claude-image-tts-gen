@@ -31,6 +31,7 @@ import { estimateCostDryRun, type EstimateCostArgs } from "./tools/estimate-cost
 import { exportSpend, type ExportSpendArgs } from "./tools/export-spend.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech, type GenerateSpeechArgs } from "./tools/generate-speech.js";
+import { generateVideo, type GenerateVideoArgs } from "./tools/generate-video.js";
 import { healthCheck } from "./tools/health-check.js";
 import { iterate, type IterateArgs } from "./tools/iterate.js";
 import { pickVariant, type PickVariantArgs } from "./tools/pick-variant.js";
@@ -55,7 +56,7 @@ import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
 
-const VERSION = "0.8.10";
+const VERSION = "0.9.0";
 const config = loadConfig();
 await applyAutoDetection(config);
 
@@ -77,6 +78,8 @@ function fileExtToMime(p: string): string {
   if (ext === "mp3") return "audio/mpeg";
   if (ext === "wav") return "audio/wav";
   if (ext === "opus") return "audio/ogg";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "webm") return "video/webm";
   if (ext === "srt" || ext === "vtt") return "text/plain";
   return "application/octet-stream";
 }
@@ -215,6 +218,55 @@ const speechInputSchema = {
   required: ["text"],
 } as const;
 
+const videoInputSchema = {
+  type: "object",
+  properties: {
+    prompt: { type: "string", description: "Motion / action directions for the clip (what should move and how)." },
+    imagePath: {
+      type: "string",
+      description:
+        "Path to the input frame to animate. Required — grok-imagine-video-1.5 is image-to-video only. Generate one with generate_image first if you don't have a still.",
+    },
+    referenceImagePaths: {
+      type: "array",
+      items: { type: "string" },
+      description: "Optional extra reference images passed alongside imagePath (grok accepts up to 7 total).",
+    },
+    provider: {
+      type: "string",
+      enum: ["replicate"],
+      description: `Provider. Default: ${getDefaultProvider("video")}. Needs REPLICATE_API_TOKEN.`,
+    },
+    tier: {
+      type: "string",
+      enum: ["small", "mid"],
+      description: `Resolution tier: small = 480p ($0.08/s), mid = 720p ($0.14/s). Default: ${getDefaultTier()}.`,
+    },
+    model: { type: "string", description: "Optional explicit model override." },
+    duration: {
+      type: "number",
+      minimum: 1,
+      maximum: 15,
+      description: "Clip length in seconds (1–15). Default 5. Cost = duration × per-second rate.",
+    },
+    aspectRatio: {
+      type: "string",
+      enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
+      description: "Output aspect ratio. Omit for the model's auto. Note: 21:9 is not supported for video.",
+    },
+    outputPath: { type: "string", description: "Optional explicit output path (.mp4)." },
+    outputDir: {
+      type: "string",
+      description: "Directory for the auto-generated filename (ignored if outputPath is passed). Overrides the video output dir from env.",
+    },
+    sidecar: {
+      type: "boolean",
+      description: "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true.",
+    },
+  },
+  required: ["prompt", "imagePath"],
+} as const;
+
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
@@ -228,6 +280,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: speechInputSchema,
     },
     {
+      name: "generate_video",
+      description: `Generate a video from an input image (image-to-video). Default ${getDefaultProvider("video")}/${getDefaultTier()} via grok-imagine-video-1.5. Output dir: ${config.videoOutputDir}. Requires REPLICATE_API_TOKEN. imagePath is mandatory; prompt sets the motion. Audio (sfx/ambience/speech) is synthesized in the same pass. Billed per second of output.`,
+      inputSchema: videoInputSchema,
+    },
+    {
       name: "create_asset",
       description: "Generic media asset alias. v1: routes to generate_image (TTS via generate_speech).",
       inputSchema: imageInputSchema,
@@ -238,7 +295,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: "object",
         properties: {
-          modality: { type: "string", enum: ["image", "tts"] },
+          modality: { type: "string", enum: ["image", "tts", "video"] },
         },
         required: ["modality"],
       },
@@ -272,11 +329,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: "object",
         properties: {
-          modality: { type: "string", enum: ["image", "tts"] },
+          modality: { type: "string", enum: ["image", "tts", "video"] },
           count: { type: "number", description: "Number of images (default 1)" },
           text: { type: "string", description: "TTS text — char count is used" },
           chars: { type: "number", description: "Override TTS char count directly" },
-          provider: { type: "string", enum: ["google", "openai", "openrouter", "elevenlabs"] },
+          seconds: { type: "number", description: "Video clip length in seconds (default 5)" },
+          provider: { type: "string", enum: ["google", "openai", "openrouter", "elevenlabs", "replicate"] },
           tier: { type: "string", enum: ["small", "mid", "pro"] },
         },
         required: ["modality"],
@@ -566,6 +624,39 @@ async function handleImageCall(args: unknown) {
   };
 }
 
+async function handleVideoCall(args: unknown) {
+  const parsed = (args ?? {}) as GenerateVideoArgs;
+
+  // Optional MCP-sampling prompt rewrite for the motion prompt.
+  let rewriteNote: string | null = null;
+  if (config.rewritePrompts && parsed.prompt) {
+    const rewrite = await rewritePromptViaMcpSampling(server, parsed.prompt, getDefaultProvider("video"));
+    if (rewrite) {
+      rewriteNote = `Prompt rewritten via MCP sampling.`;
+      parsed.prompt = rewrite.rewritten;
+    }
+  }
+
+  const result = await generateVideo(parsed, config);
+  const lines = [
+    `Video generated.`,
+    `File: ${result.files[0]}`,
+    `Provider: ${result.providerUsed} (${result.tier} tier)`,
+    `Model: ${result.modelUsed}`,
+    `Duration: ${result.durationSeconds}s`,
+    `Cost: ${result.cost.currency} ${result.cost.total.toFixed(4)}` +
+      `${result.cached ? ` [cached, would have been ${result.cost.currency} ${(result.cost.pricePerUnit * result.durationSeconds).toFixed(4)}]` : ""}`,
+    `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
+      `(${result.sessionTotal.today.callCount} calls)`,
+  ];
+  if (rewriteNote) lines.push(rewriteNote);
+  if (result.budgetWarning) lines.push(formatBudgetWarning(result.budgetWarning));
+  return {
+    structuredContent: result,
+    content: [{ type: "text", text: lines.join("\n") }],
+  };
+}
+
 async function handleSpeechCall(args: unknown) {
   const result = await generateSpeech((args ?? {}) as GenerateSpeechArgs, config);
   const lines = [
@@ -767,7 +858,12 @@ async function handlePostProcess(args: unknown) {
 
 async function handleIterate(args: unknown) {
   const result = await iterate((args ?? {}) as IterateArgs, config);
-  const tool = "voiceUsed" in result ? "generate_speech" : "generate_image";
+  const tool =
+    "voiceUsed" in result
+      ? "generate_speech"
+      : "durationSeconds" in result
+        ? "generate_video"
+        : "generate_image";
   return {
     structuredContent: result,
     content: [
@@ -801,7 +897,12 @@ async function handlePickVariant(args: unknown) {
 
 async function handleRegenerate(args: unknown) {
   const result = await regenerate((args ?? {}) as RegenerateArgs, config);
-  const tool = "voiceUsed" in result ? "generate_speech" : "generate_image";
+  const tool =
+    "voiceUsed" in result
+      ? "generate_speech"
+      : "durationSeconds" in result
+        ? "generate_video"
+        : "generate_image";
   return {
     structuredContent: result,
     content: [
@@ -830,15 +931,17 @@ function providerKeyConfigured(providerId: string): boolean {
       return Boolean(config.elevenlabsApiKey);
     case "local":
       return config.localEnabled;
+    case "replicate":
+      return Boolean(config.replicateApiToken);
     default:
       return false;
   }
 }
 
 function handleListProviders(args: unknown) {
-  const { modality } = (args ?? {}) as { modality?: "image" | "tts" };
-  if (modality !== "image" && modality !== "tts") {
-    throw new Error("modality must be 'image' or 'tts'");
+  const { modality } = (args ?? {}) as { modality?: "image" | "tts" | "video" };
+  if (modality !== "image" && modality !== "tts" && modality !== "video") {
+    throw new Error("modality must be 'image', 'tts', or 'video'");
   }
   const entries = listDeclared(modality).map((e) => ({
     ...e,
@@ -876,6 +979,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "generate_speech") {
       return await handleSpeechCall(request.params.arguments);
+    }
+    if (name === "generate_video") {
+      return await handleVideoCall(request.params.arguments);
     }
     if (name === "list_providers") {
       return handleListProviders(request.params.arguments);

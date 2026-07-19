@@ -1,8 +1,12 @@
+import { StructuredError } from "./util/errors.js";
+
 export interface Config {
   geminiApiKey: string | undefined;
   openaiApiKey: string | undefined;
   openrouterApiKey: string | undefined;
   elevenlabsApiKey: string | undefined;
+  /** Replicate API token — enables the `replicate` provider (video via grok-imagine-video-1.5). */
+  replicateApiToken: string | undefined;
   /** Local OpenAI-compatible server base URL (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, LM Studio, ...). */
   localBaseUrl: string;
   /** Whether the local provider is opted in to the failover chain. Resolved at startup: explicit env wins; otherwise auto-detect probes localBaseUrl/models. */
@@ -18,6 +22,7 @@ export interface Config {
   geminiImageModel: string;
   imageOutputDir: string;
   audioOutputDir: string;
+  videoOutputDir: string;
   logLevel: "error" | "warn" | "info" | "debug";
   autoplay: boolean;
   rewritePrompts: boolean;
@@ -49,6 +54,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     openaiApiKey: env.OPENAI_API_KEY,
     openrouterApiKey: env.OPENROUTER_API_KEY,
     elevenlabsApiKey: env.ELEVENLABS_API_KEY,
+    replicateApiToken: env.REPLICATE_API_TOKEN,
     // Default http://localhost:8880/v1 (Kokoro-FastAPI's default port) since
     // that's the recommended local backend. Users running Orpheus-FastAPI
     // (:5005), Speaches (:8000), LM Studio (:1234), etc. can override with
@@ -69,6 +75,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     geminiImageModel: env.GEMINI_IMAGE_MODEL ?? "gemini-2.5-flash-image",
     imageOutputDir: env.IMAGE_OUTPUT_DIR ?? sharedDir ?? "./generated-images",
     audioOutputDir: env.AUDIO_OUTPUT_DIR ?? sharedDir ?? "./generated-audio",
+    videoOutputDir: env.VIDEO_OUTPUT_DIR ?? sharedDir ?? "./generated-videos",
     logLevel: validLog,
     autoplay: ["true", "1", "yes", "on"].includes((env.AUTOPLAY ?? "").toLowerCase()),
     // Default true per CLAUDE.md decision (opt-out via REWRITE_PROMPTS=false).
@@ -88,9 +95,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
 function requireKey(envName: string, providerLabel: string, value: string | undefined): string {
   if (!value) {
-    // Imported lazily to avoid a circular import (errors.ts → util/output → config).
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { StructuredError } = require("./util/errors.js") as typeof import("./util/errors.js");
     throw new StructuredError(
       "CONFIG_ERROR",
       `${envName} is required for the ${providerLabel} provider`,
@@ -114,4 +118,8 @@ export function requireOpenRouterKey(config: Config): string {
 
 export function requireElevenLabsKey(config: Config): string {
   return requireKey("ELEVENLABS_API_KEY", "elevenlabs", config.elevenlabsApiKey);
+}
+
+export function requireReplicateToken(config: Config): string {
+  return requireKey("REPLICATE_API_TOKEN", "replicate", config.replicateApiToken);
 }

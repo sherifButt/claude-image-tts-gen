@@ -1,7 +1,7 @@
 {
   "name": "claude-image-tts-gen",
-  "description": "Multi-provider image and text-to-speech generation with cost tracking and batch mode.",
-  "version": "0.8.10",
+  "description": "Multi-provider image, text-to-speech, and video generation with cost tracking and batch mode.",
+  "version": "0.9.0",
   "author": {
     "name": "Sherif Butt"
   },
@@ -16,6 +16,7 @@
         "OPENAI_API_KEY": "${OPENAI_API_KEY:-}",
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY:-}",
         "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY:-}",
+        "REPLICATE_API_TOKEN": "${REPLICATE_API_TOKEN:-}",
         "GEMINI_DEFAULT_VOICE": "${GEMINI_DEFAULT_VOICE:-}",
         "OPENAI_DEFAULT_VOICE": "${OPENAI_DEFAULT_VOICE:-}",
         "ELEVENLABS_DEFAULT_VOICE": "${ELEVENLABS_DEFAULT_VOICE:-}",
@@ -28,6 +29,7 @@
         "GEMINI_IMAGE_MODEL": "${GEMINI_IMAGE_MODEL:-}",
         "IMAGE_OUTPUT_DIR": "${IMAGE_OUTPUT_DIR:-./generated-images}",
         "AUDIO_OUTPUT_DIR": "${AUDIO_OUTPUT_DIR:-./generated-audio}",
+        "VIDEO_OUTPUT_DIR": "${VIDEO_OUTPUT_DIR:-./generated-videos}",
         "STATE_DIR": "${STATE_DIR:-}",
         "AUTOPLAY": "${AUTOPLAY:-false}",
         "REWRITE_PROMPTS": "${REWRITE_PROMPTS:-true}",

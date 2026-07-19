@@ -1,13 +1,15 @@
-import { requireElevenLabsKey, requireGeminiKey, requireOpenAIKey, requireOpenRouterKey, } from "../config.js";
+import { requireElevenLabsKey, requireGeminiKey, requireOpenAIKey, requireOpenRouterKey, requireReplicateToken, } from "../config.js";
 import { StructuredError } from "../util/errors.js";
 import { ELEVENLABS_DEFAULT_VOICE, ELEVENLABS_FRIENDLY_VOICES, ElevenLabsProvider, } from "./elevenlabs.js";
 import { GEMINI_DEFAULT_VOICE, GEMINI_TTS_VOICES, GoogleProvider, } from "./google.js";
 import { LocalProvider } from "./local.js";
 import { OpenAIProvider } from "./openai.js";
 import { OpenRouterProvider } from "./openrouter.js";
+import { ReplicateProvider } from "./replicate.js";
 import { VoiceboxProvider } from "./voicebox.js";
 import { OPENAI_TTS_VOICES_GPT4O, OPENAI_TTS_VOICES_STD, } from "./types.js";
 const NA = { model: null, batchable: false, implemented: false };
+const NA_TABLE = { small: NA, mid: NA, pro: NA };
 const MATRIX = [
     {
         id: "google",
@@ -36,6 +38,7 @@ const MATRIX = [
                 maxCharsPerCall: 4000,
             },
         },
+        video: NA_TABLE,
     },
     {
         id: "openai",
@@ -85,6 +88,7 @@ const MATRIX = [
                 maxCharsPerCall: 4096,
             },
         },
+        video: NA_TABLE,
     },
     {
         id: "openrouter",
@@ -94,6 +98,7 @@ const MATRIX = [
             pro: { model: "google/gemini-3-pro-image-preview", batchable: false, implemented: true },
         },
         tts: { small: NA, mid: NA, pro: NA },
+        video: NA_TABLE,
     },
     {
         id: "local",
@@ -102,6 +107,7 @@ const MATRIX = [
         // usable only via explicit --model. check_local lists what's available.
         image: { small: NA, mid: NA, pro: NA },
         tts: { small: NA, mid: NA, pro: NA },
+        video: NA_TABLE,
     },
     {
         id: "voicebox",
@@ -133,6 +139,7 @@ const MATRIX = [
             mid: NA,
             pro: NA,
         },
+        video: NA_TABLE,
     },
     {
         id: "elevenlabs",
@@ -169,11 +176,37 @@ const MATRIX = [
                 maxCharsPerCall: 5000,
             },
         },
+        video: NA_TABLE,
+    },
+    {
+        id: "replicate",
+        // Replicate is video-only in this plugin. grok-imagine-video-1.5 is a
+        // single image-to-video model; the tier axis maps to output resolution
+        // (small = 480p @ $0.08/s, mid = 720p @ $0.14/s). Duration (1–15s) is a
+        // per-call param and drives cost. No `pro` slot — 720p is the ceiling.
+        image: NA_TABLE,
+        tts: NA_TABLE,
+        video: {
+            small: {
+                model: "xai/grok-imagine-video-1.5",
+                batchable: false,
+                implemented: true,
+                params: { resolution: "480p" },
+            },
+            mid: {
+                model: "xai/grok-imagine-video-1.5",
+                batchable: false,
+                implemented: true,
+                params: { resolution: "720p" },
+            },
+            pro: NA,
+        },
     },
 ];
 const DEFAULT_PROVIDER = {
     image: "google",
     tts: "google",
+    video: "replicate",
 };
 const DEFAULT_TIER = "small";
 export function getDefaultProvider(modality) {
@@ -278,6 +311,7 @@ export function createImageProvider(id, config) {
             return new LocalProvider({ baseUrl: config.localBaseUrl });
         case "elevenlabs":
         case "voicebox":
+        case "replicate":
             throw new Error(`${id} image provider is declared in the registry but not yet implemented`);
     }
 }
@@ -295,5 +329,20 @@ export function createTtsProvider(id, config) {
             return new VoiceboxProvider({ baseUrl: config.voiceboxBaseUrl });
         case "openrouter":
             throw new Error("openrouter does not support TTS");
+        case "replicate":
+            throw new Error("replicate does not support TTS (video-only in this plugin)");
+    }
+}
+export function createVideoProvider(id, config) {
+    switch (id) {
+        case "replicate":
+            return new ReplicateProvider({ apiToken: requireReplicateToken(config) });
+        case "google":
+        case "openai":
+        case "openrouter":
+        case "elevenlabs":
+        case "local":
+        case "voicebox":
+            throw new StructuredError("VALIDATION_ERROR", `${id} does not support video generation`, "Use --provider replicate for video (grok-imagine-video-1.5).");
     }
 }
