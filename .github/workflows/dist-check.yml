@@ -20,22 +20,15 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          # Pin to match the maintainer's local environment so the
-          # byte-level dist diff is reproducible across CI and dev.
-          # Bumping this requires re-committing dist/ from the same
-          # Node version, otherwise the verify step will fail.
-          node-version: 22
+          # Node 24 ships npm 11 — required here. npm 11 writes a versionless
+          # optional-dep stub for sharp's @img/sharp-win32-arm64 and tolerates
+          # it; npm 10 (bundled with node 22) throws `Invalid Version` parsing
+          # that empty version, which is what kept dist-check red on every push.
+          # tsc output is node-version-independent, so the byte-level dist diff
+          # below is unaffected (verified identical across node 22/24/25).
+          node-version: 24
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
-
-      # Node 22 ships npm 10, which throws `Invalid Version` on the versionless
-      # optional-dependency stub npm 11 writes for sharp's @img/sharp-win32-arm64
-      # (npm 11 both writes and tolerates it; npm 10 chokes parsing its empty
-      # version). Local dev + the maintainer use npm 11, so pin CI to npm 11 too
-      # to keep the lockfile consistent. tsc output is node-version-independent,
-      # so this doesn't affect the byte-level dist diff below.
-      - name: Use npm 11
-        run: npm install -g npm@11
 
       - name: Install
         working-directory: mcp-server
