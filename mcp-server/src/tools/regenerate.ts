@@ -42,6 +42,7 @@ export async function regenerate(
         tier: meta.tier,
         model: meta.model,
         aspectRatio: input.aspectRatio,
+        resolution: input.resolution,
         referenceImagePath: input.referenceImagePath,
         referenceImagePaths: input.referenceImagePaths,
         outputPath: args.outputPath,

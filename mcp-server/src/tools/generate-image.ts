@@ -21,7 +21,12 @@ import { existsSync } from "node:fs";
 import { readStylePresets } from "../presets/store.js";
 import type { ReferenceImage } from "../providers/types.js";
 import { extensionForMime } from "../util/output.js";
-import { isAspectRatio, type AspectRatio } from "../util/aspect.js";
+import {
+  isAspectRatio,
+  isImageResolution,
+  type AspectRatio,
+  type ImageResolution,
+} from "../util/aspect.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover, type FailoverDetails } from "../util/failover.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
@@ -45,6 +50,9 @@ export interface GenerateImageArgs {
   referenceImagePaths?: string[];
   /** Output aspect ratio. Defaults to 1:1 when omitted. */
   aspectRatio?: AspectRatio;
+  /** Output resolution tier: 1K (default) / 2K / 4K. gpt-image-2 only —
+   *  ignored by other providers. Combined with aspectRatio → concrete size. */
+  resolution?: ImageResolution;
   /** Write a .regenerate.json sidecar next to the output. Default true (or EMIT_SIDECAR env). */
   sidecar?: boolean;
 }
@@ -116,6 +124,15 @@ export async function generateImage(
   }
   const aspectRatio = args.aspectRatio;
 
+  if (args.resolution !== undefined && !isImageResolution(args.resolution)) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown resolution: ${String(args.resolution)}`,
+      "Use 1K, 2K, or 4K. Higher resolutions are gpt-image-2 (openai) only.",
+    );
+  }
+  const resolution = args.resolution;
+
   // Apply style preset if requested. Explicit args still win.
   let resolvedPrompt = args.prompt;
   let presetProvider: ProviderId | undefined;
@@ -180,6 +197,12 @@ export async function generateImage(
   } else if (referenceImages.length > 1) {
     refKeyParams.refs = referenceImages.map((r) => r.path ?? "buffer");
   }
+  // Resolution (2K/4K) is a gpt-image-2 concern only; fold it into the price/
+  // cache key for openai so cost + cache distinguish resolutions. Other
+  // providers ignore it (avoids polluting their keys / missing pricing rows).
+  const resKeyParams = (p: ProviderId): Record<string, unknown> =>
+    p === "openai" && resolution && resolution !== "1K" ? { resolution } : {};
+
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
     model: slot.model,
@@ -188,6 +211,7 @@ export async function generateImage(
     params: {
       ...slot.params,
       ...(aspectRatio ? { aspectRatio } : {}),
+      ...resKeyParams(requestedProvider),
       ...refKeyParams,
     },
   });
@@ -197,7 +221,12 @@ export async function generateImage(
   if (!cached) {
     const projectedCost =
       tryEstimateCost(
-        { provider: requestedProvider, model: slot.model, modality: "image", params: slot.params },
+        {
+          provider: requestedProvider,
+          model: slot.model,
+          modality: "image",
+          params: { ...slot.params, ...resKeyParams(requestedProvider) },
+        },
         1,
       ) ?? { total: 0 };
     const check = await checkBudget(projectedCost.total);
@@ -237,6 +266,7 @@ export async function generateImage(
         params: slot.params,
         referenceImages,
         aspectRatio,
+        resolution,
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -268,6 +298,7 @@ export async function generateImage(
           params: resolvedSlot.params,
           referenceImages,
           aspectRatio,
+          resolution,
         });
       },
     });
@@ -323,7 +354,7 @@ export async function generateImage(
     provider: providerUsed,
     model: modelUsed,
     modality: "image" as const,
-    params: slot.params,
+    params: { ...slot.params, ...resKeyParams(providerUsed) },
   };
   const cost =
     tryEstimateCost(costQuery, 1) ?? unknownCostEstimate(costQuery, 1);
@@ -366,6 +397,7 @@ export async function generateImage(
         prompt: resolvedPrompt,
         ...(refPaths.length > 0 ? { referenceImagePaths: refPaths } : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
+        ...(resolution ? { resolution } : {}),
       },
       output: { files: [filePath], mimeType },
       cost: { ...cost, total: chargedCost },

@@ -33,7 +33,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.9.1";
+const VERSION = "0.9.2";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`
@@ -85,6 +85,7 @@ Options:
       --style <name>            Apply saved image style preset on generation
       --reference <path>        Reference image (image-to-image edit). Repeat for multi-reference (gpt-image-2 / gemini-3.1-flash-image-preview).
   -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
+      --resolution <tier>       Image tier: 1K (default) | 2K | 4K (gpt-image-2 / --provider openai only)
       --no-sidecar              Skip the hidden .<name>.regenerate.json sidecar
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
       --max-chars-per-chunk <n> Override per-chunk char ceiling (e.g. 300 for
@@ -185,6 +186,7 @@ async function main(): Promise<void> {
         reference: { type: "string", multiple: true, description: "Reference image path (image-to-image). Repeat for multi-reference: --reference a.png --reference b.png" },
         "reference-audio": { type: "string", description: "Reference audio path for local voice cloning" },
         "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
+        resolution: { type: "string", description: "Image output tier: 1K (default) | 2K | 4K (gpt-image-2 / --provider openai only)" },
         "no-sidecar": { type: "boolean", default: false, description: "Skip writing the .regenerate.json sidecar" },
         "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
         "max-chars-per-chunk": { type: "string", description: "Override per-chunk char ceiling (defaults to provider slot's value)" },
@@ -519,6 +521,7 @@ async function main(): Promise<void> {
             style: values.style,
             referenceImagePaths: values.reference,
             aspectRatio: values["aspect-ratio"] as GenerateImageArgs["aspectRatio"],
+            resolution: values.resolution as GenerateImageArgs["resolution"],
             outputPath: values.output,
             outputDir,
             sidecar: emitSidecar,

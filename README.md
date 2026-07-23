@@ -79,13 +79,14 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **seven** (
 ### Generation
 - **7 providers** behind a single tier abstraction (`small | mid | pro`):
   - **Google Gemini** (image: 3.1 Flash **Lite** "Nano Banana 2 Lite" → 3.1 Flash "Nano Banana 2" → 3 Pro "Nano Banana Pro", all GA; TTS: 2.5 Flash → 3.1 Flash → 2.5 Pro. Replaced the now-deprecated Imagen 4 pro slot — Imagen 4 shuts down 2026-08-17.)
-  - **OpenAI** (image: gpt-image-2 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
+  - **OpenAI** (image: gpt-image-2 ×3 quality, up to **4K / 3840×2160** via `resolution`; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough: 2.5-flash-image, 3.1-flash-image-preview, 3-pro-image-preview)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
   - **🎬 Replicate (`provider: replicate`)** — video (image-to-video) via `xai/grok-imagine-video-1.5`. Tier = resolution (small=480p, mid=720p), 1–15s clips billed per second, audio synthesized free.
   - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
   - **🎙 Voicebox (`provider: voicebox`)** — local-first voice studio ([voicebox.sh](https://voicebox.sh)) with 7 TTS engines (Qwen3-TTS, Chatterbox, Kokoro, ...), zero-shot cloning, 23 languages. $0/call, no API key.
 - **Image-to-image edits** via reference image input (gpt-image-2, Gemini multimodal, local server if it supports `/v1/images/edits`). **Multi-reference composition** (v0.8.8) — pass an array of inputs to gpt-image-2 or gemini-3.1-flash-image-preview via `referenceImagePaths[]` (MCP) or repeated `--reference` flags (CLI)
+- **High-resolution image output** (v0.9.2) — `resolution: 1K | 2K | 4K` on gpt-image-2 (provider `openai`). Default 1K (≈1024px) keeps output/cost unchanged; 2K (≈2048px) and 4K (up to 3840×2160) opt in, combined with `aspectRatio` to pick the exact size. Resolution-keyed pricing keeps the ledger accurate (4K-high ≈ $0.41/img vs 1K-high ≈ $0.21).
 - **🎬 Image-to-video** (v0.9.0) via Replicate `grok-imagine-video-1.5` — feed a still frame + a motion prompt to `generate_video` (CLI: `--video -p "..." --image frame.png`). 1–15s clips at 480p/720p, per-second billing, synchronized audio. Same cache / sidecar / budget / regenerate machinery as image + TTS. Needs `REPLICATE_API_TOKEN`.
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg. Triggers both pre-emptively (text > provider's `maxCharsPerCall`) *and* reactively (provider rejects a shorter input as too long for output-duration / token reasons — a new `INPUT_TOO_LONG` code catches that and retries with chunking on the same provider, preserving voice)
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
@@ -95,7 +96,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **seven** (
 - **`voiceDefaulted` signal** on every TTS response — when you didn't spec a voice, the response says so, letting Claude catch mismatches before spending on a long run
 
 ### Cost awareness
-- **26-model pricing table** with batch (50% off) rates and 30-day staleness warning
+- **32-entry pricing table** with batch (50% off) rates and 30-day staleness warning
 - **Per-call cost** in every tool response; **session ledger** persisted to `~/.claude-image-tts-gen/session.json`
 - **Per-project tracking** (cwd-hashed) — `session_spend --project`
 - **Budget caps** (daily / weekly / monthly) — soft warn at 80%, hard block at 100%

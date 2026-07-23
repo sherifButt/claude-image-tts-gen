@@ -106,7 +106,37 @@
         "standard": 0.211,
         "batch": 0.1055
       },
-      "notes": "1024x1024 high quality. Per-image figure derived from token pricing; confirm against the official calculator. Larger sizes cost more in proportion to output tokens."
+      "notes": "1024x1024 (1K) high quality. Per-image figure derived from token pricing; confirm against the official calculator. 2K/4K priced separately (:high@2K, :high@4K)."
+    },
+    "openai/gpt-image-2:low@2K": {
+      "modality": "image",
+      "pricing": { "type": "image", "standard": 0.012, "batch": 0.006 },
+      "notes": "gpt-image-2 low quality at 2K (~2048x2048). Estimate — low quality is ~$0.01–0.02 at any size. Verify with OpenAI's image cost calculator."
+    },
+    "openai/gpt-image-2:medium@2K": {
+      "modality": "image",
+      "pricing": { "type": "image", "standard": 0.08, "batch": 0.04 },
+      "notes": "gpt-image-2 medium quality at 2K. Estimate scaled from the 1K figure and the high@2K anchor; verify with the calculator."
+    },
+    "openai/gpt-image-2:high@2K": {
+      "modality": "image",
+      "pricing": { "type": "image", "standard": 0.30, "batch": 0.15 },
+      "notes": "gpt-image-2 high quality at 2K (~2048x2048). ~$0.30/image per OpenAI 2026 pricing reports; verify with the calculator."
+    },
+    "openai/gpt-image-2:low@4K": {
+      "modality": "image",
+      "pricing": { "type": "image", "standard": 0.02, "batch": 0.01 },
+      "notes": "gpt-image-2 low quality at 4K (3840x2160). Estimate; low quality tops out around $0.02/image. Verify with the calculator."
+    },
+    "openai/gpt-image-2:medium@4K": {
+      "modality": "image",
+      "pricing": { "type": "image", "standard": 0.10, "batch": 0.05 },
+      "notes": "gpt-image-2 medium quality at 4K. Estimate scaled from the high@4K anchor; verify with the calculator."
+    },
+    "openai/gpt-image-2:high@4K": {
+      "modality": "image",
+      "pricing": { "type": "image", "standard": 0.41, "batch": 0.205 },
+      "notes": "gpt-image-2 high quality at 4K (3840x2160). ~$0.41/image per OpenAI 2026 pricing reports; verify with the calculator."
     },
     "openai/tts-1": {
       "modality": "tts",

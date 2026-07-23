@@ -9,7 +9,7 @@ import { summarize } from "../state/spend.js";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { readStylePresets } from "../presets/store.js";
-import { isAspectRatio } from "../util/aspect.js";
+import { isAspectRatio, isImageResolution, } from "../util/aspect.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { withFailover } from "../util/failover.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
@@ -46,6 +46,10 @@ export async function generateImage(args, config, opts = {}) {
         throw new StructuredError("VALIDATION_ERROR", `Unknown aspectRatio: ${String(args.aspectRatio)}`, `Use one of 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9.`);
     }
     const aspectRatio = args.aspectRatio;
+    if (args.resolution !== undefined && !isImageResolution(args.resolution)) {
+        throw new StructuredError("VALIDATION_ERROR", `Unknown resolution: ${String(args.resolution)}`, "Use 1K, 2K, or 4K. Higher resolutions are gpt-image-2 (openai) only.");
+    }
+    const resolution = args.resolution;
     // Apply style preset if requested. Explicit args still win.
     let resolvedPrompt = args.prompt;
     let presetProvider;
@@ -98,6 +102,10 @@ export async function generateImage(args, config, opts = {}) {
     else if (referenceImages.length > 1) {
         refKeyParams.refs = referenceImages.map((r) => r.path ?? "buffer");
     }
+    // Resolution (2K/4K) is a gpt-image-2 concern only; fold it into the price/
+    // cache key for openai so cost + cache distinguish resolutions. Other
+    // providers ignore it (avoids polluting their keys / missing pricing rows).
+    const resKeyParams = (p) => p === "openai" && resolution && resolution !== "1K" ? { resolution } : {};
     const cacheKey = buildCacheKey({
         provider: requestedProvider,
         model: slot.model,
@@ -106,13 +114,19 @@ export async function generateImage(args, config, opts = {}) {
         params: {
             ...slot.params,
             ...(aspectRatio ? { aspectRatio } : {}),
+            ...resKeyParams(requestedProvider),
             ...refKeyParams,
         },
     });
     const cached = await lookupCache(cacheKey);
     let budgetWarning = null;
     if (!cached) {
-        const projectedCost = tryEstimateCost({ provider: requestedProvider, model: slot.model, modality: "image", params: slot.params }, 1) ?? { total: 0 };
+        const projectedCost = tryEstimateCost({
+            provider: requestedProvider,
+            model: slot.model,
+            modality: "image",
+            params: { ...slot.params, ...resKeyParams(requestedProvider) },
+        }, 1) ?? { total: 0 };
         const check = await checkBudget(projectedCost.total);
         if (check.block) {
             throw new StructuredError("BUDGET_EXCEEDED", formatBudgetBlockError(check.block), `Raise the cap with set_budget --daily ${(check.block.cap * 2).toFixed(2)}, switch to a cheaper tier, or wait for the period to reset.`);
@@ -145,6 +159,7 @@ export async function generateImage(args, config, opts = {}) {
                 params: slot.params,
                 referenceImages,
                 aspectRatio,
+                resolution,
             });
         }
         catch (err) {
@@ -178,6 +193,7 @@ export async function generateImage(args, config, opts = {}) {
                     params: resolvedSlot.params,
                     referenceImages,
                     aspectRatio,
+                    resolution,
                 });
             },
         });
@@ -226,7 +242,7 @@ export async function generateImage(args, config, opts = {}) {
         provider: providerUsed,
         model: modelUsed,
         modality: "image",
-        params: slot.params,
+        params: { ...slot.params, ...resKeyParams(providerUsed) },
     };
     const cost = tryEstimateCost(costQuery, 1) ?? unknownCostEstimate(costQuery, 1);
     const isCached = cached !== null;
@@ -265,6 +281,7 @@ export async function generateImage(args, config, opts = {}) {
                 prompt: resolvedPrompt,
                 ...(refPaths.length > 0 ? { referenceImagePaths: refPaths } : {}),
                 ...(aspectRatio ? { aspectRatio } : {}),
+                ...(resolution ? { resolution } : {}),
             },
             output: { files: [filePath], mimeType },
             cost: { ...cost, total: chargedCost },

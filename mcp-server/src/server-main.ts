@@ -56,7 +56,7 @@ import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
 
-const VERSION = "0.9.1";
+const VERSION = "0.9.2";
 const config = loadConfig();
 await applyAutoDetection(config);
 
@@ -150,6 +150,12 @@ const imageInputSchema = {
       enum: ["1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3", "21:9"],
       description:
         "Output aspect ratio. Defaults to 1:1 if omitted. OG / social-landscape → 16:9 or 3:2; story/mobile portrait → 9:16; Instagram square → 1:1.",
+    },
+    resolution: {
+      type: "string",
+      enum: ["1K", "2K", "4K"],
+      description:
+        "Output resolution tier. Default 1K (≈1024px, unchanged). 2K (≈2048px) / 4K (up to 3840×2160) are gpt-image-2 (provider: openai) only — other providers ignore it. Cost rises steeply: 4K high ≈ $0.41/img vs 1K high ≈ $0.21. Combined with aspectRatio to pick the exact size.",
     },
     outputDir: {
       type: "string",

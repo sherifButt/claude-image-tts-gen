@@ -1,5 +1,5 @@
 import OpenAI, { toFile } from "openai";
-import { aspectToOpenAISize } from "../util/aspect.js";
+import { aspectToOpenAISize, aspectToOpenAISizeAtResolution } from "../util/aspect.js";
 const DEFAULT_VOICE = "alloy";
 const DEFAULT_AUDIO_FORMAT = "mp3";
 export class OpenAIProvider {
@@ -11,9 +11,15 @@ export class OpenAIProvider {
     async generateImage(req) {
         const params = req.params ?? {};
         const quality = params.quality ?? "auto";
-        const size = req.aspectRatio
-            ? aspectToOpenAISize(req.aspectRatio)
-            : (params.size ?? "auto");
+        // Resolution (gpt-image-2 2K/4K) needs an explicit WIDTHxHEIGHT — "auto"
+        // yields ~1K. For 2K/4K, resolve a concrete bucket from the aspect (square
+        // when none given). 1K keeps legacy behavior (aspect bucket, else auto).
+        const highRes = req.resolution && req.resolution !== "1K";
+        const size = highRes
+            ? aspectToOpenAISizeAtResolution(req.aspectRatio ?? "1:1", req.resolution)
+            : req.aspectRatio
+                ? aspectToOpenAISize(req.aspectRatio)
+                : (params.size ?? "auto");
         let item;
         const refs = req.referenceImages ?? [];
         if (refs.length > 0) {

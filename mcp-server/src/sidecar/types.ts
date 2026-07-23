@@ -15,6 +15,8 @@ export interface SidecarImageInput {
   referenceImagePaths?: string[];
   /** Aspect ratio passed to the provider at generation time. */
   aspectRatio?: import("../util/aspect.js").AspectRatio;
+  /** Output resolution tier (gpt-image-2: 1K/2K/4K). */
+  resolution?: import("../util/aspect.js").ImageResolution;
 }
 
 export interface SidecarSpeechInput {

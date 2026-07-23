@@ -27,12 +27,16 @@ export function makePriceKey(
 ): string {
   const base = `${provider}/${model}`;
   // Image slots vary by `quality` (gpt-image-*); video slots vary by
-  // `resolution` (grok-imagine-video). Either discriminates the price key.
-  const variant = params?.quality ?? params?.resolution;
-  if (typeof variant === "string" && variant.length > 0) {
-    return `${base}:${variant}`;
+  // `resolution` (grok-imagine-video: 480p/720p). gpt-image-2 varies by BOTH —
+  // quality plus an output-resolution tier (2K/4K), keyed as "quality@2K". 1K
+  // is the implicit default and never appears in the key (legacy parity).
+  const quality = typeof params?.quality === "string" ? params.quality : "";
+  const resolution = typeof params?.resolution === "string" ? params.resolution : "";
+  let variant = quality;
+  if (resolution && resolution !== "1K") {
+    variant = variant ? `${variant}@${resolution}` : resolution;
   }
-  return base;
+  return variant ? `${base}:${variant}` : base;
 }
 
 export function resolvePrice(

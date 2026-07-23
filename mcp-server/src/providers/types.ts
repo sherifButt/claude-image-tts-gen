@@ -24,6 +24,9 @@ export interface ImageGenRequest {
    *  (e.g. Gemini multimodal). Undefined or empty → text-only generation. */
   referenceImages?: ReferenceImage[];
   aspectRatio?: import("../util/aspect.js").AspectRatio;
+  /** Output resolution tier (gpt-image-2 only: 1K default / 2K / 4K). Other
+   *  providers ignore it. Combined with aspectRatio to pick a concrete size. */
+  resolution?: import("../util/aspect.js").ImageResolution;
 }
 
 export interface ImageGenResult {

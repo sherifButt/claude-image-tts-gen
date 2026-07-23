@@ -15,26 +15,65 @@ export function isAspectRatio(v: unknown): v is AspectRatio {
   return typeof v === "string" && (ASPECT_RATIOS as readonly string[]).includes(v);
 }
 
-/**
- * gpt-image-1 only supports three concrete sizes. gpt-image-2 accepts
- * flexible sizes but we keep the same three-bucket mapping for parity.
- */
-export function aspectToOpenAISize(
-  aspect: AspectRatio,
-): "1024x1024" | "1536x1024" | "1024x1536" {
+/** Output-resolution tiers for gpt-image-2 (opt-in; 1K preserves legacy output). */
+export const IMAGE_RESOLUTIONS = ["1K", "2K", "4K"] as const;
+export type ImageResolution = (typeof IMAGE_RESOLUTIONS)[number];
+
+export function isImageResolution(v: unknown): v is ImageResolution {
+  return typeof v === "string" && (IMAGE_RESOLUTIONS as readonly string[]).includes(v);
+}
+
+type OpenAIShape = "square" | "landscape" | "portrait";
+
+function aspectShape(aspect: AspectRatio): OpenAIShape {
   switch (aspect) {
     case "1:1":
-      return "1024x1024";
+      return "square";
     case "4:3":
     case "3:2":
     case "16:9":
     case "21:9":
-      return "1536x1024";
+      return "landscape";
     case "3:4":
     case "2:3":
     case "9:16":
-      return "1024x1536";
+      return "portrait";
   }
+}
+
+/**
+ * gpt-image-1 only supports three concrete sizes. gpt-image-2 accepts
+ * flexible sizes but we keep the same three-bucket mapping for 1K parity.
+ */
+export function aspectToOpenAISize(
+  aspect: AspectRatio,
+): "1024x1024" | "1536x1024" | "1024x1536" {
+  const shape = aspectShape(aspect);
+  return shape === "square"
+    ? "1024x1024"
+    : shape === "landscape"
+      ? "1536x1024"
+      : "1024x1536";
+}
+
+/**
+ * Concrete gpt-image-2 size for an (aspect, resolution) pair. Every value obeys
+ * gpt-image-2's constraints: max edge ≤3840px, both edges multiples of 16,
+ * long:short ratio ≤3:1, total pixels 0.65–8.3 MP. 1K reuses the legacy
+ * gpt-image-1 buckets so default output/cost is unchanged. Square 4K is capped
+ * at 2880² (8.29 MP) — 3840² would exceed the pixel ceiling.
+ */
+export function aspectToOpenAISizeAtResolution(
+  aspect: AspectRatio,
+  resolution: ImageResolution,
+): string {
+  if (resolution === "1K") return aspectToOpenAISize(aspect);
+  const shape = aspectShape(aspect);
+  const sizes: Record<Exclude<ImageResolution, "1K">, Record<OpenAIShape, string>> = {
+    "2K": { square: "2048x2048", landscape: "2048x1152", portrait: "1152x2048" },
+    "4K": { square: "2880x2880", landscape: "3840x2160", portrait: "2160x3840" },
+  };
+  return sizes[resolution][shape];
 }
 
 const LABELS: Record<AspectRatio, string> = {

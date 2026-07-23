@@ -1,5 +1,5 @@
 import OpenAI, { toFile } from "openai";
-import { aspectToOpenAISize } from "../util/aspect.js";
+import { aspectToOpenAISize, aspectToOpenAISizeAtResolution } from "../util/aspect.js";
 import type {
   ImageGenRequest,
   ImageGenResult,
@@ -11,7 +11,10 @@ import type {
 } from "./types.js";
 
 type ImageQuality = "low" | "medium" | "high" | "auto";
-type ImageSize = "1024x1024" | "1024x1536" | "1536x1024" | "auto";
+// gpt-image-1 sizes plus gpt-image-2's higher-resolution buckets (2K/4K).
+// gpt-image-2 accepts any WIDTHxHEIGHT satisfying its constraints; we pass a
+// resolved bucket string, so the type stays a string at the API boundary.
+type ImageSize = string;
 type AudioFormat = "mp3" | "opus" | "aac" | "flac" | "wav" | "pcm";
 
 const DEFAULT_VOICE = "alloy";
@@ -29,9 +32,15 @@ export class OpenAIProvider implements ImageProvider, TtsProvider {
   async generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
     const params = req.params ?? {};
     const quality = (params.quality as ImageQuality | undefined) ?? "auto";
-    const size: ImageSize = req.aspectRatio
-      ? aspectToOpenAISize(req.aspectRatio)
-      : ((params.size as ImageSize | undefined) ?? "auto");
+    // Resolution (gpt-image-2 2K/4K) needs an explicit WIDTHxHEIGHT — "auto"
+    // yields ~1K. For 2K/4K, resolve a concrete bucket from the aspect (square
+    // when none given). 1K keeps legacy behavior (aspect bucket, else auto).
+    const highRes = req.resolution && req.resolution !== "1K";
+    const size: ImageSize = highRes
+      ? aspectToOpenAISizeAtResolution(req.aspectRatio ?? "1:1", req.resolution!)
+      : req.aspectRatio
+        ? aspectToOpenAISize(req.aspectRatio)
+        : ((params.size as ImageSize | undefined) ?? "auto");
 
     let item;
     const refs = req.referenceImages ?? [];

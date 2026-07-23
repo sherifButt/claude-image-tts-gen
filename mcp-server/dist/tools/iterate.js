@@ -24,6 +24,7 @@ export async function iterate(args, config) {
             tier: meta.tier,
             model: meta.model,
             aspectRatio: input.aspectRatio,
+            resolution: input.resolution,
             referenceImagePath: input.referenceImagePath,
             referenceImagePaths: input.referenceImagePaths,
             outputPath: args.outputPath,
