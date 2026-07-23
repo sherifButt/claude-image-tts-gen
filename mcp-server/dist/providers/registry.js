@@ -14,9 +14,16 @@ const MATRIX = [
     {
         id: "google",
         image: {
-            small: { model: "gemini-2.5-flash-image", batchable: true, implemented: true },
-            mid: { model: "gemini-3.1-flash-image-preview", batchable: true, implemented: true },
-            pro: { model: "imagen-4.0-generate-001", batchable: false, implemented: true },
+            // small = the cheapest GA option (Nano Banana 2 Lite, ~$0.034/img),
+            // honoring the cheapest-by-default rule. gemini-2.5-flash-image stays
+            // usable via explicit --model (its pricing entry is retained).
+            small: { model: "gemini-3.1-flash-lite-image", batchable: true, implemented: true },
+            mid: { model: "gemini-3.1-flash-image", batchable: true, implemented: true },
+            // pro was imagen-4.0-generate-001 until Imagen 4's 2026-08-17 shutdown.
+            // Google's recommended replacement is the GA Gemini image family; we use
+            // Gemini 3 Pro Image ("Nano Banana Pro"), which runs on the same
+            // generateContent path as the small/mid slots (no Imagen code path).
+            pro: { model: "gemini-3-pro-image", batchable: true, implemented: true },
         },
         tts: {
             small: {
@@ -28,7 +35,16 @@ const MATRIX = [
                 // Gemini TTS accepts prompts up to ~8k tokens; chunk well under that in chars.
                 maxCharsPerCall: 4000,
             },
-            mid: NA,
+            mid: {
+                // Gemini 3.1 Flash TTS (preview) — newer flash-tier TTS. Same voice
+                // list as the 2.5 models; ~$20/M output (same as pro tier).
+                model: "gemini-3.1-flash-tts-preview",
+                batchable: true,
+                implemented: true,
+                voices: GEMINI_TTS_VOICES,
+                defaultVoice: GEMINI_DEFAULT_VOICE,
+                maxCharsPerCall: 4000,
+            },
             pro: {
                 model: "gemini-2.5-pro-preview-tts",
                 batchable: true,

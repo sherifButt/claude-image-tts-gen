@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-05-13",
+  "last_updated": "2026-07-23",
   "currency": "USD",
   "sources": [
     "https://ai.google.dev/gemini-api/docs/pricing",
@@ -25,25 +25,34 @@
         "type": "image",
         "standard": 0.04
       },
-      "notes": "Imagen 4 standard. No batch pricing."
+      "notes": "DEPRECATED — Imagen 4 (standard/ultra/fast) shuts down 2026-08-17. Recommended replacement: gemini-3-pro-image (pro) or gemini-3.1-flash-image (mid). Kept only so old sidecars still resolve a cost; not in the registry anymore. Note the API shape differs (generate_images → generate_content)."
     },
-    "google/gemini-3-pro-image-preview": {
+    "google/gemini-3-pro-image": {
       "modality": "image",
       "pricing": {
         "type": "image",
         "standard": 0.134,
         "batch": 0.067
       },
-      "notes": "Gemini 3 Pro Image Preview. Estimate per image; verify against current quote."
+      "notes": "Gemini 3 Pro Image (\"Nano Banana Pro\"), GA. $2/M input, $120/M image-output tokens. ~$0.134 per 1K/2K image (1120 tokens), ~$0.24 at 4K (2000 tokens). Batch/Flex 50% off. Verify resolution-specific quotes against ai.google.dev/gemini-api/docs/pricing."
     },
-    "google/gemini-3.1-flash-image-preview": {
+    "google/gemini-3.1-flash-image": {
       "modality": "image",
       "pricing": {
         "type": "image",
         "standard": 0.067,
         "batch": 0.034
       },
-      "notes": "Gemini 3.1 Flash Image Preview (\"Nano Banana 2\"). 1024px baseline at $60/M image-output tokens × ~1120 tokens. 2K ≈ $0.101, 4K ≈ $0.151; verify resolution-specific quotes against ai.google.dev/gemini-api/docs/pricing."
+      "notes": "Gemini 3.1 Flash Image (\"Nano Banana 2\"), GA. 1024px baseline at $60/M image-output tokens × ~1120 tokens. 2K ≈ $0.101, 4K ≈ $0.151. Verify against ai.google.dev/gemini-api/docs/pricing."
+    },
+    "google/gemini-3.1-flash-lite-image": {
+      "modality": "image",
+      "pricing": {
+        "type": "image",
+        "standard": 0.034,
+        "batch": 0.017
+      },
+      "notes": "Gemini 3.1 Flash Lite Image (\"Nano Banana 2 Lite\"), GA. Cheapest Gemini image tier at $30/M image-output tokens × ~1120 tokens (≈$0.034 at 1K). Batch 50% off. Default google/small slot. Verify against ai.google.dev/gemini-api/docs/pricing."
     },
     "openai/gpt-image-1:low": {
       "modality": "image",
@@ -188,6 +197,15 @@
         "batch": 10.0
       },
       "notes": "Gemini 2.5 Pro TTS sync. Approximate per-char. Batch 50% off."
+    },
+    "google/gemini-3.1-flash-tts-preview": {
+      "modality": "tts",
+      "pricing": {
+        "type": "million_chars",
+        "standard": 20.0,
+        "batch": 10.0
+      },
+      "notes": "Gemini 3.1 Flash TTS (preview). Newer flash-tier TTS; ~$20/M output (same rate as 2.5 Pro TTS), batch 50% off. Fills the google/tts mid slot. Approximate per-char derived from token pricing; verify against ai.google.dev/gemini-api/docs/pricing."
     },
     "voicebox/voicebox": {
       "modality": "tts",

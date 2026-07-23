@@ -32,7 +32,7 @@ import { rewritePromptViaMcpSampling } from "./rewriter/sampling.js";
 import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.9.0";
+const VERSION = "0.9.1";
 const config = loadConfig();
 await applyAutoDetection(config);
 const server = new Server({ name: "claude-image-tts-gen", version: VERSION }, { capabilities: { tools: {}, resources: { listChanged: false } } });

@@ -78,7 +78,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **seven** (
 
 ### Generation
 - **7 providers** behind a single tier abstraction (`small | mid | pro`):
-  - **Google Gemini** (image: 2.5 Flash + 3.1 Flash Preview ("Nano Banana 2") + Imagen 4, TTS declared)
+  - **Google Gemini** (image: 3.1 Flash **Lite** "Nano Banana 2 Lite" → 3.1 Flash "Nano Banana 2" → 3 Pro "Nano Banana Pro", all GA; TTS: 2.5 Flash → 3.1 Flash → 2.5 Pro. Replaced the now-deprecated Imagen 4 pro slot — Imagen 4 shuts down 2026-08-17.)
   - **OpenAI** (image: gpt-image-2 ×3 quality; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough: 2.5-flash-image, 3.1-flash-image-preview, 3-pro-image-preview)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
@@ -95,7 +95,7 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **seven** (
 - **`voiceDefaulted` signal** on every TTS response — when you didn't spec a voice, the response says so, letting Claude catch mismatches before spending on a long run
 
 ### Cost awareness
-- **24-model pricing table** with batch (50% off) rates and 30-day staleness warning
+- **26-model pricing table** with batch (50% off) rates and 30-day staleness warning
 - **Per-call cost** in every tool response; **session ledger** persisted to `~/.claude-image-tts-gen/session.json`
 - **Per-project tracking** (cwd-hashed) — `session_spend --project`
 - **Budget caps** (daily / weekly / monthly) — soft warn at 80%, hard block at 100%
