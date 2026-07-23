@@ -20,13 +20,11 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          # Node 24 ships npm 11 — required here. npm 11 writes a versionless
-          # optional-dep stub for sharp's @img/sharp-win32-arm64 and tolerates
-          # it; npm 10 (bundled with node 22) throws `Invalid Version` parsing
-          # that empty version, which is what kept dist-check red on every push.
-          # tsc output is node-version-independent, so the byte-level dist diff
-          # below is unaffected (verified identical across node 22/24/25).
-          node-version: 24
+          # Pin to match the maintainer's local environment so the
+          # byte-level dist diff is reproducible across CI and dev.
+          # Bumping this requires re-committing dist/ from the same
+          # Node version, otherwise the verify step will fail.
+          node-version: 22
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
 
