@@ -22,7 +22,7 @@ import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
 import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.9.2";
+const VERSION = "0.9.3";
 function printHelp(imageOutputDir, audioOutputDir) {
     process.stdout.write(`
 claude-image-tts-gen-cli v${VERSION}
@@ -74,6 +74,8 @@ Options:
       --reference <path>        Reference image (image-to-image edit). Repeat for multi-reference (gpt-image-2 / gemini-3.1-flash-image-preview).
   -a, --aspect-ratio <ratio>    Output aspect: 1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9
       --resolution <tier>       Image tier: 1K (default) | 2K | 4K (gpt-image-2 / --provider openai only)
+      --size <WxH>              Exact gpt-image-2 size, e.g. 3840x2160 (overrides --resolution/--aspect-ratio)
+      --background <mode>       Image background: auto (default) | opaque | transparent (transparent = gpt-image-1)
       --no-sidecar              Skip the hidden .<name>.regenerate.json sidecar
       --voice-preset <name>     Apply saved TTS voice preset on speech gen
       --max-chars-per-chunk <n> Override per-chunk char ceiling (e.g. 300 for
@@ -171,6 +173,8 @@ async function main() {
                 "reference-audio": { type: "string", description: "Reference audio path for local voice cloning" },
                 "aspect-ratio": { type: "string", short: "a", description: "1:1 | 4:3 | 3:4 | 16:9 | 9:16 | 3:2 | 2:3 | 21:9" },
                 resolution: { type: "string", description: "Image output tier: 1K (default) | 2K | 4K (gpt-image-2 / --provider openai only)" },
+                size: { type: "string", description: "Exact gpt-image-2 size WIDTHxHEIGHT (e.g. 3840x2160); overrides --resolution/--aspect-ratio" },
+                background: { type: "string", description: "Image background: auto (default) | opaque | transparent (transparent = gpt-image-1 only)" },
                 "no-sidecar": { type: "boolean", default: false, description: "Skip writing the .regenerate.json sidecar" },
                 "voice-preset": { type: "string", description: "Apply saved voice preset on TTS" },
                 "max-chars-per-chunk": { type: "string", description: "Override per-chunk char ceiling (defaults to provider slot's value)" },
@@ -447,6 +451,8 @@ async function main() {
                     referenceImagePaths: values.reference,
                     aspectRatio: values["aspect-ratio"],
                     resolution: values.resolution,
+                    size: values.size,
+                    background: values.background,
                     outputPath: values.output,
                     outputDir,
                     sidecar: emitSidecar,

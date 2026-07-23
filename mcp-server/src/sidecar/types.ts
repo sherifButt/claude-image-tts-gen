@@ -17,6 +17,10 @@ export interface SidecarImageInput {
   aspectRatio?: import("../util/aspect.js").AspectRatio;
   /** Output resolution tier (gpt-image-2: 1K/2K/4K). */
   resolution?: import("../util/aspect.js").ImageResolution;
+  /** Exact custom gpt-image-2 size "WIDTHxHEIGHT". */
+  size?: string;
+  /** Background: auto / opaque / transparent. */
+  background?: "auto" | "opaque" | "transparent";
 }
 
 export interface SidecarSpeechInput {

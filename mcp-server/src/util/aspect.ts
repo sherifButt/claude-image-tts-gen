@@ -76,6 +76,51 @@ export function aspectToOpenAISizeAtResolution(
   return sizes[resolution][shape];
 }
 
+/** gpt-image-2 custom-size limits (OpenAI images API). */
+export const OPENAI_MAX_EDGE = 3840;
+export const OPENAI_MIN_PIXELS = 655360; // 0.65 MP
+export const OPENAI_MAX_PIXELS = 8294400; // 8.3 MP
+
+/**
+ * Validate a custom gpt-image-2 `size` string (WIDTHxHEIGHT). Returns the
+ * parsed dims or a human-readable reason it's rejected. Constraints: both
+ * edges multiples of 16, max edge ≤3840, long:short ratio ≤3:1, total pixels
+ * within 0.65–8.3 MP.
+ */
+export function validateOpenAICustomSize(
+  size: string,
+): { ok: true; width: number; height: number } | { ok: false; reason: string } {
+  const m = /^(\d+)x(\d+)$/.exec(size.trim());
+  if (!m) return { ok: false, reason: `expected WIDTHxHEIGHT (e.g. 2048x1152), got "${size}"` };
+  const width = Number(m[1]);
+  const height = Number(m[2]);
+  if (width <= 0 || height <= 0) return { ok: false, reason: "width and height must be positive" };
+  if (width % 16 !== 0 || height % 16 !== 0)
+    return { ok: false, reason: `both edges must be multiples of 16 (got ${width}x${height})` };
+  if (Math.max(width, height) > OPENAI_MAX_EDGE)
+    return { ok: false, reason: `max edge is ${OPENAI_MAX_EDGE}px (got ${Math.max(width, height)})` };
+  const ratio = Math.max(width, height) / Math.min(width, height);
+  if (ratio > 3) return { ok: false, reason: `aspect ratio must be ≤3:1 (got ${ratio.toFixed(2)}:1)` };
+  const pixels = width * height;
+  if (pixels < OPENAI_MIN_PIXELS || pixels > OPENAI_MAX_PIXELS)
+    return {
+      ok: false,
+      reason: `total pixels must be 0.65–8.3 MP (got ${(pixels / 1_000_000).toFixed(2)} MP)`,
+    };
+  return { ok: true, width, height };
+}
+
+/**
+ * Bucket a concrete pixel count into a resolution tier for pricing. Custom
+ * sizes don't have their own price rows, so we charge the nearest tier by
+ * megapixels (1K ≈ ≤1.05–1.6 MP, 2K ≈ ≤4.2 MP, 4K ≈ ≤8.3 MP).
+ */
+export function pixelsToResolutionTier(pixels: number): ImageResolution {
+  if (pixels <= 2_000_000) return "1K";
+  if (pixels <= 5_500_000) return "2K";
+  return "4K";
+}
+
 const LABELS: Record<AspectRatio, string> = {
   "1:1": "square",
   "4:3": "classic landscape",

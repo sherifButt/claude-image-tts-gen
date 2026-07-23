@@ -19,6 +19,8 @@ export async function regenerate(args, config) {
             model: meta.model,
             aspectRatio: input.aspectRatio,
             resolution: input.resolution,
+            size: input.size,
+            background: input.background,
             referenceImagePath: input.referenceImagePath,
             referenceImagePaths: input.referenceImagePaths,
             outputPath: args.outputPath,

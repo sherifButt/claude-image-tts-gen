@@ -27,6 +27,12 @@ export interface ImageGenRequest {
   /** Output resolution tier (gpt-image-2 only: 1K default / 2K / 4K). Other
    *  providers ignore it. Combined with aspectRatio to pick a concrete size. */
   resolution?: import("../util/aspect.js").ImageResolution;
+  /** Exact gpt-image-2 output size "WIDTHxHEIGHT" (overrides resolution +
+   *  aspectRatio). Must satisfy gpt-image-2's size constraints. openai only. */
+  size?: string;
+  /** Background handling (gpt-image-2 / gpt-image-1 family): auto (default),
+   *  opaque, or transparent. Transparent is unsupported on gpt-image-2. */
+  background?: "auto" | "opaque" | "transparent";
 }
 
 export interface ImageGenResult {

@@ -32,7 +32,7 @@ import { rewritePromptViaMcpSampling } from "./rewriter/sampling.js";
 import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.9.2";
+const VERSION = "0.9.3";
 const config = loadConfig();
 await applyAutoDetection(config);
 const server = new Server({ name: "claude-image-tts-gen", version: VERSION }, { capabilities: { tools: {}, resources: { listChanged: false } } });
@@ -130,6 +130,16 @@ const imageInputSchema = {
             type: "string",
             enum: ["1K", "2K", "4K"],
             description: "Output resolution tier. Default 1K (≈1024px, unchanged). 2K (≈2048px) / 4K (up to 3840×2160) are gpt-image-2 (provider: openai) only — other providers ignore it. Cost rises steeply: 4K high ≈ $0.41/img vs 1K high ≈ $0.21. Combined with aspectRatio to pick the exact size.",
+        },
+        size: {
+            type: "string",
+            pattern: "^\\d+x\\d+$",
+            description: "Exact gpt-image-2 output size 'WIDTHxHEIGHT' (overrides resolution + aspectRatio). openai only. Constraints: both edges ÷16, max edge 3840, ratio ≤3:1, 0.65–8.3 MP (e.g. 2048x1152, 3840x2160, 1152x2048). Priced at the nearest 1K/2K/4K tier by megapixels.",
+        },
+        background: {
+            type: "string",
+            enum: ["auto", "opaque", "transparent"],
+            description: "Background handling (gpt-image family / openai). Default auto. transparent needs gpt-image-1 (--model gpt-image-1) — gpt-image-2 rejects it.",
         },
         outputDir: {
             type: "string",

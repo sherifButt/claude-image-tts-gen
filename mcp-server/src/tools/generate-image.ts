@@ -24,6 +24,8 @@ import { extensionForMime } from "../util/output.js";
 import {
   isAspectRatio,
   isImageResolution,
+  pixelsToResolutionTier,
+  validateOpenAICustomSize,
   type AspectRatio,
   type ImageResolution,
 } from "../util/aspect.js";
@@ -53,6 +55,12 @@ export interface GenerateImageArgs {
   /** Output resolution tier: 1K (default) / 2K / 4K. gpt-image-2 only —
    *  ignored by other providers. Combined with aspectRatio → concrete size. */
   resolution?: ImageResolution;
+  /** Exact gpt-image-2 output size "WIDTHxHEIGHT" (overrides resolution +
+   *  aspectRatio). openai only; validated against gpt-image-2's constraints. */
+  size?: string;
+  /** Background: auto (default) / opaque / transparent. gpt-image family only
+   *  (openai); transparent is unsupported on gpt-image-2. */
+  background?: "auto" | "opaque" | "transparent";
   /** Write a .regenerate.json sidecar next to the output. Default true (or EMIT_SIDECAR env). */
   sidecar?: boolean;
 }
@@ -133,6 +141,38 @@ export async function generateImage(
   }
   const resolution = args.resolution;
 
+  // Custom size (gpt-image-2) overrides resolution+aspect. Validate up front.
+  let customSizePixels: number | undefined;
+  if (args.size !== undefined) {
+    const v = validateOpenAICustomSize(args.size);
+    if (!v.ok) {
+      throw new StructuredError(
+        "VALIDATION_ERROR",
+        `Invalid size "${args.size}": ${v.reason}`,
+        "gpt-image-2 sizes: WIDTHxHEIGHT, both ÷16, max edge 3840, ratio ≤3:1, 0.65–8.3 MP (e.g. 2048x1152, 3840x2160).",
+      );
+    }
+    customSizePixels = v.width * v.height;
+  }
+  const size = args.size;
+
+  if (
+    args.background !== undefined &&
+    !["auto", "opaque", "transparent"].includes(args.background)
+  ) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `Unknown background: ${String(args.background)}`,
+      "Use auto, opaque, or transparent (transparent is gpt-image-1 only — gpt-image-2 rejects it).",
+    );
+  }
+  const background = args.background;
+
+  // Resolution tier used for pricing: a custom size maps to the nearest tier
+  // by megapixels; otherwise the explicit resolution knob.
+  const pricingResolution: ImageResolution | undefined =
+    customSizePixels !== undefined ? pixelsToResolutionTier(customSizePixels) : resolution;
+
   // Apply style preset if requested. Explicit args still win.
   let resolvedPrompt = args.prompt;
   let presetProvider: ProviderId | undefined;
@@ -197,11 +237,22 @@ export async function generateImage(
   } else if (referenceImages.length > 1) {
     refKeyParams.refs = referenceImages.map((r) => r.path ?? "buffer");
   }
-  // Resolution (2K/4K) is a gpt-image-2 concern only; fold it into the price/
-  // cache key for openai so cost + cache distinguish resolutions. Other
-  // providers ignore it (avoids polluting their keys / missing pricing rows).
-  const resKeyParams = (p: ProviderId): Record<string, unknown> =>
-    p === "openai" && resolution && resolution !== "1K" ? { resolution } : {};
+  // Resolution / custom size / background are gpt-image-2 (openai) concerns.
+  // For PRICING we fold the resolution tier into the key (custom sizes charge
+  // the nearest tier). For CACHE we also key on the exact size + background so
+  // different outputs don't collide. Other providers ignore all of it.
+  const priceResParams = (p: ProviderId): Record<string, unknown> =>
+    p === "openai" && pricingResolution && pricingResolution !== "1K"
+      ? { resolution: pricingResolution }
+      : {};
+  const cacheExtras = (p: ProviderId): Record<string, unknown> => {
+    if (p !== "openai") return {};
+    const out: Record<string, unknown> = {};
+    if (size) out.size = size;
+    else if (pricingResolution && pricingResolution !== "1K") out.resolution = pricingResolution;
+    if (background && background !== "auto") out.background = background;
+    return out;
+  };
 
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
@@ -211,7 +262,7 @@ export async function generateImage(
     params: {
       ...slot.params,
       ...(aspectRatio ? { aspectRatio } : {}),
-      ...resKeyParams(requestedProvider),
+      ...cacheExtras(requestedProvider),
       ...refKeyParams,
     },
   });
@@ -225,7 +276,7 @@ export async function generateImage(
           provider: requestedProvider,
           model: slot.model,
           modality: "image",
-          params: { ...slot.params, ...resKeyParams(requestedProvider) },
+          params: { ...slot.params, ...priceResParams(requestedProvider) },
         },
         1,
       ) ?? { total: 0 };
@@ -267,6 +318,8 @@ export async function generateImage(
         referenceImages,
         aspectRatio,
         resolution,
+        size,
+        background,
       });
     } catch (err) {
       throw mapProviderError(err, requestedProvider);
@@ -299,6 +352,8 @@ export async function generateImage(
           referenceImages,
           aspectRatio,
           resolution,
+          size,
+          background,
         });
       },
     });
@@ -354,7 +409,7 @@ export async function generateImage(
     provider: providerUsed,
     model: modelUsed,
     modality: "image" as const,
-    params: { ...slot.params, ...resKeyParams(providerUsed) },
+    params: { ...slot.params, ...priceResParams(providerUsed) },
   };
   const cost =
     tryEstimateCost(costQuery, 1) ?? unknownCostEstimate(costQuery, 1);
@@ -398,6 +453,8 @@ export async function generateImage(
         ...(refPaths.length > 0 ? { referenceImagePaths: refPaths } : {}),
         ...(aspectRatio ? { aspectRatio } : {}),
         ...(resolution ? { resolution } : {}),
+        ...(size ? { size } : {}),
+        ...(background ? { background } : {}),
       },
       output: { files: [filePath], mimeType },
       cost: { ...cost, total: chargedCost },
