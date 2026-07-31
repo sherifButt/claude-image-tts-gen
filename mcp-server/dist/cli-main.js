@@ -12,6 +12,7 @@ import { exportSpend } from "./tools/export-spend.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
 import { generateVideo } from "./tools/generate-video.js";
+import { gallery } from "./tools/gallery.js";
 import { healthCheck } from "./tools/health-check.js";
 import { iterate } from "./tools/iterate.js";
 import { pickVariant } from "./tools/pick-variant.js";
@@ -22,7 +23,7 @@ import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
 import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.9.3";
+const VERSION = "0.9.4";
 function printHelp(imageOutputDir, audioOutputDir) {
     process.stdout.write(`
 claude-image-tts-gen-cli v${VERSION}
@@ -47,6 +48,10 @@ Options:
       --duration <n>       Video clip length in seconds (1–15, default 5)
       --list-providers <m> List declared providers for modality m (image|tts|video)
       --check-voicebox     Probe Voicebox server: profiles, engines, capabilities (tags / cloning / instruct)
+      --gallery            Build an HTML gallery of all generated media (image/audio/video)
+      --modality <m>       Gallery filter: all (default) | image | tts | video
+      --open               Open the gallery in the browser afterwards (macOS)
+      --no-thumbnails      Skip thumbnail generation in the gallery
       --session-spend      Show running spend totals (today/week/month/all-time)
   -R, --regenerate <path>  Re-run a prior generation from its sidecar or output path
       --estimate-cost      Dry-run cost estimate across implemented providers/tiers
@@ -151,6 +156,11 @@ async function main() {
                 "health-check": { type: "boolean", default: false },
                 "check-local": { type: "boolean", default: false },
                 "check-voicebox": { type: "boolean", default: false },
+                gallery: { type: "boolean", default: false, description: "Build an HTML gallery of all generated media" },
+                modality: { type: "string", description: "gallery filter: all (default) | image | tts | video" },
+                open: { type: "boolean", default: false, description: "Open the gallery in the browser afterwards (macOS)" },
+                "no-thumbnails": { type: "boolean", default: false, description: "Skip thumbnail generation in the gallery" },
+                "gallery-title": { type: "string", description: "Gallery heading" },
                 "batch-submit": { type: "string", description: "Path to JSON file with prompts array" },
                 "batch-status": { type: "string", description: "Job ID to poll" },
                 "batch-list": { type: "boolean", default: false },
@@ -291,6 +301,23 @@ async function main() {
             const result = await checkVoicebox(config);
             process.stdout.write(result.text + "\n");
             process.exit(result.success ? 0 : 1);
+        }
+        if (values.gallery) {
+            const modality = values.modality;
+            if (modality && !["all", "image", "tts", "video"].includes(modality)) {
+                throw new Error(`Invalid --modality: ${modality} (use all | image | tts | video)`);
+            }
+            const result = await gallery({
+                modality,
+                provider: values.provider,
+                model: values.model,
+                outputPath: values.output,
+                title: values["gallery-title"],
+                thumbnails: values["no-thumbnails"] ? false : undefined,
+                open: values.open,
+            }, config);
+            process.stdout.write(result.text + "\n");
+            process.exit(0);
         }
         if (values["batch-list"]) {
             const result = await batchStatus({ list: true }, config);

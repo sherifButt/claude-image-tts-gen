@@ -54,3 +54,5 @@ docs/demo/*.mov
 docs/demo/*.gif
 docs/designer/
 
+gallery.html
+.gallery-assets/
