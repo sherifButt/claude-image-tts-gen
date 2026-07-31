@@ -74,6 +74,26 @@ There are plenty of MCP servers that wrap one vendor. This one wraps **seven** (
 > generation work through this provider. Use Kokoro-FastAPI (or one of the others
 > above) instead. `check_local` will flag an LM-Studio-style server with a warning.
 
+## Gallery
+
+Everything you generate — images, video, and audio — can be gathered into a single
+self-contained, cost-annotated HTML page with the `gallery` tool (`/gen-gallery`, or
+`--gallery` from the CLI):
+
+![The generated media gallery — a thumbnail grid where every card shows the prompt, model, tier, params, cost, and date, with filter / search / sort controls.](docs/gallery.png)
+
+It scans the image/audio/video output directories, reads each file's
+[`.regenerate.json` sidecar](#sidecars-regeneratejson), and writes `gallery.html`: a
+thumbnail grid (webp thumbnails via `sharp`, video poster frames via `ffmpeg`) where
+every card carries the **prompt, model, tier, params, cost, and date**. The page has
+client-side **filter (by modality) / search / sort (newest · oldest · cost)** and a
+click-to-zoom lightbox; audio cards get inline players. Re-run any time to refresh, or
+narrow it (`--modality image`, `--provider openai --model gpt-image-2`) to a subset.
+
+```sh
+claude-image-tts-gen-cli --gallery --open          # all modalities, then open it
+```
+
 ## Features
 
 ### Generation
