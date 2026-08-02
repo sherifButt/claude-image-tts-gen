@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { basename, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, extname, isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Config } from "../config.js";
 import { isSidecarPath, readSidecar } from "../sidecar/metadata.js";
@@ -13,7 +13,12 @@ import type {
 } from "../sidecar/types.js";
 import type { Modality, ProviderId } from "../providers/types.js";
 import { StructuredError } from "../util/errors.js";
-import { imageThumbDataUri, videoPosterDataUri } from "../post/thumbnail.js";
+import {
+  imageDimensions,
+  imageThumbDataUri,
+  videoDimensions,
+  videoPosterDataUri,
+} from "../post/thumbnail.js";
 
 type MediaKind = "image" | "video" | "audio";
 
@@ -62,6 +67,14 @@ interface GalleryItem {
   prompt?: string;
   detail?: string;
   thumb?: string | null;
+  /** File format label, e.g. "PNG", "MP4". */
+  type?: string;
+  /** File size in bytes. */
+  sizeBytes?: number;
+  /** Pixel dimensions "W×H" (image / video). */
+  dims?: string;
+  /** Path relative to the gallery's cwd. */
+  relPath?: string;
 }
 
 export interface GalleryOutput {
@@ -131,6 +144,26 @@ async function buildItem(file: string): Promise<GalleryItem> {
   const kind = EXT_KIND[extOf(file)];
   const name = basename(file);
   const fileUrl = pathToFileURL(file).href;
+
+  // Filesystem facts, always available.
+  let sizeBytes: number | undefined;
+  let mtimeMs = 0;
+  try {
+    const st = await stat(file);
+    sizeBytes = st.size;
+    mtimeMs = st.mtimeMs;
+  } catch {
+    /* ignore */
+  }
+  const common = {
+    fileUrl,
+    name,
+    kind,
+    type: extOf(file).toUpperCase() || undefined,
+    sizeBytes,
+    relPath: relative(process.cwd(), file),
+  };
+
   let meta: SidecarMetadata | null = null;
   try {
     meta = await readSidecar(file);
@@ -141,9 +174,7 @@ async function buildItem(file: string): Promise<GalleryItem> {
   if (meta) {
     const { prompt, detail } = readInput(meta);
     return {
-      fileUrl,
-      name,
-      kind,
+      ...common,
       modality: meta.modality,
       provider: meta.provider,
       model: meta.model,
@@ -159,16 +190,8 @@ async function buildItem(file: string): Promise<GalleryItem> {
   }
 
   // No sidecar — infer what we can from the file itself.
-  let mtimeMs = 0;
-  try {
-    mtimeMs = (await stat(file)).mtimeMs;
-  } catch {
-    /* ignore */
-  }
   return {
-    fileUrl,
-    name,
-    kind,
+    ...common,
     modality: KIND_MODALITY[kind],
     createdAt: new Date(mtimeMs).toISOString(),
     createdMs: mtimeMs,
@@ -179,6 +202,16 @@ async function attachThumb(item: GalleryItem, file: string): Promise<void> {
   if (item.kind === "image") item.thumb = await imageThumbDataUri(file);
   else if (item.kind === "video") item.thumb = await videoPosterDataUri(file);
   else item.thumb = null;
+}
+
+async function attachDims(item: GalleryItem, file: string): Promise<void> {
+  const d =
+    item.kind === "image"
+      ? await imageDimensions(file)
+      : item.kind === "video"
+        ? await videoDimensions(file)
+        : null;
+  if (d) item.dims = `${d.width}×${d.height}`;
 }
 
 export async function gallery(args: GalleryArgs, config: Config): Promise<GalleryOutput> {
@@ -205,11 +238,13 @@ export async function gallery(args: GalleryArgs, config: Config): Promise<Galler
 
   items.sort((a, b) => b.createdMs - a.createdMs);
 
-  // Thumbnails (after filtering, so we don't decode images we won't show).
+  // Dimensions + thumbnails (after filtering, so we don't decode files we
+  // won't show). Dimensions are always probed; thumbnails are opt-out.
   let sharpMissing = false;
-  if (wantThumbs) {
-    for (const item of items) {
-      const file = decodeURIComponent(new URL(item.fileUrl).pathname);
+  for (const item of items) {
+    const file = decodeURIComponent(new URL(item.fileUrl).pathname);
+    await attachDims(item, file);
+    if (wantThumbs) {
       await attachThumb(item, file);
       if (item.kind === "image" && item.thumb === null) sharpMissing = true;
     }
@@ -386,6 +421,7 @@ function renderGalleryHtml(
   const state = { mod:"all", q:"", sort:"new" };
   const fmtCost = c => (c==null? "" : "$"+Number(c).toFixed(c<0.01?4:c<1?3:2));
   const fmtDate = ms => { try { return new Date(ms).toLocaleString(); } catch(e){ return ""; } };
+  const fmtSize = b => { if(b==null) return ""; const u=["B","KB","MB","GB"]; let i=0,n=b; while(n>=1024&&i<u.length-1){n/=1024;i++;} return (i===0? n : n.toFixed(n<10?1:0))+" "+u[i]; };
   const escd = s => (s==null?"":String(s)).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
   function playerFor(it){
@@ -455,7 +491,8 @@ function renderGalleryHtml(
         mrow("Tier", it.tier)+ mrow("Params", it.detail)+
         mrow("Cost", it.cost!=null? fmtCost(it.cost): "")+
         mrow("Cached", it.cached? "yes": "")+ mrow("Date", fmtDate(it.createdMs))+
-        mrow("File", it.name)+
+        mrow("Type", it.type)+ mrow("Dimensions", it.dims)+ mrow("Size", fmtSize(it.sizeBytes))+
+        mrow("File", it.name)+ mrow("Path", it.relPath)+
       '</dl>'+
       (it.prompt? '<div class="lbprompt">'+escd(it.prompt)+'</div>':'')+
       '<div class="lbactions">'+

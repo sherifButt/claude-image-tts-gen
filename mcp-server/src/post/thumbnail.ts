@@ -34,6 +34,41 @@ export async function imageThumbDataUri(path: string, maxPx = 512): Promise<stri
   }
 }
 
+/** Pixel dimensions of a still image via sharp. null if sharp is missing or the
+ *  file can't be read. */
+export async function imageDimensions(
+  path: string,
+): Promise<{ width: number; height: number; format?: string } | null> {
+  const sharp = await loadSharp();
+  if (!sharp) return null;
+  try {
+    const m = await sharp(path).metadata();
+    if (m.width && m.height) return { width: m.width, height: m.height, format: m.format };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pixel dimensions of a video's first stream via ffprobe. null if ffprobe is
+ *  absent or fails. */
+export function videoDimensions(path: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const proc = spawn(
+      "ffprobe",
+      ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", path],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    let out = "";
+    proc.stdout?.on("data", (d: Buffer) => (out += String(d)));
+    proc.on("error", () => resolve(null));
+    proc.on("exit", (code) => {
+      const m = /^(\d+)x(\d+)/.exec(out.trim());
+      resolve(code === 0 && m ? { width: Number(m[1]), height: Number(m[2]) } : null);
+    });
+  });
+}
+
 /** Grab a single frame from a video as a PNG buffer via ffmpeg (stdout pipe). */
 function extractVideoFramePng(path: string, atSeconds: number): Promise<Buffer | null> {
   return new Promise((resolve) => {
