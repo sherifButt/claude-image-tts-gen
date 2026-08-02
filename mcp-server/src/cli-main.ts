@@ -34,7 +34,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.9.4";
+const VERSION = "0.9.5";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`

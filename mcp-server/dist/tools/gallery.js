@@ -263,10 +263,19 @@ function renderGalleryHtml(items, meta) {
   .actions a, .actions button { color:var(--accent); background:none; border:none; cursor:pointer; font:inherit; font-size:12px; padding:0; text-decoration:none; }
   .empty { padding:60px 20px; text-align:center; color:var(--muted); }
   /* lightbox */
-  #lb { position:fixed; inset:0; background:rgba(0,0,0,.9); display:none; align-items:center; justify-content:center; z-index:100; padding:24px; cursor:zoom-out; }
+  #lb { position:fixed; inset:0; background:rgba(0,0,0,.92); display:none; z-index:100; }
   #lb.on { display:flex; }
-  #lb img, #lb video { max-width:100%; max-height:88vh; object-fit:contain; border-radius:8px; }
-  #lb .cap { position:fixed; bottom:14px; left:0; right:0; text-align:center; color:#ddd; font-size:13px; padding:0 20px; }
+  #lbmedia { flex:1; display:flex; align-items:center; justify-content:center; padding:24px; min-width:0; cursor:zoom-out; }
+  #lbmedia img, #lbmedia video { max-width:100%; max-height:92vh; object-fit:contain; border-radius:8px; }
+  #lbmeta { width:340px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border); padding:18px 20px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; }
+  #lbmeta .lbclose { align-self:flex-end; background:none; border:none; color:var(--muted); font-size:24px; line-height:1; cursor:pointer; margin:-4px -4px 0 0; }
+  #lbmeta .lbprompt { font-size:14px; line-height:1.5; white-space:pre-wrap; word-break:break-word; padding-top:14px; border-top:1px solid var(--border); }
+  #lbmeta dl { display:grid; grid-template-columns:auto 1fr; gap:7px 14px; font-size:13px; margin:0; }
+  #lbmeta dt { color:var(--muted); }
+  #lbmeta dd { margin:0; word-break:break-word; }
+  #lbmeta .lbactions { display:flex; gap:16px; margin-top:auto; padding-top:10px; border-top:1px solid var(--border); }
+  #lbmeta .lbactions a, #lbmeta .lbactions button { color:var(--accent); background:none; border:none; cursor:pointer; font:inherit; font-size:13px; padding:0; text-decoration:none; }
+  @media (max-width:720px){ #lb.on { flex-direction:column; } #lbmeta { width:auto; border-left:none; border-top:1px solid var(--border); max-height:42vh; } }
 </style>
 </head>
 <body>
@@ -295,7 +304,7 @@ function renderGalleryHtml(items, meta) {
 </header>
 <div class="grid" id="grid"></div>
 <div class="empty" id="empty" style="display:none">No matching items.</div>
-<div id="lb"><div id="lbinner"></div><div class="cap" id="lbcap"></div></div>
+<div id="lb"><div id="lbmedia"></div><aside id="lbmeta"></aside></div>
 <script id="data" type="application/json">${dataJson}</script>
 <script>
   const ITEMS = JSON.parse(document.getElementById("data").textContent);
@@ -359,15 +368,36 @@ function renderGalleryHtml(items, meta) {
   grid.addEventListener("click", e=>{
     const btn=e.target.closest("button[data-copy]");
     if(btn){ navigator.clipboard && navigator.clipboard.writeText(btn.dataset.copy); btn.textContent="Copied ✓"; setTimeout(()=>btn.textContent="Copy prompt",1200); return; }
-    const img=e.target.closest(".media img"); if(img){ openLightbox(img.dataset.full, img.dataset.kind); }
+    const img=e.target.closest(".media img"); if(img){ const it=ITEMS.find(x=>x.fileUrl===img.dataset.full); if(it) openLightbox(it); }
   });
-  const lb=document.getElementById("lb"), lbinner=document.getElementById("lbinner");
-  function openLightbox(url, kind){
-    lbinner.innerHTML = kind==="video" ? '<video src="'+escd(url)+'" controls autoplay></video>' : '<img src="'+escd(url)+'">';
+  const lb=document.getElementById("lb"), lbmedia=document.getElementById("lbmedia"), lbmeta=document.getElementById("lbmeta");
+  const mrow=(label,val)=> val!=null && val!=="" ? '<dt>'+label+'</dt><dd>'+escd(val)+'</dd>' : '';
+  function openLightbox(it){
+    lbmedia.innerHTML = it.kind==="video" ? '<video src="'+escd(it.fileUrl)+'" controls autoplay></video>' : '<img src="'+escd(it.fileUrl)+'">';
+    lbmeta.innerHTML =
+      '<button class="lbclose" title="Close (Esc)">×</button>'+
+      '<dl>'+
+        mrow("Kind", it.kind)+ mrow("Provider", it.provider)+ mrow("Model", it.model)+
+        mrow("Tier", it.tier)+ mrow("Params", it.detail)+
+        mrow("Cost", it.cost!=null? fmtCost(it.cost): "")+
+        mrow("Cached", it.cached? "yes": "")+ mrow("Date", fmtDate(it.createdMs))+
+        mrow("File", it.name)+
+      '</dl>'+
+      (it.prompt? '<div class="lbprompt">'+escd(it.prompt)+'</div>':'')+
+      '<div class="lbactions">'+
+        '<a href="'+escd(it.fileUrl)+'" target="_blank" rel="noopener">Open file ↗</a>'+
+        (it.prompt? '<button data-copy="'+escd(it.prompt)+'">Copy prompt</button>':'')+
+      '</div>';
     lb.classList.add("on");
   }
-  lb.addEventListener("click", e=>{ if(e.target.tagName!=="VIDEO"){ lb.classList.remove("on"); lbinner.innerHTML=""; } });
-  document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ lb.classList.remove("on"); lbinner.innerHTML=""; } });
+  function closeLb(){ lb.classList.remove("on"); lbmedia.innerHTML=""; lbmeta.innerHTML=""; }
+  lb.addEventListener("click", e=>{
+    if(e.target.closest(".lbclose")){ closeLb(); return; }
+    const cp=e.target.closest("#lbmeta button[data-copy]");
+    if(cp){ navigator.clipboard && navigator.clipboard.writeText(cp.dataset.copy); cp.textContent="Copied ✓"; setTimeout(()=>cp.textContent="Copy prompt",1200); return; }
+    if(e.target===lbmedia) closeLb(); // click the backdrop (not the media or meta panel) to close
+  });
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeLb(); });
   const tb=document.getElementById("themebtn");
   tb.addEventListener("click", ()=>{
     const cur=document.documentElement.getAttribute("data-theme")|| (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
