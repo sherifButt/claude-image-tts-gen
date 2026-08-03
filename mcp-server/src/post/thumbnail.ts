@@ -69,6 +69,26 @@ export function videoDimensions(path: string): Promise<{ width: number; height: 
   });
 }
 
+/** Duration of an audio (or video) file in seconds via ffprobe. null if ffprobe
+ *  is absent or fails — callers that need it for pricing should treat null as
+ *  "can't price" rather than "free". */
+export function mediaDurationSeconds(path: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const proc = spawn(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
+    let out = "";
+    proc.stdout?.on("data", (d: Buffer) => (out += String(d)));
+    proc.on("error", () => resolve(null));
+    proc.on("exit", (code) => {
+      const n = Number.parseFloat(out.trim());
+      resolve(code === 0 && Number.isFinite(n) && n > 0 ? n : null);
+    });
+  });
+}
+
 /** Grab a single frame from a video as a PNG buffer via ffmpeg (stdout pipe). */
 function extractVideoFramePng(path: string, atSeconds: number): Promise<Buffer | null> {
   return new Promise((resolve) => {

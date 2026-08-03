@@ -5,9 +5,10 @@ const POLL_INTERVAL_MS = 2500;
 const POLL_TIMEOUT_MS = 10 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 30_000;
 /**
- * Replicate provider — currently video-only via xAI grok-imagine-video-1.5.
- * Uses the model-scoped predictions endpoint: create a prediction, then poll
- * its `urls.get` until it reaches a terminal state, then download the output.
+ * Replicate provider — video via xAI grok-imagine-video-1.5 (image-to-video,
+ * motion) and talking-avatar video via VEED Fabric 1.0 (image + audio →
+ * lip-synced video). Uses the model-scoped predictions endpoint: create a
+ * prediction, poll its `urls.get` until terminal, then download the output.
  */
 export class ReplicateProvider {
     id = "replicate";
@@ -24,17 +25,7 @@ export class ReplicateProvider {
             // Slot params (resolution) and any caller overrides win last.
             ...(req.params ?? {}),
         };
-        const created = await this.createPrediction(req.model, input);
-        const settled = await this.pollUntilDone(created);
-        if (settled.status !== "succeeded") {
-            const detail = settled.error ? `: ${settled.error}` : "";
-            throw new Error(`Replicate prediction ${settled.status ?? "unknown"} for ${req.model}${detail}`);
-        }
-        const url = firstOutputUrl(settled.output);
-        if (!url) {
-            throw new Error(`Replicate ${req.model} returned no video URL (output: ${JSON.stringify(settled.output)?.slice(0, 200)}).`);
-        }
-        const { data, mimeType } = await downloadBinary(url);
+        const { data, mimeType } = await this.runToOutput(req.model, input);
         return {
             mimeType,
             data,
@@ -42,6 +33,36 @@ export class ReplicateProvider {
             providerUsed: this.id,
             durationSeconds: req.durationSeconds,
         };
+    }
+    async generateAvatar(req) {
+        const input = {
+            image: toDataUri(req.image.mimeType, req.image.data),
+            audio: toDataUri(req.audio.mimeType, req.audio.data),
+            // Slot params (resolution) and any caller overrides win last.
+            ...(req.params ?? {}),
+        };
+        const { data, mimeType } = await this.runToOutput(req.model, input);
+        return {
+            mimeType,
+            data,
+            modelUsed: req.model,
+            providerUsed: this.id,
+            durationSeconds: req.durationSeconds,
+        };
+    }
+    /** Create a prediction, poll to terminal, download the output file. */
+    async runToOutput(model, input) {
+        const created = await this.createPrediction(model, input);
+        const settled = await this.pollUntilDone(created);
+        if (settled.status !== "succeeded") {
+            const detail = settled.error ? `: ${settled.error}` : "";
+            throw new Error(`Replicate prediction ${settled.status ?? "unknown"} for ${model}${detail}`);
+        }
+        const url = firstOutputUrl(settled.output);
+        if (!url) {
+            throw new Error(`Replicate ${model} returned no output URL (output: ${JSON.stringify(settled.output)?.slice(0, 200)}).`);
+        }
+        return await downloadBinary(url);
     }
     async createPrediction(model, input) {
         const res = await this.fetchJson(`${API_BASE}/models/${model}/predictions`, {

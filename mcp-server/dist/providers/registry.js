@@ -362,3 +362,32 @@ export function createVideoProvider(id, config) {
             throw new StructuredError("VALIDATION_ERROR", `${id} does not support video generation`, "Use --provider replicate for video (grok-imagine-video-1.5).");
     }
 }
+// Talking-avatar (lip-sync) video — image + audio → video via VEED Fabric 1.0.
+// A second replicate video model, distinct from the grok motion model in the
+// video TierTable (which is prompt-driven). The generate_avatar tool selects it
+// here so the model id stays in the registry, not the tool. Tier maps to output
+// resolution; the output length equals the input audio's duration.
+const AVATAR_TIERS = {
+    small: { model: "veed/fabric-1.0", resolution: "480p" },
+    mid: { model: "veed/fabric-1.0", resolution: "720p" },
+};
+export function resolveAvatarSlot(tier) {
+    const slot = AVATAR_TIERS[tier];
+    if (!slot) {
+        throw new StructuredError("VALIDATION_ERROR", `talking-avatar video has no ${tier} tier`, "Use tier small (480p, $0.08/s) or mid (720p, $0.15/s).");
+    }
+    return { provider: "replicate", model: slot.model, params: { resolution: slot.resolution } };
+}
+export function createAvatarProvider(id, config) {
+    switch (id) {
+        case "replicate":
+            return new ReplicateProvider({ apiToken: requireReplicateToken(config) });
+        case "google":
+        case "openai":
+        case "openrouter":
+        case "elevenlabs":
+        case "local":
+        case "voicebox":
+            throw new StructuredError("VALIDATION_ERROR", `${id} does not support talking-avatar generation`, "Use --provider replicate for talking avatars (veed/fabric-1.0).");
+    }
+}

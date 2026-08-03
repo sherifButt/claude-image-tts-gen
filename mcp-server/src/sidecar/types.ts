@@ -41,12 +41,25 @@ export interface SidecarVideoInput {
   aspectRatio?: import("../util/aspect.js").AspectRatio;
 }
 
-export type SidecarInput = SidecarImageInput | SidecarSpeechInput | SidecarVideoInput;
+export interface SidecarAvatarInput {
+  /** Path to the avatar / person image that gets lip-synced. */
+  imagePath: string;
+  /** Path to the speech audio driving the lip-sync. */
+  audioPath: string;
+  /** Output length in seconds (= the audio's duration). */
+  durationSeconds: number;
+}
+
+export type SidecarInput =
+  | SidecarImageInput
+  | SidecarSpeechInput
+  | SidecarVideoInput
+  | SidecarAvatarInput;
 
 export interface SidecarMetadata {
   version: 1;
   createdAt: string;
-  tool: "generate_image" | "generate_speech" | "generate_video";
+  tool: "generate_image" | "generate_speech" | "generate_video" | "generate_avatar";
   modality: Modality;
   provider: ProviderId;
   model: string;

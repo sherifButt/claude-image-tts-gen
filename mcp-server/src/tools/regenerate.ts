@@ -2,6 +2,7 @@ import { dirname } from "node:path";
 import type { Config } from "../config.js";
 import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
 import type {
+  SidecarAvatarInput,
   SidecarImageInput,
   SidecarMetadata,
   SidecarSpeechInput,
@@ -10,6 +11,7 @@ import type {
 import { generateImage, type GenerateImageOutput } from "./generate-image.js";
 import { generateSpeech, type GenerateSpeechOutput } from "./generate-speech.js";
 import { generateVideo, type GenerateVideoOutput } from "./generate-video.js";
+import { generateAvatar, type GenerateAvatarOutput } from "./generate-avatar.js";
 
 export interface RegenerateArgs {
   path: string;
@@ -19,7 +21,8 @@ export interface RegenerateArgs {
 export type RegenerateOutput =
   | GenerateImageOutput
   | GenerateSpeechOutput
-  | GenerateVideoOutput;
+  | GenerateVideoOutput
+  | GenerateAvatarOutput;
 
 export async function regenerate(
   args: RegenerateArgs,
@@ -82,6 +85,23 @@ export async function regenerate(
         referenceImagePaths: input.referenceImagePaths,
         duration: input.durationSeconds,
         aspectRatio: input.aspectRatio,
+        provider: meta.provider,
+        tier: meta.tier,
+        model: meta.model,
+        outputPath: args.outputPath,
+        outputDir: args.outputPath ? undefined : originalDir,
+      },
+      config,
+      { parentSidecar: sidecarPath },
+    );
+  }
+
+  if (meta.tool === "generate_avatar") {
+    const input = meta.input as SidecarAvatarInput;
+    return await generateAvatar(
+      {
+        imagePath: input.imagePath,
+        audioPath: input.audioPath,
         provider: meta.provider,
         tier: meta.tier,
         model: meta.model,

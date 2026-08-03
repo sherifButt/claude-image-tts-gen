@@ -3,6 +3,7 @@ import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.
 import { generateImage } from "./generate-image.js";
 import { generateSpeech } from "./generate-speech.js";
 import { generateVideo } from "./generate-video.js";
+import { generateAvatar } from "./generate-avatar.js";
 export async function regenerate(args, config) {
     if (!args.path) {
         throw new Error("path is required (sidecar .regenerate.json or original output file)");
@@ -48,6 +49,18 @@ export async function regenerate(args, config) {
             referenceImagePaths: input.referenceImagePaths,
             duration: input.durationSeconds,
             aspectRatio: input.aspectRatio,
+            provider: meta.provider,
+            tier: meta.tier,
+            model: meta.model,
+            outputPath: args.outputPath,
+            outputDir: args.outputPath ? undefined : originalDir,
+        }, config, { parentSidecar: sidecarPath });
+    }
+    if (meta.tool === "generate_avatar") {
+        const input = meta.input;
+        return await generateAvatar({
+            imagePath: input.imagePath,
+            audioPath: input.audioPath,
             provider: meta.provider,
             tier: meta.tier,
             model: meta.model,

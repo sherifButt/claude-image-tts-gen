@@ -18,6 +18,7 @@ import { exportSpend } from "./tools/export-spend.js";
 import { generateImage } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
 import { generateVideo } from "./tools/generate-video.js";
+import { generateAvatar } from "./tools/generate-avatar.js";
 import { gallery } from "./tools/gallery.js";
 import { healthCheck } from "./tools/health-check.js";
 import { iterate } from "./tools/iterate.js";
@@ -33,7 +34,7 @@ import { rewritePromptViaMcpSampling } from "./rewriter/sampling.js";
 import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.9.6";
+const VERSION = "0.10.0";
 const config = loadConfig();
 await applyAutoDetection(config);
 const server = new Server({ name: "claude-image-tts-gen", version: VERSION }, { capabilities: { tools: {}, resources: { listChanged: false } } });
@@ -247,6 +248,40 @@ const videoInputSchema = {
     },
     required: ["prompt", "imagePath"],
 };
+const avatarInputSchema = {
+    type: "object",
+    properties: {
+        imagePath: {
+            type: "string",
+            description: "Path to the avatar / person image to lip-sync (jpg/png). Required. A photo, illustration, 3D render, or mascot all work. Generate one with generate_image if you don't have one.",
+        },
+        audioPath: {
+            type: "string",
+            description: "Path to the speech audio the mouth + head are synced to (mp3/wav/m4a/aac). Required. Generate one with generate_speech. The output video's length equals this audio's length.",
+        },
+        provider: {
+            type: "string",
+            enum: ["replicate"],
+            description: `Provider. Default: replicate (veed/fabric-1.0). Needs REPLICATE_API_TOKEN.`,
+        },
+        tier: {
+            type: "string",
+            enum: ["small", "mid"],
+            description: `Resolution tier: small = 480p ($0.08/s), mid = 720p ($0.15/s). Default: ${getDefaultTier()}. Cost = audio duration × rate, so a 30s clip is ~$2.40 (480p) / ~$4.50 (720p).`,
+        },
+        model: { type: "string", description: "Optional explicit model override." },
+        outputPath: { type: "string", description: "Optional explicit output path (.mp4)." },
+        outputDir: {
+            type: "string",
+            description: "Directory for the auto-generated filename (ignored if outputPath is passed). Overrides the video output dir.",
+        },
+        sidecar: {
+            type: "boolean",
+            description: "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true.",
+        },
+    },
+    required: ["imagePath", "audioPath"],
+};
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
         {
@@ -263,6 +298,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             name: "generate_video",
             description: `Generate a video from an input image (image-to-video). Default ${getDefaultProvider("video")}/${getDefaultTier()} via grok-imagine-video-1.5. Output dir: ${config.videoOutputDir}. Requires REPLICATE_API_TOKEN. imagePath is mandatory; prompt sets the motion. Audio (sfx/ambience/speech) is synthesized in the same pass. Billed per second of output.`,
             inputSchema: videoInputSchema,
+        },
+        {
+            name: "generate_avatar",
+            description: `Generate a talking-avatar (lip-sync) video from an image + speech audio, via VEED Fabric 1.0. Output dir: ${config.videoOutputDir}. Requires REPLICATE_API_TOKEN + ffmpeg (to read the audio duration for pricing). imagePath + audioPath are mandatory; the output length equals the audio. Great for outreach / personalized messages: pair generate_image (avatar) + generate_speech (voice) → generate_avatar. Billed per second (480p $0.08 / 720p $0.15).`,
+            inputSchema: avatarInputSchema,
         },
         {
             name: "create_asset",
@@ -637,6 +677,26 @@ async function handleVideoCall(args) {
         content: [{ type: "text", text: lines.join("\n") }],
     };
 }
+async function handleAvatarCall(args) {
+    const result = await generateAvatar((args ?? {}), config);
+    const lines = [
+        `Talking avatar generated.`,
+        `File: ${result.files[0]}`,
+        `Provider: ${result.providerUsed} (${result.tier} tier)`,
+        `Model: ${result.modelUsed}`,
+        `Duration: ${result.durationSeconds}s (from the audio)`,
+        `Cost: ${result.cost.currency} ${result.cost.total.toFixed(4)}` +
+            `${result.cached ? " [cached]" : ""}`,
+        `Today: ${result.sessionTotal.currency} ${result.sessionTotal.today.cost.toFixed(4)} ` +
+            `(${result.sessionTotal.today.callCount} calls)`,
+    ];
+    if (result.budgetWarning)
+        lines.push(formatBudgetWarning(result.budgetWarning));
+    return {
+        structuredContent: result,
+        content: [{ type: "text", text: lines.join("\n") }],
+    };
+}
 async function handleSpeechCall(args) {
     const result = await generateSpeech((args ?? {}), config);
     const lines = [
@@ -835,9 +895,11 @@ async function handleIterate(args) {
     const result = await iterate((args ?? {}), config);
     const tool = "voiceUsed" in result
         ? "generate_speech"
-        : "durationSeconds" in result
-            ? "generate_video"
-            : "generate_image";
+        : "isAvatar" in result
+            ? "generate_avatar"
+            : "durationSeconds" in result
+                ? "generate_video"
+                : "generate_image";
     return {
         structuredContent: result,
         content: [
@@ -869,9 +931,11 @@ async function handleRegenerate(args) {
     const result = await regenerate((args ?? {}), config);
     const tool = "voiceUsed" in result
         ? "generate_speech"
-        : "durationSeconds" in result
-            ? "generate_video"
-            : "generate_image";
+        : "isAvatar" in result
+            ? "generate_avatar"
+            : "durationSeconds" in result
+                ? "generate_video"
+                : "generate_image";
     return {
         structuredContent: result,
         content: [
@@ -943,6 +1007,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         if (name === "generate_video") {
             return await handleVideoCall(request.params.arguments);
+        }
+        if (name === "generate_avatar") {
+            return await handleAvatarCall(request.params.arguments);
         }
         if (name === "list_providers") {
             return handleListProviders(request.params.arguments);

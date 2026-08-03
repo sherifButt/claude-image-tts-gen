@@ -112,6 +112,31 @@ export interface VideoProvider {
   generateVideo(req: VideoGenRequest): Promise<VideoGenResult>;
 }
 
+export interface AvatarGenRequest {
+  model: string;
+  /** The avatar / person / illustration to animate (jpg/png). */
+  image: ReferenceImage;
+  /** The speech audio the mouth + head are lip-synced to (mp3/wav/m4a/aac). */
+  audio: ReferenceAudio;
+  params?: Record<string, unknown>;
+  /** Output length in seconds (= the audio's duration). Drives per-second cost. */
+  durationSeconds: number;
+}
+
+export interface AvatarGenResult {
+  mimeType: string;
+  data: Buffer;
+  modelUsed: string;
+  providerUsed: ProviderId;
+  durationSeconds: number;
+}
+
+/** Talking-avatar / lip-sync video: image + audio → video (VEED Fabric). */
+export interface AvatarProvider {
+  readonly id: ProviderId;
+  generateAvatar(req: AvatarGenRequest): Promise<AvatarGenResult>;
+}
+
 export interface TtsProvider {
   readonly id: ProviderId;
   generateSpeech(req: TtsGenRequest): Promise<TtsGenResult>;

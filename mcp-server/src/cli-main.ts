@@ -16,6 +16,7 @@ import { exportSpend } from "./tools/export-spend.js";
 import { generateImage, type GenerateImageArgs } from "./tools/generate-image.js";
 import { generateSpeech } from "./tools/generate-speech.js";
 import { generateVideo, type GenerateVideoArgs } from "./tools/generate-video.js";
+import { generateAvatar } from "./tools/generate-avatar.js";
 import { gallery } from "./tools/gallery.js";
 import { healthCheck } from "./tools/health-check.js";
 import { iterate } from "./tools/iterate.js";
@@ -34,7 +35,7 @@ import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
 import type { Modality, ProviderId, Tier } from "./providers/types.js";
 
-const VERSION = "0.9.6";
+const VERSION = "0.10.0";
 
 function printHelp(imageOutputDir: string, audioOutputDir: string): void {
   process.stdout.write(`
@@ -44,6 +45,7 @@ Usage:
   cli [options]                            # generate image (default)
   cli --speech -p "..." [options]          # generate TTS audio
   cli --video -p "..." --image frame.png [options]   # image-to-video (grok-imagine-video-1.5)
+  cli --avatar --image face.png --audio speech.mp3 [options]   # talking avatar (veed/fabric-1.0)
 
 Options:
   -p, --prompt <text>      Prompt (image) or text (speech). Required for generation.
@@ -56,7 +58,9 @@ Options:
   -d, --output-dir <dir>   Output directory (image: ${imageOutputDir}, audio: ${audioOutputDir})
       --speech             Generate speech audio instead of an image
       --video              Generate video (image-to-video) instead of an image
-      --image <path>       Input frame for --video (required for video)
+      --avatar             Generate a talking-avatar (lip-sync) video from --image + --audio
+      --image <path>       Input frame for --video / avatar image for --avatar
+      --audio <path>       Speech audio for --avatar (mp3/wav/m4a/aac); output length = audio length
       --duration <n>       Video clip length in seconds (1–15, default 5)
       --list-providers <m> List declared providers for modality m (image|tts|video)
       --check-voicebox     Probe Voicebox server: profiles, engines, capabilities (tags / cloning / instruct)
@@ -113,7 +117,7 @@ Environment:
   OPENAI_API_KEY           Required for openai provider
   OPENROUTER_API_KEY       Required for openrouter provider (image only)
   ELEVENLABS_API_KEY       Required for elevenlabs provider (TTS only)
-  REPLICATE_API_TOKEN      Required for replicate provider (video only)
+  REPLICATE_API_TOKEN      Required for replicate provider (video + talking avatars)
   REWRITE_PROMPTS          true (default) | false  — opt out of MCP-sampling prompt rewrite
   AUTOPLAY                 false (default) | true  — afplay TTS output (macOS)
   STATE_DIR                ~/.claude-image-tts-gen (default)
@@ -156,7 +160,9 @@ async function main(): Promise<void> {
         "output-dir": { type: "string", short: "d" },
         speech: { type: "boolean", default: false },
         video: { type: "boolean", default: false, description: "Generate video (image-to-video)" },
-        image: { type: "string", description: "Input frame path for --video" },
+        avatar: { type: "boolean", default: false, description: "Generate a talking-avatar (lip-sync) video from --image + --audio" },
+        image: { type: "string", description: "Input frame path for --video / avatar image for --avatar" },
+        audio: { type: "string", description: "Speech audio path for --avatar (mp3/wav/m4a/aac)" },
         duration: { type: "string", description: "Video clip length in seconds (1–15, default 5)" },
         "list-providers": { type: "string" },
         "session-spend": { type: "boolean", default: false },
@@ -219,10 +225,10 @@ async function main(): Promise<void> {
       ...(values["output-dir"] && values.speech
         ? { AUDIO_OUTPUT_DIR: values["output-dir"] }
         : {}),
-      ...(values["output-dir"] && values.video
+      ...(values["output-dir"] && (values.video || values.avatar)
         ? { VIDEO_OUTPUT_DIR: values["output-dir"] }
         : {}),
-      ...(values["output-dir"] && !values.speech && !values.video
+      ...(values["output-dir"] && !values.speech && !values.video && !values.avatar
         ? { IMAGE_OUTPUT_DIR: values["output-dir"] }
         : {}),
     });
@@ -353,6 +359,29 @@ async function main(): Promise<void> {
         config,
       );
       process.stdout.write(result.text + "\n");
+      process.exit(0);
+    }
+
+    if (values.avatar) {
+      if (values.provider !== undefined && !isProvider(values.provider)) {
+        throw new Error(`Invalid --provider: ${values.provider}`);
+      }
+      if (values.tier !== undefined && !isTier(values.tier)) {
+        throw new Error(`Invalid --tier: ${values.tier}`);
+      }
+      const result = await generateAvatar(
+        {
+          imagePath: values.image ?? "",
+          audioPath: values.audio ?? "",
+          provider: values.provider as ProviderId | undefined,
+          tier: values.tier as Tier | undefined,
+          model: values.model,
+          outputPath: values.output,
+          sidecar: values["no-sidecar"] ? false : undefined,
+        },
+        config,
+      );
+      process.stdout.write(JSON.stringify(result) + "\n");
       process.exit(0);
     }
 

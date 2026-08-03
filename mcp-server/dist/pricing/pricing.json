@@ -260,6 +260,22 @@
         "standard": 0.14
       },
       "notes": "xAI Grok Imagine Video 1.5 at 720p, billed per second of output (1–15s). Image-to-video only; audio synthesized free. Verify on replicate.com/xai/grok-imagine-video-1.5."
+    },
+    "replicate/veed/fabric-1.0:480p": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.08
+      },
+      "notes": "VEED Fabric 1.0 talking-avatar (lip-sync) at 480p, billed per second of output. Output length = input audio duration (clips up to ~5 min). Image + audio → video. Verify on replicate.com/veed/fabric-1.0."
+    },
+    "replicate/veed/fabric-1.0:720p": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.15
+      },
+      "notes": "VEED Fabric 1.0 talking-avatar (lip-sync) at 720p, billed per second of output. Output length = input audio duration. Image + audio → video. Verify on replicate.com/veed/fabric-1.0."
     }
   }
 }
