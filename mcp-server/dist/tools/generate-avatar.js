@@ -4,7 +4,7 @@ import { buildCacheKey } from "../cache/key.js";
 import { copyFromCache, lookupCache, storeInCache } from "../cache/store.js";
 import { mediaDurationSeconds } from "../post/thumbnail.js";
 import { tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
-import { createAvatarProvider, getDefaultTier, resolveAvatarSlot, } from "../providers/registry.js";
+import { avatarRate, createAvatarProvider, DEFAULT_AVATAR_TIER, resolveAvatarSlot, } from "../providers/registry.js";
 import { readLineageFromParent, writeSidecar } from "../sidecar/metadata.js";
 import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
@@ -12,6 +12,9 @@ import { summarize } from "../state/spend.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
 const DEFAULT_PROVIDER = "replicate";
+/** p-video is a general video model with audio conditioning, so it needs a
+ *  motion prompt even though the audio drives the lip-sync. */
+const DEFAULT_AVATAR_PROMPT = "The person speaks, moving their hands naturally.";
 function imageMime(path) {
     const ext = path.toLowerCase().split(".").pop() ?? "png";
     if (ext === "jpg" || ext === "jpeg")
@@ -48,7 +51,7 @@ export async function generateAvatar(args, config, opts = {}) {
         throw new StructuredError("NOT_FOUND", `Audio not found: ${args.audioPath}`, "Pass an existing audio path.");
     }
     const requestedProvider = args.provider ?? DEFAULT_PROVIDER;
-    const tier = args.tier ?? getDefaultTier();
+    const requestedTier = args.tier ?? DEFAULT_AVATAR_TIER;
     // Output length = audio duration; cost = duration × per-second rate. We must
     // know the duration to price + budget-guard this (it can be expensive), so
     // ffprobe is required here.
@@ -57,10 +60,26 @@ export async function generateAvatar(args, config, opts = {}) {
         throw new StructuredError("PROVIDER_ERROR", "Could not read the audio duration (ffprobe unavailable or unreadable file)", "Talking-avatar cost is billed per second of output, so the audio length is needed to price it and enforce your budget. Install ffmpeg (macOS: `brew install ffmpeg`) or pass a readable mp3/wav/m4a/aac.");
     }
     const durationSeconds = Math.round(duration * 10) / 10;
+    const resolved = resolveAvatarSlot(requestedTier);
+    const tier = resolved.tier;
     const slot = args.model
-        ? { provider: requestedProvider, model: args.model, params: {} }
-        : resolveAvatarSlot(tier);
+        ? { ...resolved, model: args.model, params: {} }
+        : resolved;
     const modelId = slot.model;
+    const prompt = slot.needsPrompt ? (args.prompt?.trim() || DEFAULT_AVATAR_PROMPT) : undefined;
+    // The p-video tiers silently truncate past their cap: the prediction comes
+    // back `succeeded` with a short clip and no warning, so a caller would only
+    // notice by watching the output. Refuse before spending instead, and price
+    // the alternatives from the real duration so the choice is concrete.
+    const cap = slot.maxAudioSeconds;
+    if (cap !== null && durationSeconds > cap) {
+        const priced = (t) => `$${(durationSeconds * avatarRate(t)).toFixed(2)}`;
+        throw new StructuredError("VALIDATION_ERROR", `audio is ${durationSeconds}s; tier "${tier}" caps at ${cap}s and would silently return only the first ${cap}s`, [
+            `Use tier high (Fabric 480p, no cap): ${priced("high")}.`,
+            `Use tier ultra (Fabric 720p, no cap): ${priced("ultra")}.`,
+            `Or supply audio of ${cap}s or less at tier "${tier}" — split the script at sentence boundaries and generate one clip per segment (see the avatar-generation skill for shot variation across cuts).`,
+        ].join(" "));
+    }
     const image = {
         data: await readFile(args.imagePath),
         mimeType: imageMime(args.imagePath),
@@ -81,7 +100,8 @@ export async function generateAvatar(args, config, opts = {}) {
         provider: requestedProvider,
         model: modelId,
         modality: "video",
-        text: "", // no prompt; the audio drives the output
+        // Empty on Fabric (audio alone drives it); the motion prompt on p-video.
+        text: prompt ?? "",
         params: {
             ...slot.params,
             image: args.imagePath,
@@ -95,7 +115,7 @@ export async function generateAvatar(args, config, opts = {}) {
         const projected = tryEstimateCost(costQuery, durationSeconds) ?? { total: 0 };
         const check = await checkBudget(projected.total);
         if (check.block) {
-            throw new StructuredError("BUDGET_EXCEEDED", formatBudgetBlockError(check.block), `A ${durationSeconds}s clip at this tier costs ~${(projected.total).toFixed(2)}. Raise the cap with set_budget --daily ${(check.block.cap * 2).toFixed(2)}, use --tier small (480p), shorten the audio, or wait for the period to reset.`);
+            throw new StructuredError("BUDGET_EXCEEDED", formatBudgetBlockError(check.block), `A ${durationSeconds}s clip at tier "${tier}" costs ~$${projected.total.toFixed(2)}. Raise the cap with set_budget --daily ${(check.block.cap * 2).toFixed(2)}, drop to --tier draft (~$${(durationSeconds * avatarRate("draft")).toFixed(2)}, preview quality), shorten the audio, or wait for the period to reset.`);
         }
         budgetWarning = check.warning;
     }
@@ -121,6 +141,7 @@ export async function generateAvatar(args, config, opts = {}) {
                 model: modelId,
                 image,
                 audio,
+                prompt,
                 params: slot.params,
                 durationSeconds,
             });
@@ -179,6 +200,7 @@ export async function generateAvatar(args, config, opts = {}) {
                 imagePath: args.imagePath,
                 audioPath: args.audioPath,
                 durationSeconds,
+                ...(prompt ? { prompt } : {}),
             },
             output: { files: [filePath], mimeType },
             cost: { ...cost, total: chargedCost },

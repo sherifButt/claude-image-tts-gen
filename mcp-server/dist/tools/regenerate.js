@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import { asAvatarTier, asTier } from "../providers/types.js";
 import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
 import { generateImage } from "./generate-image.js";
 import { generateSpeech } from "./generate-speech.js";
@@ -16,7 +17,7 @@ export async function regenerate(args, config) {
         return await generateImage({
             prompt: input.prompt,
             provider: meta.provider,
-            tier: meta.tier,
+            tier: asTier(meta.tier),
             model: meta.model,
             aspectRatio: input.aspectRatio,
             resolution: input.resolution,
@@ -35,7 +36,7 @@ export async function regenerate(args, config) {
             voice: input.voice,
             referenceAudioPath: input.referenceAudioPath,
             provider: meta.provider,
-            tier: meta.tier,
+            tier: asTier(meta.tier),
             model: meta.model,
             outputPath: args.outputPath,
             outputDir: args.outputPath ? undefined : originalDir,
@@ -50,7 +51,7 @@ export async function regenerate(args, config) {
             duration: input.durationSeconds,
             aspectRatio: input.aspectRatio,
             provider: meta.provider,
-            tier: meta.tier,
+            tier: asTier(meta.tier),
             model: meta.model,
             outputPath: args.outputPath,
             outputDir: args.outputPath ? undefined : originalDir,
@@ -61,8 +62,9 @@ export async function regenerate(args, config) {
         return await generateAvatar({
             imagePath: input.imagePath,
             audioPath: input.audioPath,
+            prompt: input.prompt,
             provider: meta.provider,
-            tier: meta.tier,
+            tier: asAvatarTier(meta.tier),
             model: meta.model,
             outputPath: args.outputPath,
             outputDir: args.outputPath ? undefined : originalDir,

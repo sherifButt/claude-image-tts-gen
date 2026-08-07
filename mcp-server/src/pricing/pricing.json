@@ -276,6 +276,38 @@
         "standard": 0.15
       },
       "notes": "VEED Fabric 1.0 talking-avatar (lip-sync) at 720p, billed per second of output. Output length = input audio duration. Image + audio → video. Verify on replicate.com/veed/fabric-1.0."
+    },
+    "replicate/prunaai/p-video:720p": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.02
+      },
+      "notes": "Pruna p-video at 720p, billed per second of output. Image + audio → lip-synced video (avatar tier `low`). Output length = input audio duration, but SILENTLY TRUNCATED AT 20s — the prediction still reports succeeded. Verify on replicate.com/prunaai/p-video."
+    },
+    "replicate/prunaai/p-video:1080p": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.04
+      },
+      "notes": "Pruna p-video at 1080p, billed per second of output. Image + audio → lip-synced video (avatar tier `normal`, the default). Same 20s silent truncation as 720p. Verify on replicate.com/prunaai/p-video."
+    },
+    "replicate/prunaai/p-video:720p-draft": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.005
+      },
+      "notes": "Pruna p-video at 720p in draft mode — the cheapest avatar rung (tier `draft`), for iteration rather than delivery. Same 20s silent truncation. Verify on replicate.com/prunaai/p-video."
+    },
+    "replicate/prunaai/p-video:1080p-draft": {
+      "modality": "video",
+      "pricing": {
+        "type": "second",
+        "standard": 0.01
+      },
+      "notes": "Pruna p-video at 1080p in draft mode. Not currently mapped to an avatar tier; priced so an explicit --model override resolves rather than falling through to unknown-cost. Verify on replicate.com/prunaai/p-video."
     }
   }
 }

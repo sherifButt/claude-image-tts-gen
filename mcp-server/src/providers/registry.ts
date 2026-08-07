@@ -28,6 +28,8 @@ import {
 } from "./types.js";
 import type {
   AvatarProvider,
+  AvatarTier,
+  AvatarTierInput,
   ImageProvider,
   Modality,
   ProviderId,
@@ -482,25 +484,129 @@ export function createVideoProvider(id: ProviderId, config: Config): VideoProvid
 // video TierTable (which is prompt-driven). The generate_avatar tool selects it
 // here so the model id stays in the registry, not the tool. Tier maps to output
 // resolution; the output length equals the input audio's duration.
-const AVATAR_TIERS: Partial<Record<Tier, { model: string; resolution: string }>> = {
-  small: { model: "veed/fabric-1.0", resolution: "480p" },
-  mid: { model: "veed/fabric-1.0", resolution: "720p" },
+interface AvatarSlotDef {
+  model: string;
+  /** Literal replicate prediction input for this rung (minus image/audio/prompt). */
+  params: Record<string, unknown>;
+  /** Hard cap on input audio length, or null when the model has none.
+   *  p-video silently truncates past this — it returns `succeeded` with a
+   *  short video and no warning — so the tool must refuse pre-call. */
+  maxAudioSeconds: number | null;
+  /** p-video requires a prompt; Fabric takes none. */
+  needsPrompt: boolean;
+}
+
+/**
+ * Talking-avatar (lip-sync) ladder — image + audio → video. Two models:
+ * p-video for the cheap rungs and VEED Fabric for the long/high-fidelity ones.
+ * Kept out of the video `TierTable` because that maps one model across tiers;
+ * here the tier axis switches model, resolution, and length ceiling at once.
+ *
+ * p-video pins two params away from the model's own defaults: prompt_upsampling
+ * off (an LLM rewriting the prompt server-side would make the sidecar stop
+ * describing what was generated) and the safety filter on (it ships off, which
+ * is not a default to inherit silently for a tool that animates real faces).
+ */
+const AVATAR_TIERS: Record<AvatarTier, AvatarSlotDef> = {
+  draft: {
+    model: "prunaai/p-video",
+    params: {
+      resolution: "720p",
+      fps: 48,
+      draft: true,
+      prompt_upsampling: false,
+      disable_safety_filter: false,
+    },
+    maxAudioSeconds: 20,
+    needsPrompt: true,
+  },
+  low: {
+    model: "prunaai/p-video",
+    params: {
+      resolution: "720p",
+      fps: 48,
+      draft: false,
+      prompt_upsampling: false,
+      disable_safety_filter: false,
+    },
+    maxAudioSeconds: 20,
+    needsPrompt: true,
+  },
+  normal: {
+    model: "prunaai/p-video",
+    params: {
+      resolution: "1080p",
+      fps: 48,
+      draft: false,
+      prompt_upsampling: false,
+      disable_safety_filter: false,
+    },
+    maxAudioSeconds: 20,
+    needsPrompt: true,
+  },
+  high: {
+    model: "veed/fabric-1.0",
+    params: { resolution: "480p" },
+    maxAudioSeconds: null,
+    needsPrompt: false,
+  },
+  ultra: {
+    model: "veed/fabric-1.0",
+    params: { resolution: "720p" },
+    maxAudioSeconds: null,
+    needsPrompt: false,
+  },
 };
 
-export function resolveAvatarSlot(tier: Tier): {
+/** Per-second rates, for error/help text only — pricing.json stays authoritative. */
+const AVATAR_RATES: Record<AvatarTier, number> = {
+  draft: 0.005,
+  low: 0.02,
+  normal: 0.04,
+  high: 0.08,
+  ultra: 0.15,
+};
+
+export const DEFAULT_AVATAR_TIER: AvatarTier = "normal";
+
+/** Pre-ladder sidecars say small/mid and must still resolve to Fabric. */
+const LEGACY_AVATAR_TIERS: Record<string, AvatarTier> = { small: "high", mid: "ultra" };
+
+export function normalizeAvatarTier(tier: AvatarTierInput): AvatarTier {
+  return LEGACY_AVATAR_TIERS[tier] ?? (tier as AvatarTier);
+}
+
+export function avatarRate(tier: AvatarTier): number {
+  return AVATAR_RATES[tier];
+}
+
+export interface ResolvedAvatarSlot {
   provider: ProviderId;
   model: string;
-  params: { resolution: string };
-} {
-  const slot = AVATAR_TIERS[tier];
+  tier: AvatarTier;
+  params: Record<string, unknown>;
+  maxAudioSeconds: number | null;
+  needsPrompt: boolean;
+}
+
+export function resolveAvatarSlot(tier: AvatarTierInput): ResolvedAvatarSlot {
+  const resolved = normalizeAvatarTier(tier);
+  const slot = AVATAR_TIERS[resolved];
   if (!slot) {
     throw new StructuredError(
       "VALIDATION_ERROR",
-      `talking-avatar video has no ${tier} tier`,
-      "Use tier small (480p, $0.08/s) or mid (720p, $0.15/s).",
+      `unknown talking-avatar tier "${tier}"`,
+      "Use draft ($0.005/s), low ($0.02/s), normal ($0.04/s), high ($0.08/s) or ultra ($0.15/s). draft/low/normal cap the audio at 20s.",
     );
   }
-  return { provider: "replicate", model: slot.model, params: { resolution: slot.resolution } };
+  return {
+    provider: "replicate",
+    model: slot.model,
+    tier: resolved,
+    params: { ...slot.params },
+    maxAudioSeconds: slot.maxAudioSeconds,
+    needsPrompt: slot.needsPrompt,
+  };
 }
 
 export function createAvatarProvider(id: ProviderId, config: Config): AvatarProvider {

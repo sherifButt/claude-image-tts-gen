@@ -38,7 +38,9 @@ export class ReplicateProvider {
         const input = {
             image: toDataUri(req.image.mimeType, req.image.data),
             audio: toDataUri(req.audio.mimeType, req.audio.data),
-            // Slot params (resolution) and any caller overrides win last.
+            // p-video requires a motion prompt; Fabric takes none and is given none.
+            ...(req.prompt ? { prompt: req.prompt } : {}),
+            // Slot params (resolution, fps, draft, ...) and caller overrides win last.
             ...(req.params ?? {}),
         };
         const { data, mimeType } = await this.runToOutput(req.model, input);

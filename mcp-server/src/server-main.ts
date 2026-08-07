@@ -293,7 +293,7 @@ const avatarInputSchema = {
     imagePath: {
       type: "string",
       description:
-        "Path to the avatar / person image to lip-sync (jpg/png). Required. A photo, illustration, 3D render, or mascot all work. Generate one with generate_image if you don't have one.",
+        "Path to the avatar / person image to lip-sync (jpg/png). Required. A photo, illustration, 3D render, or mascot all work. Generate one with generate_image if you don't have one. Pass ONE clearly-framed subject: on the draft/low/normal tiers a multi-subject or ambiguous image makes the model ignore it and invent an unrelated person, and it still reports success.",
     },
     audioPath: {
       type: "string",
@@ -303,12 +303,27 @@ const avatarInputSchema = {
     provider: {
       type: "string",
       enum: ["replicate"],
-      description: `Provider. Default: replicate (veed/fabric-1.0). Needs REPLICATE_API_TOKEN.`,
+      description: `Provider. Default: replicate. Needs REPLICATE_API_TOKEN.`,
     },
     tier: {
       type: "string",
-      enum: ["small", "mid"],
-      description: `Resolution tier: small = 480p ($0.08/s), mid = 720p ($0.15/s). Default: ${getDefaultTier()}. Cost = audio duration × rate, so a 30s clip is ~$2.40 (480p) / ~$4.50 (720p).`,
+      enum: ["draft", "low", "normal", "high", "ultra"],
+      description:
+        "Quality/cost ladder, cheapest first. Cost = audio duration x rate. " +
+        "draft = p-video 720p preview, $0.005/s. " +
+        "low = p-video 720p, $0.02/s. " +
+        "normal = p-video 1080p, $0.04/s (DEFAULT). " +
+        "high = Fabric 480p, $0.08/s. " +
+        "ultra = Fabric 720p, $0.15/s. " +
+        "IMPORTANT: draft/low/normal cap the audio at 20s and this tool refuses longer input " +
+        "(the model would silently return only the first 20s). For audio over 20s use high/ultra, " +
+        "or split the script into sub-20s segments and generate one clip per segment.",
+    },
+    prompt: {
+      type: "string",
+      description:
+        "Motion prompt for the draft/low/normal tiers, e.g. 'The person speaks, gesturing calmly'. " +
+        "Defaults to a neutral speaking prompt. Ignored by high/ultra (Fabric), where the audio alone drives the shot.",
     },
     model: { type: "string", description: "Optional explicit model override." },
     outputPath: { type: "string", description: "Optional explicit output path (.mp4)." },
@@ -343,7 +358,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "generate_avatar",
-      description: `Generate a talking-avatar (lip-sync) video from an image + speech audio, via VEED Fabric 1.0. Output dir: ${config.videoOutputDir}. Requires REPLICATE_API_TOKEN + ffmpeg (to read the audio duration for pricing). imagePath + audioPath are mandatory; the output length equals the audio. Great for outreach / personalized messages: pair generate_image (avatar) + generate_speech (voice) → generate_avatar. Billed per second (480p $0.08 / 720p $0.15).`,
+      description: `Generate a talking-avatar (lip-sync) video from an image + speech audio. Output dir: ${config.videoOutputDir}. Requires REPLICATE_API_TOKEN + ffmpeg (to read the audio duration for pricing). imagePath + audioPath are mandatory; the output length equals the audio. Great for outreach / personalized messages: pair generate_image (avatar) + generate_speech (voice) → generate_avatar. Five tiers spanning 30x in price, billed per second: draft $0.005 / low $0.02 / normal $0.04 (default) / high $0.08 / ultra $0.15. The three cheap tiers run Pruna p-video and cap the audio at 20s; high/ultra run VEED Fabric 1.0 with no length cap. Iterate on draft, deliver on normal or above.`,
       inputSchema: avatarInputSchema,
     },
     {

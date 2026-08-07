@@ -36,6 +36,12 @@ export function makePriceKey(
   if (resolution && resolution !== "1K") {
     variant = variant ? `${variant}@${resolution}` : resolution;
   }
+  // p-video prices draft mode at a quarter of standard at the same resolution,
+  // so the flag has to discriminate the key too ("720p-draft"). Undefined on
+  // every other call site, which leaves existing keys untouched.
+  if (params?.draft === true) {
+    variant = variant ? `${variant}-draft` : "draft";
+  }
   return variant ? `${base}:${variant}` : base;
 }
 

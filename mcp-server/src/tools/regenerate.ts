@@ -1,5 +1,6 @@
 import { dirname } from "node:path";
 import type { Config } from "../config.js";
+import { asAvatarTier, asTier } from "../providers/types.js";
 import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
 import type {
   SidecarAvatarInput,
@@ -42,7 +43,7 @@ export async function regenerate(
       {
         prompt: input.prompt,
         provider: meta.provider,
-        tier: meta.tier,
+        tier: asTier(meta.tier),
         model: meta.model,
         aspectRatio: input.aspectRatio,
         resolution: input.resolution,
@@ -66,7 +67,7 @@ export async function regenerate(
         voice: input.voice,
         referenceAudioPath: input.referenceAudioPath,
         provider: meta.provider,
-        tier: meta.tier,
+        tier: asTier(meta.tier),
         model: meta.model,
         outputPath: args.outputPath,
         outputDir: args.outputPath ? undefined : originalDir,
@@ -86,7 +87,7 @@ export async function regenerate(
         duration: input.durationSeconds,
         aspectRatio: input.aspectRatio,
         provider: meta.provider,
-        tier: meta.tier,
+        tier: asTier(meta.tier),
         model: meta.model,
         outputPath: args.outputPath,
         outputDir: args.outputPath ? undefined : originalDir,
@@ -102,8 +103,9 @@ export async function regenerate(
       {
         imagePath: input.imagePath,
         audioPath: input.audioPath,
+        prompt: input.prompt,
         provider: meta.provider,
-        tier: meta.tier,
+        tier: asAvatarTier(meta.tier),
         model: meta.model,
         outputPath: args.outputPath,
         outputDir: args.outputPath ? undefined : originalDir,

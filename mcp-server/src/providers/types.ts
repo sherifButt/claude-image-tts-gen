@@ -8,6 +8,47 @@ export type ProviderId =
   | "replicate";
 export type Modality = "image" | "tts" | "video";
 export type Tier = "small" | "mid" | "pro";
+/**
+ * Talking-avatar quality ladder. Wider than the shared image/tts/video `Tier`
+ * because avatars span two models with very different economics: p-video
+ * (draft/low/normal — fast, cheap, capped at 20s of audio) and VEED Fabric
+ * (high/ultra — dedicated lip-sync, no length cap). Ordered cheapest-first.
+ * `small`/`mid` are accepted as deprecated aliases for `high`/`ultra` so
+ * sidecars written before this ladder existed still regenerate to Fabric.
+ */
+export type AvatarTier = "draft" | "low" | "normal" | "high" | "ultra";
+export type AvatarTierInput = AvatarTier | "small" | "mid";
+
+const TIERS: readonly string[] = ["small", "mid", "pro"];
+
+/**
+ * Narrow a sidecar/ledger tier back to the shared image/tts/video `Tier`.
+ * Those records carry `Tier | AvatarTier` because avatars share the field, but
+ * an avatar-only rung can never appear on an image/speech/video sidecar — the
+ * `tool` field already discriminates. The fallback is for hand-edited files.
+ */
+export function asTier(tier: Tier | AvatarTier, fallback: Tier = "small"): Tier {
+  return TIERS.includes(tier) ? (tier as Tier) : fallback;
+}
+
+const AVATAR_TIER_INPUTS: readonly string[] = [
+  "draft",
+  "low",
+  "normal",
+  "high",
+  "ultra",
+  "small",
+  "mid",
+];
+
+/** Counterpart of {@link asTier} for the avatar branch. "pro" is the only
+ *  value that can't appear on an avatar sidecar; it falls back to Fabric 480p. */
+export function asAvatarTier(
+  tier: Tier | AvatarTier,
+  fallback: AvatarTierInput = "high",
+): AvatarTierInput {
+  return AVATAR_TIER_INPUTS.includes(tier) ? (tier as AvatarTierInput) : fallback;
+}
 
 export interface ReferenceImage {
   data: Buffer;
@@ -118,6 +159,9 @@ export interface AvatarGenRequest {
   image: ReferenceImage;
   /** The speech audio the mouth + head are lip-synced to (mp3/wav/m4a/aac). */
   audio: ReferenceAudio;
+  /** Motion prompt. Required by p-video (which is a general video model with
+   *  audio conditioning); Fabric ignores it — the audio alone drives that one. */
+  prompt?: string;
   params?: Record<string, unknown>;
   /** Output length in seconds (= the audio's duration). Drives per-second cost. */
   durationSeconds: number;

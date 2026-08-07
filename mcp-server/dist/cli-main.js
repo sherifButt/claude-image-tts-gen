@@ -33,7 +33,7 @@ Usage:
   cli [options]                            # generate image (default)
   cli --speech -p "..." [options]          # generate TTS audio
   cli --video -p "..." --image frame.png [options]   # image-to-video (grok-imagine-video-1.5)
-  cli --avatar --image face.png --audio speech.mp3 [options]   # talking avatar (veed/fabric-1.0)
+  cli --avatar --image face.png --audio speech.mp3 [options]   # talking avatar (lip-sync)
 
 Options:
   -p, --prompt <text>      Prompt (image) or text (speech). Required for generation.
@@ -49,6 +49,8 @@ Options:
       --avatar             Generate a talking-avatar (lip-sync) video from --image + --audio
       --image <path>       Input frame for --video / avatar image for --avatar
       --audio <path>       Speech audio for --avatar (mp3/wav/m4a/aac); output length = audio length
+      (--avatar tiers)     draft $0.005/s | low $0.02/s | normal $0.04/s (default) | high $0.08/s | ultra $0.15/s
+                           draft/low/normal cap audio at 20s; high/ultra (Fabric) have no cap
       --duration <n>       Video clip length in seconds (1–15, default 5)
       --list-providers <m> List declared providers for modality m (image|tts|video)
       --check-voicebox     Probe Voicebox server: profiles, engines, capabilities (tags / cloning / instruct)
@@ -126,6 +128,11 @@ function isProvider(s) {
 }
 function isTier(s) {
     return s === "small" || s === "mid" || s === "pro";
+}
+function isAvatarTier(s) {
+    return (s === "draft" || s === "low" || s === "normal" || s === "high" || s === "ultra" ||
+        // deprecated aliases for high/ultra, kept so old scripts keep working
+        s === "small" || s === "mid");
 }
 function isModality(s) {
     return s === "image" || s === "tts" || s === "video";
@@ -329,14 +336,15 @@ async function main() {
             if (values.provider !== undefined && !isProvider(values.provider)) {
                 throw new Error(`Invalid --provider: ${values.provider}`);
             }
-            if (values.tier !== undefined && !isTier(values.tier)) {
-                throw new Error(`Invalid --tier: ${values.tier}`);
+            if (values.tier !== undefined && !isAvatarTier(values.tier)) {
+                throw new Error(`Invalid --tier for --avatar: ${values.tier} (use draft | low | normal | high | ultra)`);
             }
             const result = await generateAvatar({
                 imagePath: values.image ?? "",
                 audioPath: values.audio ?? "",
                 provider: values.provider,
                 tier: values.tier,
+                prompt: values.prompt,
                 model: values.model,
                 outputPath: values.output,
                 sidecar: values["no-sidecar"] ? false : undefined,

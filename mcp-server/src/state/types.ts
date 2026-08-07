@@ -1,4 +1,4 @@
-import type { Modality, ProviderId, Tier } from "../providers/types.js";
+import type { AvatarTier, Modality, ProviderId, Tier } from "../providers/types.js";
 import type { PriceUnit } from "../pricing/types.js";
 
 export interface CallEntry {
@@ -6,7 +6,7 @@ export interface CallEntry {
   tool: string;
   provider: ProviderId;
   model: string;
-  tier: Tier;
+  tier: Tier | AvatarTier;
   modality: Modality;
   units: number;
   unit: PriceUnit;

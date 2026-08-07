@@ -1,5 +1,6 @@
 import { dirname } from "node:path";
 import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
+import { asTier } from "../providers/types.js";
 import { StructuredError } from "../util/errors.js";
 import { generateImage, } from "./generate-image.js";
 import { generateSpeech, } from "./generate-speech.js";
@@ -21,7 +22,7 @@ export async function iterate(args, config) {
         return await generateImage({
             prompt: newPrompt,
             provider: meta.provider,
-            tier: meta.tier,
+            tier: asTier(meta.tier),
             model: meta.model,
             aspectRatio: input.aspectRatio,
             resolution: input.resolution,
@@ -41,7 +42,7 @@ export async function iterate(args, config) {
             voice: input.voice,
             referenceAudioPath: input.referenceAudioPath,
             provider: meta.provider,
-            tier: meta.tier,
+            tier: asTier(meta.tier),
             model: meta.model,
             outputPath: args.outputPath,
             outputDir: args.outputPath ? undefined : originalDir,
@@ -57,7 +58,7 @@ export async function iterate(args, config) {
             duration: input.durationSeconds,
             aspectRatio: input.aspectRatio,
             provider: meta.provider,
-            tier: meta.tier,
+            tier: asTier(meta.tier),
             model: meta.model,
             outputPath: args.outputPath,
             outputDir: args.outputPath ? undefined : originalDir,

@@ -1,4 +1,4 @@
-import type { Modality, ProviderId, Tier } from "../providers/types.js";
+import type { AvatarTier, Modality, ProviderId, Tier } from "../providers/types.js";
 import type { CostEstimate } from "../pricing/types.js";
 
 export interface SidecarLineage {
@@ -48,6 +48,8 @@ export interface SidecarAvatarInput {
   audioPath: string;
   /** Output length in seconds (= the audio's duration). */
   durationSeconds: number;
+  /** Motion prompt, on p-video tiers only (Fabric takes none). */
+  prompt?: string;
 }
 
 export type SidecarInput =
@@ -63,7 +65,7 @@ export interface SidecarMetadata {
   modality: Modality;
   provider: ProviderId;
   model: string;
-  tier: Tier;
+  tier: Tier | AvatarTier;
   params: Record<string, unknown>;
   input: SidecarInput;
   output: {

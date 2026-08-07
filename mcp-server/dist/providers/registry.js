@@ -362,21 +362,98 @@ export function createVideoProvider(id, config) {
             throw new StructuredError("VALIDATION_ERROR", `${id} does not support video generation`, "Use --provider replicate for video (grok-imagine-video-1.5).");
     }
 }
-// Talking-avatar (lip-sync) video — image + audio → video via VEED Fabric 1.0.
-// A second replicate video model, distinct from the grok motion model in the
-// video TierTable (which is prompt-driven). The generate_avatar tool selects it
-// here so the model id stays in the registry, not the tool. Tier maps to output
-// resolution; the output length equals the input audio's duration.
+/**
+ * Talking-avatar (lip-sync) ladder — image + audio → video. Two models:
+ * p-video for the cheap rungs and VEED Fabric for the long/high-fidelity ones.
+ * Kept out of the video `TierTable` because that maps one model across tiers;
+ * here the tier axis switches model, resolution, and length ceiling at once.
+ *
+ * p-video pins two params away from the model's own defaults: prompt_upsampling
+ * off (an LLM rewriting the prompt server-side would make the sidecar stop
+ * describing what was generated) and the safety filter on (it ships off, which
+ * is not a default to inherit silently for a tool that animates real faces).
+ */
 const AVATAR_TIERS = {
-    small: { model: "veed/fabric-1.0", resolution: "480p" },
-    mid: { model: "veed/fabric-1.0", resolution: "720p" },
+    draft: {
+        model: "prunaai/p-video",
+        params: {
+            resolution: "720p",
+            fps: 48,
+            draft: true,
+            prompt_upsampling: false,
+            disable_safety_filter: false,
+        },
+        maxAudioSeconds: 20,
+        needsPrompt: true,
+    },
+    low: {
+        model: "prunaai/p-video",
+        params: {
+            resolution: "720p",
+            fps: 48,
+            draft: false,
+            prompt_upsampling: false,
+            disable_safety_filter: false,
+        },
+        maxAudioSeconds: 20,
+        needsPrompt: true,
+    },
+    normal: {
+        model: "prunaai/p-video",
+        params: {
+            resolution: "1080p",
+            fps: 48,
+            draft: false,
+            prompt_upsampling: false,
+            disable_safety_filter: false,
+        },
+        maxAudioSeconds: 20,
+        needsPrompt: true,
+    },
+    high: {
+        model: "veed/fabric-1.0",
+        params: { resolution: "480p" },
+        maxAudioSeconds: null,
+        needsPrompt: false,
+    },
+    ultra: {
+        model: "veed/fabric-1.0",
+        params: { resolution: "720p" },
+        maxAudioSeconds: null,
+        needsPrompt: false,
+    },
 };
+/** Per-second rates, for error/help text only — pricing.json stays authoritative. */
+const AVATAR_RATES = {
+    draft: 0.005,
+    low: 0.02,
+    normal: 0.04,
+    high: 0.08,
+    ultra: 0.15,
+};
+export const DEFAULT_AVATAR_TIER = "normal";
+/** Pre-ladder sidecars say small/mid and must still resolve to Fabric. */
+const LEGACY_AVATAR_TIERS = { small: "high", mid: "ultra" };
+export function normalizeAvatarTier(tier) {
+    return LEGACY_AVATAR_TIERS[tier] ?? tier;
+}
+export function avatarRate(tier) {
+    return AVATAR_RATES[tier];
+}
 export function resolveAvatarSlot(tier) {
-    const slot = AVATAR_TIERS[tier];
+    const resolved = normalizeAvatarTier(tier);
+    const slot = AVATAR_TIERS[resolved];
     if (!slot) {
-        throw new StructuredError("VALIDATION_ERROR", `talking-avatar video has no ${tier} tier`, "Use tier small (480p, $0.08/s) or mid (720p, $0.15/s).");
+        throw new StructuredError("VALIDATION_ERROR", `unknown talking-avatar tier "${tier}"`, "Use draft ($0.005/s), low ($0.02/s), normal ($0.04/s), high ($0.08/s) or ultra ($0.15/s). draft/low/normal cap the audio at 20s.");
     }
-    return { provider: "replicate", model: slot.model, params: { resolution: slot.resolution } };
+    return {
+        provider: "replicate",
+        model: slot.model,
+        tier: resolved,
+        params: { ...slot.params },
+        maxAudioSeconds: slot.maxAudioSeconds,
+        needsPrompt: slot.needsPrompt,
+    };
 }
 export function createAvatarProvider(id, config) {
     switch (id) {

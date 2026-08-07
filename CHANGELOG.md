@@ -4,6 +4,60 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-08-07
+
+### Added
+
+- **Talking-avatar tier ladder.** `generate_avatar` grows from two rungs to five,
+  spanning 30x in price, by adding Replicate's `prunaai/p-video` alongside the
+  existing `veed/fabric-1.0`:
+
+  | tier | model | output | $/sec | max audio |
+  | --- | --- | --- | --- | --- |
+  | `draft` | p-video | 720p, draft mode | 0.005 | 20s |
+  | `low` | p-video | 720p | 0.02 | 20s |
+  | `normal` **(default)** | p-video | 1080p | 0.04 | 20s |
+  | `high` | fabric | 480p | 0.08 | none |
+  | `ultra` | fabric | 720p | 0.15 | none |
+
+  The floor drops from $0.08/sec to $0.005/sec, so iterating on framing and
+  timing costs cents instead of dollars.
+- `generate_avatar --prompt` — motion prompt for the p-video tiers (defaults to
+  "The person speaks, moving their hands naturally."). Fabric ignores it; there
+  the audio alone drives the shot. Recorded in the sidecar so `regenerate`
+  reproduces it.
+- Multi-shot guidance in `skills/avatar-generation/SKILL.md` for scripts that
+  exceed the 20s cap: split the text (not the rendered audio) at sentence
+  boundaries, target ~17s segments, vary shot size by ~20% between adjacent cuts,
+  hard cuts only. Per-second billing makes splitting cost-neutral.
+
+### Changed
+
+- **Default avatar tier is now `normal`** (p-video 1080p, $0.04/sec) — half the
+  price of the previous default at higher resolution. A deliberate exception to
+  the cheapest-by-default rule: `draft` is for iteration, not delivery.
+- `makePriceKey` gained a `draft` discriminator (`...:720p-draft`) alongside the
+  existing quality/resolution ones. Existing keys are unchanged.
+- `CallEntry.tier` and `SidecarMetadata.tier` widen to `Tier | AvatarTier`, with
+  `asTier` / `asAvatarTier` narrowing at the regenerate/iterate call sites.
+
+### Fixed
+
+- **Over-length audio no longer silently truncates.** p-video returns
+  `status: succeeded` with only the first 20 seconds when handed longer audio —
+  no error, nothing in the response to detect it from (verified: 35.44s in →
+  20.02s out). `generate_avatar` now refuses pre-call on the capped tiers and
+  quotes both uncapped fabric tiers priced from the real duration. It does not
+  auto-escalate; silently doubling the bill is the caller's decision to make.
+
+### Notes
+
+- `small` / `mid` remain accepted as deprecated aliases for `high` / `ultra`, so
+  sidecars written before this release regenerate to the same model and price.
+- p-video ignores a multi-subject or ambiguous input image and generates an
+  unrelated person from the prompt, while still reporting success. Pass one
+  clearly-framed subject. Fabric refuses such inputs instead.
+
 ## [0.8.10] - 2026-05-13
 
 ### Fixed
