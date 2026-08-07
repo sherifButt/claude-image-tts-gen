@@ -52,7 +52,14 @@ demo-script.md
 # docs/hero.gif gets committed.
 docs/demo/*.mov
 docs/demo/*.gif
+# The rest of docs/demo/ is scratch for building those recordings: a rendered
+# changelog page and copies of brand marks that live for real in landing/assets/.
+docs/demo/*.html
+docs/demo/*.svg
 docs/designer/
+
+# asciinema captures for the demo — regenerated on demand, not sources.
+/*.cast
 
 gallery.html
 .gallery-assets/

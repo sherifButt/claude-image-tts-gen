@@ -58,6 +58,116 @@ All notable changes to this project are documented here. Format loosely follows
   unrelated person from the prompt, while still reporting success. Pass one
   clearly-framed subject. Fabric refuses such inputs instead.
 
+## [0.10.0] - 2026-08-03
+
+### Added
+
+- **`generate_avatar`** — talking-avatar (lip-sync) video: an image + speech
+  audio produce a clip whose mouth, head and subtle body motion track the voice.
+  Provider `replicate`, model `veed/fabric-1.0`. Built for outreach and
+  personalized messages: `generate_image` + `generate_speech` → `generate_avatar`.
+  A separate tool rather than part of `generate_video`, because the input
+  contract differs (image **+ audio**, no motion prompt).
+- Output length equals the audio duration, probed via `ffprobe`
+  (`post/thumbnail.ts:mediaDurationSeconds`) so the pre-call budget guard works;
+  errors clearly when ffmpeg is absent. Billed per second: 480p $0.08, 720p $0.15.
+- `ReplicateProvider` now implements `VideoProvider` + `AvatarProvider` over a
+  shared `runToOutput()` prediction lifecycle. Pricing keys
+  `replicate/veed/fabric-1.0:480p|720p`. CLI `--avatar --image --audio`,
+  `/gen-avatar`, and an `avatar-generation` skill.
+
+## [0.9.6] - 2026-08-02
+
+### Added
+
+- Gallery lightbox also shows Type, Dimensions (sharp for images, ffprobe for
+  video), Size, and the path relative to the gallery's cwd. `post/thumbnail.ts`
+  gains `imageDimensions` / `videoDimensions`.
+
+## [0.9.5] - 2026-08-02
+
+### Added
+
+- Gallery lightbox metadata panel: compact facts (kind, provider, model, tier,
+  params, cost, cached, date, file), then the full scrollable prompt, with
+  Open-file / Copy-prompt pinned at the bottom. Esc or backdrop closes it.
+
+## [0.9.4] - 2026-07-31
+
+### Added
+
+- **`gallery`** — scans the image/audio/video output dirs, reads each sidecar,
+  and writes a self-contained theme-aware `gallery.html`: thumbnail grid with
+  prompt/model/tier/params/cost/date per card, client-side filter, search, sort,
+  and a click-to-zoom lightbox. Audio cards get inline players.
+- Thumbnails via `post/thumbnail.ts` — sharp for images, ffmpeg poster frame +
+  sharp for video, both optional and degrading gracefully. Inlined as webp data
+  URIs so the page is portable.
+- Sources from the persistent output dirs, not the daily-resetting session
+  ledger. Files without sidecars still render. Output is gitignored.
+
+## [0.9.3] - 2026-07-23
+
+### Added
+
+- gpt-image-2 `background: auto | opaque | transparent`, passed to
+  `images.generate`/`edit`. The adapter fails fast on transparent + gpt-image-2
+  (unsupported) rather than spending a doomed call.
+- gpt-image-2 `size: "WIDTHxHEIGHT"` exact output size, overriding
+  resolution/aspectRatio. Validated by `util/aspect.ts:validateOpenAICustomSize`
+  (÷16, ≤3840px, ratio ≤3:1, 0.65–8.3 MP) and priced at the nearest 1K/2K/4K
+  tier by megapixels. Cache keys use the exact size.
+
+### Fixed
+
+- CI dist-check: restored the `@img/sharp-win32-arm64` lockfile stub as npm 11
+  writes it and pinned CI to npm 11. The previous fix (deleting the stub)
+  silenced npm 10 but broke `npm ci` for anyone on npm 11.
+
+## [0.9.2] - 2026-07-23
+
+### Added
+
+- `generate_image --resolution 1K | 2K | 4K` for gpt-image-2, lifting the
+  previous 1536px cap. Default 1K keeps output and cost unchanged. Combined with
+  aspectRatio into a concrete size via `aspectToOpenAISizeAtResolution` (square
+  4K capped at 2880² for the 8.3 MP ceiling).
+- `makePriceKey` composes quality + resolution → `openai/gpt-image-2:high@4K`
+  (1K omitted for parity). Six new pricing rows.
+
+## [0.9.1] - 2026-07-23
+
+### Changed
+
+- Refreshed the Google Gemini family ahead of Imagen 4's 2026-08-17 shutdown.
+  Image: pro → `gemini-3-pro-image` (Nano Banana Pro, now batchable, retiring
+  the Imagen-only code path), mid → `gemini-3.1-flash-image`, small →
+  `gemini-3.1-flash-lite-image` at ~$0.034/img. `gemini-2.5-flash-image` remains
+  reachable via explicit `--model`.
+- TTS mid tier filled in with `gemini-3.1-flash-tts-preview`.
+
+## [0.9.0] - 2026-07-19
+
+### Added
+
+- **Video as a first-class third modality** alongside image/tts, with
+  `replicate` as a video-only provider.
+- **`generate_video`** — image-to-video via `xai/grok-imagine-video-1.5`
+  (`imagePath` required, prompt drives motion). Duration 1–15s, tier →
+  resolution (small 480p / mid 720p), per-second pricing (`PriceUnit: "second"`),
+  audio synthesized free in the same pass.
+- `ReplicateProvider`: model-scoped predictions endpoint, input frame as a
+  base64 data URI, poll `urls.get` until terminal, download the output. No
+  failover — single provider, so the tool calls the adapter directly.
+- Video threaded through registry, pricing, config (`REPLICATE_API_TOKEN`,
+  `VIDEO_OUTPUT_DIR`), sidecar, regenerate/iterate, `estimate_cost`,
+  `list_providers`, `health_check`, and the CLI.
+
+### Fixed
+
+- `config.requireKey` used CommonJS `require()` inside an ESM module, throwing
+  "require is not defined" instead of a `CONFIG_ERROR`. Now a static import.
+
 ## [0.8.10] - 2026-05-13
 
 ### Fixed

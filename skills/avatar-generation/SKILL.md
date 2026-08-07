@@ -48,6 +48,12 @@ Five tiers spanning 30x in price:
 **Iterate on `draft`.** At $0.005/sec you can try twenty framings for the price of
 one `ultra` take. Move up only once the image, script and timing are settled.
 
+**The ladder is quality, not pixels.** Measured on a square input: `normal` renders
+1408x1408 at 48fps while `ultra` renders 960x960 at 25fps. The Fabric tiers cost more
+because their lip-sync is more faithful, not because they are larger — so if the user
+wants *resolution*, `normal` beats both Fabric tiers; if they want the mouth to track a
+difficult voice, pay for `ultra`. Say which one you're optimising for.
+
 Always surface the estimated cost (audio duration × rate) before generating. The
 pre-call budget guard blocks runs over the cap; if it fires, offer a cheaper tier,
 a shorter script, or `set_budget`.
