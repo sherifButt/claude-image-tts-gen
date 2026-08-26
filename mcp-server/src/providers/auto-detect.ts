@@ -23,6 +23,13 @@ export async function probeLocal(baseUrl: string): Promise<boolean> {
   return probe(`${baseUrl.replace(/\/$/, "")}/models`);
 }
 
+/** NOTE: /health answers "healthy" even when the gated cloning weights failed
+ *  to load. This only tells us the server is up; `check_pocket` probes whether
+ *  cloning actually works. */
+export async function probePocketTts(baseUrl: string): Promise<boolean> {
+  return probe(`${baseUrl.replace(/\/$/, "")}/health`);
+}
+
 function log(config: Config, level: "info" | "debug", msg: string): void {
   const ranks = { error: 0, warn: 1, info: 2, debug: 3 };
   if (ranks[level] <= ranks[config.logLevel]) {
@@ -71,6 +78,23 @@ export async function applyAutoDetection(config: Config): Promise<void> {
           );
         } else {
           log(config, "debug", `local: not reachable at ${config.localBaseUrl}, skipping`);
+        }
+      }),
+    );
+  }
+
+  if (config.pocketTtsAutoProbe) {
+    tasks.push(
+      probePocketTts(config.pocketTtsBaseUrl).then((reachable) => {
+        if (reachable) {
+          config.pocketTtsEnabled = true;
+          log(
+            config,
+            "info",
+            `pocket-tts: auto-detected at ${config.pocketTtsBaseUrl} (set POCKET_TTS_ENABLED=false to opt out)`,
+          );
+        } else {
+          log(config, "debug", `pocket-tts: not reachable at ${config.pocketTtsBaseUrl}, skipping`);
         }
       }),
     );

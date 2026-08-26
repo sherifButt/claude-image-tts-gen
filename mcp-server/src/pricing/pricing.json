@@ -245,6 +245,14 @@
       },
       "notes": "Local Voicebox server (voicebox.sh) — $0/call. Engine + model_size selected per profile or via params; no API cost."
     },
+    "pocket-tts/pocket-tts": {
+      "modality": "tts",
+      "pricing": {
+        "type": "million_chars",
+        "standard": 0.0
+      },
+      "notes": "Kyutai pocket-tts running locally (`pocket-tts serve`) — $0/call. 26 built-in voices plus zero-shot cloning from a reference .wav. MIT code, CC-BY-4.0 weights. Cloning weights are a gated HF repo; run check_pocket to confirm they loaded."
+    },
     "replicate/xai/grok-imagine-video-1.5:480p": {
       "modality": "video",
       "pricing": {

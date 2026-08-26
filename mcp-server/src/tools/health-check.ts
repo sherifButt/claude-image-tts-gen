@@ -8,6 +8,9 @@ export interface ProviderHealth {
   ok: boolean | null;
   latencyMs: number | null;
   error: string | null;
+  /** A working-but-degraded detail worth surfacing — e.g. pocket-tts is up
+   *  and can speak, but its gated cloning weights did not load. */
+  note?: string | null;
 }
 
 export interface HealthCheckOutput {
@@ -104,6 +107,36 @@ async function pingVoicebox(baseUrl: string): Promise<void> {
   }
 }
 
+/**
+ * pocket-tts needs more than a liveness ping. `/health` answers
+ * `{"status":"healthy"}` even when the gated cloning weights failed to load and
+ * the server would silently speak in a stock voice, so this actually exercises
+ * a clone. Costs ~0.5s and $0. The note it can set is why the whole check
+ * exists: the caller learns cloning is unavailable HERE, not three minutes into
+ * a narration run.
+ */
+let pocketCloningNote: string | null = null;
+
+async function pingPocketTts(baseUrl: string): Promise<void> {
+  pocketCloningNote = null;
+  const url = baseUrl.endsWith("/") ? `${baseUrl}health` : `${baseUrl}/health`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(`pocket-tts ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  } finally {
+    clearTimeout(t);
+  }
+  const { PocketTtsProvider } = await import("../providers/pocket-tts.js");
+  const clone = await new PocketTtsProvider({ baseUrl }).probeCloning();
+  if (!clone.ok) {
+    pocketCloningNote =
+      `built-in voices OK, but voice cloning is NOT available (${clone.detail}). ` +
+      `Accept the terms at https://huggingface.co/kyutai/pocket-tts, run \`hf auth login\`, restart the server.`;
+  }
+}
+
 async function pingReplicate(apiToken: string): Promise<void> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), PING_TIMEOUT_MS);
@@ -136,18 +169,28 @@ async function checkProvider(
 }
 
 export async function healthCheck(config: Config): Promise<HealthCheckOutput> {
-  const [google, openai, openrouter, elevenlabs, local, voicebox, replicate] = await Promise.all([
+  const [google, openai, openrouter, elevenlabs, local, voicebox, pocketTts, replicate] = await Promise.all([
     checkProvider(Boolean(config.geminiApiKey), config.geminiApiKey, pingGoogle),
     checkProvider(Boolean(config.openaiApiKey), config.openaiApiKey, pingOpenAI),
     checkProvider(Boolean(config.openrouterApiKey), config.openrouterApiKey, pingOpenRouter),
     checkProvider(Boolean(config.elevenlabsApiKey), config.elevenlabsApiKey, pingElevenLabs),
     checkProvider(config.localEnabled, config.localBaseUrl, pingLocal),
     checkProvider(config.voiceboxEnabled, config.voiceboxBaseUrl, pingVoicebox),
+    checkProvider(config.pocketTtsEnabled, config.pocketTtsBaseUrl, pingPocketTts),
     checkProvider(Boolean(config.replicateApiToken), config.replicateApiToken, pingReplicate),
   ]);
 
   const pricing = getStaleness();
-  const all = { google, openai, openrouter, elevenlabs, local, voicebox, replicate };
+  const all = {
+    google,
+    openai,
+    openrouter,
+    elevenlabs,
+    local,
+    voicebox,
+    "pocket-tts": { ...pocketTts, note: pocketCloningNote },
+    replicate,
+  };
   const configured = Object.values(all).filter((p) => p.configured);
   const allOk = configured.length > 0 && configured.every((p) => p.ok === true) && !pricing.isStale;
 
@@ -175,6 +218,9 @@ function renderText(
     } else {
       lines.push(`  ${id.padEnd(12)} FAIL — ${h.error}`);
     }
+    // A provider can be up and still be missing a capability — surfacing it
+    // here is the whole point: the caller learns now, not mid-run.
+    if (h.note) lines.push(`  ${" ".repeat(12)} ! ${h.note}`);
   }
   lines.push(``, `Pricing:`);
   lines.push(

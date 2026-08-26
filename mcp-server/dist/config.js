@@ -37,6 +37,10 @@ export function loadConfig(env = process.env) {
         elevenlabsDefaultVoice: env.ELEVENLABS_DEFAULT_VOICE?.trim() || undefined,
         localDefaultVoice: env.LOCAL_DEFAULT_VOICE?.trim() || undefined,
         voiceboxDefaultVoice: env.VOICEBOX_DEFAULT_VOICE?.trim() || undefined,
+        pocketTtsBaseUrl: env.POCKET_TTS_BASE_URL ?? env.POCKET_TTS_URL ?? "http://localhost:8000",
+        pocketTtsEnabled: ["true", "1", "yes", "on"].includes((env.POCKET_TTS_ENABLED ?? "").toLowerCase()),
+        pocketTtsAutoProbe: env.POCKET_TTS_ENABLED === undefined,
+        pocketTtsDefaultVoice: env.POCKET_TTS_DEFAULT_VOICE?.trim() || undefined,
     };
 }
 function requireKey(envName, providerLabel, value) {

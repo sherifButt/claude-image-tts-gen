@@ -10,6 +10,7 @@ const PROVIDER_GUIDANCE: Record<ProviderId, string> = {
   openrouter:
     "Routed via OpenRouter — the upstream model is usually Gemini-style. Concise, vivid, scene-first.",
   elevenlabs: "(no image rewrites for elevenlabs)",
+  "pocket-tts": "(no image rewrites for pocket-tts — TTS only)",
   local:
     "Local server — keep it simple and direct. Local image models (Stable Diffusion variants) prefer subject + style + medium tags.",
   voicebox: "(no image rewrites for voicebox — TTS-only)",

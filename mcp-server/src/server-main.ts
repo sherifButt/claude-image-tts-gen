@@ -21,6 +21,7 @@ import { batchStatus, type BatchStatusArgs } from "./tools/batch-status.js";
 import { batchSubmit, type BatchSubmitArgs } from "./tools/batch-submit.js";
 import { checkLocal } from "./tools/check-local.js";
 import { checkVoicebox } from "./tools/check-voicebox.js";
+import { checkPocket } from "./tools/check-pocket.js";
 import {
   checkBatchAvailability,
   createAssets,
@@ -58,7 +59,7 @@ import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
 
-const VERSION = "0.12.0";
+const VERSION = "0.13.0";
 const config = loadConfig();
 await applyAutoDetection(config);
 
@@ -475,6 +476,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: "check_voicebox",
       description:
         "Probe the Voicebox server (voicebox.sh) at VOICEBOX_BASE_URL and report: server health (model loaded, GPU), profiles you have (voice IDs, language, voice_type), available engines with capabilities (qwen=cloning+instruct, chatterbox_turbo=tags like [laugh]/[sigh], kokoro=preset-only, ...), and preset voice counts per engine. Use this before calling generate_speech via Voicebox to pick the right engine for tags / cloning / multi-language needs.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    {
+      name: "check_pocket",
+      description:
+        "Full credentials + capability check for pocket-tts (local, $0 TTS with voice cloning). Reports server reachability, whether the 26 built-in voices work, and — critically — whether VOICE CLONING actually works, by cloning a probe clip. This matters because pocket-tts's /health returns \"healthy\" even when its gated cloning weights failed to load, after which it silently speaks in a stock voice. Also reports whether it is enabled for auto-selection, and gives concrete fixes for anything broken. Costs $0 and about half a second. Run it BEFORE a narration run rather than discovering a problem mid-way.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
     },
     {
@@ -1155,6 +1162,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "check_local") {
       return await handleCheckLocal();
+    }
+    if (name === "check_pocket") {
+      const result = await checkPocket(config);
+      return { content: [{ type: "text", text: JSON.stringify(result) }] };
     }
     if (name === "check_voicebox") {
       return await handleCheckVoicebox();

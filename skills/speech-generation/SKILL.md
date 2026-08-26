@@ -6,6 +6,7 @@ allowed-tools:
   - mcp__claude-image-tts-gen__estimate_cost
   - mcp__claude-image-tts-gen__list_providers
   - mcp__claude-image-tts-gen__check_voicebox
+  - mcp__claude-image-tts-gen__check_pocket
   - mcp__claude-image-tts-gen__regenerate
   - mcp__claude-image-tts-gen__session_spend
 ---
@@ -35,6 +36,20 @@ Default to `mid` for narration-length text, `small` for very short clips.
   - Custom cloned voices (pass the raw voice ID)
   - SRT/VTT captions (ElevenLabs is the only provider with word-level
     timestamps in v1)
+- **`pocket-tts`** when the user wants **$0/call** generation or **voice
+  cloning** and has `pocket-tts serve` running (default `:8000`). 26 built-in
+  voices; clone by passing `--referenceAudioPath <clean .wav>`, or a `.wav`
+  path as `--voice`. ~4x realtime on CPU, 24 kHz mono.
+
+  **Run `check_pocket` before any long run or any cloning request.** Its
+  `/health` reports `healthy` even when the gated cloning weights failed to
+  load, after which it would speak in a stock voice — `check_pocket` actually
+  clones a probe clip, so it tells you the truth in about half a second for $0.
+  `generate_speech` runs the same probe as a preflight and **refuses** a cloning
+  request it cannot honour, rather than handing back a stranger's voice. If it
+  refuses, relay the fix (accept the terms at
+  https://huggingface.co/kyutai/pocket-tts, `hf auth login`, restart) instead of
+  retrying or silently switching provider.
 - **`voicebox`** when the user has [Voicebox](https://voicebox.sh)
   running locally and wants $0/call generation, voice cloning, or
   inline emotion tags. Voicebox bundles 7 engines with very different

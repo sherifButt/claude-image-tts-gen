@@ -5,6 +5,7 @@ export type ProviderId =
   | "elevenlabs"
   | "local"
   | "voicebox"
+  | "pocket-tts"
   | "replicate";
 export type Modality = "image" | "tts" | "video";
 export type Tier = "small" | "mid" | "pro";

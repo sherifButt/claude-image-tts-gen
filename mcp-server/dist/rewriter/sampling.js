@@ -4,6 +4,7 @@ const PROVIDER_GUIDANCE = {
     openai: "gpt-image-2 prefers direct, visual descriptions. Avoid abstract concepts. Specify orientation if relevant.",
     openrouter: "Routed via OpenRouter — the upstream model is usually Gemini-style. Concise, vivid, scene-first.",
     elevenlabs: "(no image rewrites for elevenlabs)",
+    "pocket-tts": "(no image rewrites for pocket-tts — TTS only)",
     local: "Local server — keep it simple and direct. Local image models (Stable Diffusion variants) prefer subject + style + medium tags.",
     voicebox: "(no image rewrites for voicebox — TTS-only)",
     replicate: "grok-imagine-video-1.5 (image-to-video): describe the MOTION — how the subject and camera move, pacing, and any ambient sound. The still frame already sets the scene; focus the prompt on what changes over time.",

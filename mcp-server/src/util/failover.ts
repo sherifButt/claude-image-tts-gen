@@ -29,6 +29,10 @@ function hasKeyFor(providerId: ProviderId, config: Config): boolean {
     case "voicebox":
       // No API key required (local Voicebox server). Opt-in via VOICEBOX_ENABLED.
       return config.voiceboxEnabled;
+    case "pocket-tts":
+      // No API key required (local `pocket-tts serve`). Opt-in via POCKET_TTS_ENABLED,
+      // or auto-detected at startup when that env var is unset.
+      return config.pocketTtsEnabled;
     case "replicate":
       // Video-only; never part of the image/tts failover chains, but the
       // switch must stay exhaustive over ProviderId.
@@ -63,6 +67,8 @@ export function envVarNameFor(providerId: ProviderId): string {
       return "LOCAL_ENABLED (opt-in) / LOCAL_BASE_URL";
     case "voicebox":
       return "VOICEBOX_ENABLED (opt-in) / VOICEBOX_BASE_URL";
+    case "pocket-tts":
+      return "POCKET_TTS_ENABLED (opt-in) / POCKET_TTS_BASE_URL";
     case "replicate":
       return "REPLICATE_API_TOKEN";
   }
@@ -128,7 +134,7 @@ export async function withFailover<TResult>(
       undefined,
       {
         requestedProvider: opts.preferredProvider,
-        availableProviders: (["google", "openai", "openrouter", "elevenlabs", "local", "voicebox"] as ProviderId[])
+        availableProviders: (["google", "openai", "openrouter", "elevenlabs", "local", "voicebox", "pocket-tts"] as ProviderId[])
           .filter((p) => hasKeyFor(p, opts.config)),
       },
     );

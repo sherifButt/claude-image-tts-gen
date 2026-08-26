@@ -4,6 +4,52 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-08-26
+
+### Added
+
+- **`pocket-tts` provider** — [Kyutai pocket-tts](https://huggingface.co/kyutai/pocket-tts)
+  running locally via its own `POST /tts` API. $0/call, no API key, ~4x realtime
+  on CPU, 24 kHz mono. 26 built-in voices plus **zero-shot cloning** from a
+  reference `.wav`. MIT code + CC-BY-4.0 weights, so it is safe for client work.
+  Adapted from the demo-reel plugin, which added it because Voicebox was the only
+  $0 provider and therefore a single point of failure.
+- **Second cloning-capable backend.** `generate_speech --referenceAudioPath` now
+  accepts `--provider pocket-tts` alongside `--provider local`.
+- **`check_pocket`** (CLI `--check-pocket`, `/gen-check pocket`) — a full
+  credentials + capability check: reachability, built-in voices, whether cloning
+  actually works, and whether the provider is enabled for auto-selection, with a
+  concrete fix for anything broken. $0 and about half a second.
+- **`/gen-check`** slash command routing to `health_check` / `check_pocket` /
+  `check_voicebox` / `check_local`, so a provider problem is found *before* a long
+  or expensive run rather than part-way through one.
+- Tristate `POCKET_TTS_ENABLED` with startup auto-detection against
+  `${POCKET_TTS_BASE_URL}/health` (default `http://localhost:8000`), matching the
+  existing `LOCAL_ENABLED` / `VOICEBOX_ENABLED` semantics. Plus
+  `POCKET_TTS_DEFAULT_VOICE`, which accepts a built-in name or a path to a
+  reference `.wav`.
+
+### Changed
+
+- `ProviderHealth` gains an optional `note`, and `health_check` renders it. A
+  provider can be reachable and still be missing a capability; that now shows up
+  instead of reading as a clean pass.
+
+### Notes
+
+- **pocket-tts must refuse rather than degrade.** On *any* cloning-weights
+  download failure the upstream library quietly loads the non-cloning model and
+  speaks in a stock voice — and `/health` still answers `{"status":"healthy"}`
+  throughout (verified against a live server). So `check_pocket` clones a probe
+  clip instead of trusting `/health`, `generate_speech` runs that same probe as a
+  preflight before any cloning request, and the server's error is translated into
+  a refusal naming the gate (`hf auth login`) rather than passed through raw.
+- The probe seeds itself: it synthesizes one token with a built-in voice and feeds
+  that audio back as the cloning reference, so it needs no file from the user.
+- Reference voices are keyed by their **bytes**, not their path — a reference can
+  be re-recorded in place, and a path-keyed cache would serve the previous voice
+  forever with nothing to indicate it.
+
 ## [0.12.0] - 2026-08-26
 
 ### Added

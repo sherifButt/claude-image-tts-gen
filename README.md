@@ -19,15 +19,15 @@ your code knowing which one ran.
 | Per-call + per-session cost ledger | ✅ | ❌ | partial (dashboard) | ❌ |
 | Batch mode (50% off where supported) | ✅ image + TTS | manual | ❌ | ❌ |
 | Reproducible sidecar / regenerate | ✅ `.regenerate.json` per output | ❌ | ❌ | ❌ |
-| Local $0/call escape hatch | ✅ Voicebox + Kokoro + 4 more | ❌ | ❌ | ❌ |
-| Voice cloning | ✅ local Chatterbox / XTTS / Voicebox + ElevenLabs voice IDs | n/a | ✅ | ❌ |
+| Local $0/call escape hatch | ✅ pocket-tts + Voicebox + Kokoro + 4 more | ❌ | ❌ | ❌ |
+| Voice cloning | ✅ local pocket-tts / Chatterbox / XTTS / Voicebox + ElevenLabs voice IDs | n/a | ✅ | ❌ |
 | Long-text TTS auto-chunk + stitch | ✅ sentence-aware, reactive | manual | partial | n/a |
 | Provider failover on rate-limit / 5xx | ✅ logged cost delta | ❌ | ❌ | ❌ |
 | MIT licensed, semver'd, changelog | ✅ | n/a | n/a | ✅ |
 
 ## Why this MCP is different
 
-There are plenty of MCP servers that wrap one vendor. This one wraps **seven** (Google Gemini, OpenAI, OpenRouter, ElevenLabs, [Voicebox](https://voicebox.sh), Replicate for video, and any OpenAI-compatible local server) behind a consistent interface, and adds the cross-cutting concerns that a thin wrapper leaves to you:
+There are plenty of MCP servers that wrap one vendor. This one wraps **eight** (Google Gemini, OpenAI, OpenRouter, ElevenLabs, [Voicebox](https://voicebox.sh), [pocket-tts](https://huggingface.co/kyutai/pocket-tts), Replicate for video, and any OpenAI-compatible local server) behind a consistent interface, and adds the cross-cutting concerns that a thin wrapper leaves to you:
 
 - **One knob (`small | mid | pro`) spans every provider.** Code written for Gemini works unchanged against OpenAI or a local Kokoro model — swap `--provider` and the call still runs. No per-vendor quirks in your prompt code.
 - **Cost-aware from the first call.** Per-call + session + per-project ledgers, hard daily/weekly/monthly budget caps enforced *pre-call* (not after the charge), dry-run `estimate_cost` that ranks every provider/tier combo, and a $0 cache for identical repeats. You know what a generation costs before you spend, and after.
@@ -97,20 +97,21 @@ claude-image-tts-gen-cli --gallery --open          # all modalities, then open i
 ## Features
 
 ### Generation
-- **7 providers** behind a single tier abstraction (`small | mid | pro`):
+- **8 providers** behind a single tier abstraction (`small | mid | pro` for image/TTS; a five-rung `draft → ultra` ladder for video and avatars):
   - **Google Gemini** (image: 3.1 Flash **Lite** "Nano Banana 2 Lite" → 3.1 Flash "Nano Banana 2" → 3 Pro "Nano Banana Pro", all GA; TTS: 2.5 Flash → 3.1 Flash → 2.5 Pro. Replaced the now-deprecated Imagen 4 pro slot — Imagen 4 shuts down 2026-08-17.)
   - **OpenAI** (image: gpt-image-2 ×3 quality, up to **4K / 3840×2160** via `resolution`; TTS: tts-1, gpt-4o-mini-tts, tts-1-hd)
   - **OpenRouter** (image passthrough: 2.5-flash-image, 3.1-flash-image-preview, 3-pro-image-preview)
   - **ElevenLabs** (TTS with friendly voice names + raw voice IDs)
-  - **🎬 Replicate (`provider: replicate`)** — video. Image-to-video (motion) via `xai/grok-imagine-video-1.5`, and **talking-avatar / lip-sync** (image + audio → talking video) via `veed/fabric-1.0`. Tier = resolution (small=480p, mid=720p), billed per second.
+  - **🎬 Replicate (`provider: replicate`)** — video + talking avatars, across three models: `prunaai/p-video` (cheap rungs; text-to-video, image-to-video **and** lip-sync), `xai/grok-imagine-video-1.5` (premium motion) and `veed/fabric-1.0` (premium lip-sync). One five-rung `draft → ultra` ladder shared by both tools, billed per second.
   - **🖥 Local (`provider: local`)** — any OpenAI-compatible server (Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, ...). $0/call, no API key, no rate limit.
   - **🎙 Voicebox (`provider: voicebox`)** — local-first voice studio ([voicebox.sh](https://voicebox.sh)) with 7 TTS engines (Qwen3-TTS, Chatterbox, Kokoro, ...), zero-shot cloning, 23 languages. $0/call, no API key.
+  - **🗣 pocket-tts (`provider: pocket-tts`)** — [Kyutai pocket-tts](https://huggingface.co/kyutai/pocket-tts) running locally, 26 built-in voices plus zero-shot cloning from a reference `.wav`. $0/call, no API key, ~4× realtime on CPU. MIT code + CC-BY-4.0 weights, so it's safe for client work. A **second** free engine so the $0 tier isn't a single point of failure.
 - **Image-to-image edits** via reference image input (gpt-image-2, Gemini multimodal, local server if it supports `/v1/images/edits`). **Multi-reference composition** (v0.8.8) — pass an array of inputs to gpt-image-2 or gemini-3.1-flash-image-preview via `referenceImagePaths[]` (MCP) or repeated `--reference` flags (CLI)
 - **High-resolution image output** (v0.9.2) — `resolution: 1K | 2K | 4K` on gpt-image-2 (provider `openai`). Default 1K (≈1024px) keeps output/cost unchanged; 2K (≈2048px) and 4K (up to 3840×2160) opt in, combined with `aspectRatio` to pick the exact size. Resolution-keyed pricing keeps the ledger accurate (4K-high ≈ $0.41/img vs 1K-high ≈ $0.21).
 - **Custom sizes + background** (v0.9.3) — `size: "WIDTHxHEIGHT"` sets an exact gpt-image-2 output size (overrides `resolution`/`aspectRatio`; validated for ÷16 / ≤3840px / ratio ≤3:1 / 0.65–8.3 MP, priced at the nearest tier by megapixels). `background: auto | opaque | transparent` controls the backdrop (transparent needs `--model gpt-image-1`; gpt-image-2 rejects it — caught before the call).
 - **🖼 HTML gallery** (v0.9.4) — `gallery` (CLI `--gallery`, `/gen-gallery`) scans the image/audio/video output dirs, reads each file's sidecar, and writes a self-contained, theme-aware `gallery.html`: a thumbnail grid (webp via sharp; video posters via ffmpeg) where every card shows the prompt, model/tier/params, **cost**, and date, with client-side filter / search / sort and a lightbox. Re-run to refresh. Filter by modality/provider (e.g. just the gpt-image-2 shots).
-- **🎬 Image-to-video** (v0.9.0) via Replicate `grok-imagine-video-1.5` — feed a still frame + a motion prompt to `generate_video` (CLI: `--video -p "..." --image frame.png`). 1–15s clips at 480p/720p, per-second billing, synchronized audio. Same cache / sidecar / budget / regenerate machinery as image + TTS. Needs `REPLICATE_API_TOKEN`.
-- **🗣 Talking avatars / lip-sync** (v0.10.0) via Replicate `veed/fabric-1.0` — feed an image + speech audio to `generate_avatar` (CLI: `--avatar --image face.png --audio voice.mp3`) and get a video where the mouth, head, and subtle body motion sync to the voice. Perfect for **outreach videos and personalized messages**: `generate_image` (avatar) → `generate_speech` (voice) → `generate_avatar`. Output length = audio length; billed per second (480p $0.08 / 720p $0.15), so a 30s clip ≈ $2.40 / $4.50 — the pre-call budget guard applies. Needs `REPLICATE_API_TOKEN` + `ffmpeg`.
+- **🎬 Video, text-to-video or image-to-video** (v0.9.0; two-model ladder v0.12.0) — `generate_video` (CLI: `--video -p "..."`, optionally `--image frame.png`). Five tiers spanning 28× in price, all billed per second: `draft` $0.005 · `low` $0.02 · `normal` $0.04 (default) · `high` $0.08 · `ultra` $0.14. The three cheap rungs run Pruna `p-video` (**text-to-video capable** — no input frame needed — up to 20s); `high`/`ultra` run `grok-imagine-video-1.5` for richer motion (input frame required, max 15s). Synchronized audio, and the same cache / sidecar / budget / regenerate machinery as image + TTS. Needs `REPLICATE_API_TOKEN`.
+- **🗣 Talking avatars / lip-sync** (v0.10.0) via Replicate `veed/fabric-1.0` — feed an image + speech audio to `generate_avatar` (CLI: `--avatar --image face.png --audio voice.mp3`) and get a video where the mouth, head, and subtle body motion sync to the voice. Perfect for **outreach videos and personalized messages**: `generate_image` (avatar) → `generate_speech` (voice) → `generate_avatar`. Output length = audio length, billed per second across the **same five tiers as video**: `draft` $0.005 · `low` $0.02 · `normal` $0.04 (default) · `high` $0.08 · `ultra` $0.15. draft/low/normal run `p-video` and cap the audio at 20s (the tool refuses longer input rather than letting the model silently truncate it); `high`/`ultra` run `veed/fabric-1.0` with no cap and the best lip-sync. Iterate on `draft` for pennies, deliver on `normal` or above. Pre-call budget guard applies. Needs `REPLICATE_API_TOKEN` + `ffmpeg`.
 - **Long-form TTS** auto-chunked at sentence boundaries, concat'd via ffmpeg. Triggers both pre-emptively (text > provider's `maxCharsPerCall`) *and* reactively (provider rejects a shorter input as too long for output-duration / token reasons — a new `INPUT_TOO_LONG` code catches that and retries with chunking on the same provider, preserving voice)
 - **SRT / VTT captions** from ElevenLabs word-level timestamps
 - **TTS auto-play** on macOS via `afplay` (opt-in)
@@ -236,7 +237,30 @@ export LOCAL_BASE_URL=http://localhost:8880/v1     # default (Kokoro-FastAPI's p
 export VOICEBOX_BASE_URL=http://localhost:17493    # default
 # export VOICEBOX_ENABLED=false                      # uncomment to opt out
 export VOICEBOX_DEFAULT_VOICE=<profile_id>         # from GET /profiles
+
+# pocket-tts (Kyutai) — `pip install pocket-tts && pocket-tts serve`
+export POCKET_TTS_BASE_URL=http://localhost:8000   # default
+# export POCKET_TTS_ENABLED=false                    # uncomment to opt out
+export POCKET_TTS_DEFAULT_VOICE=alba               # or a path to a reference .wav to clone
 ```
+
+> **Run `check_pocket` before a long narration run** (CLI: `--check-pocket`, $0, ~0.5s).
+> pocket-tts's `/health` reports `healthy` even when its **gated** cloning weights failed
+> to load — after which it quietly narrates in a stock voice instead of the one you asked
+> for. `check_pocket` actually clones a probe clip, so it tells you the truth up front:
+>
+> ```
+> pocket-tts @ http://localhost:8000 (3ms)
+>
+>   OK    server reachable
+>   OK    built-in voices (26 available, default "alba")
+>   OK    voice cloning — cloned a reference successfully
+>   OK    auto-selection (POCKET_TTS_ENABLED)
+> ```
+>
+> If cloning is unavailable it says so, names the fix (`hf auth login` after accepting the
+> terms), and `generate_speech` **refuses** a cloning request rather than substituting a
+> stranger's voice. `health_check` runs the same probe across every provider at once.
 
 Other optional:
 
@@ -270,7 +294,8 @@ export OPENAI_DEFAULT_VOICE='onyx'                        # male on OpenAI
 export ELEVENLABS_DEFAULT_VOICE='<voice-id-from-voicelab>' # raw voice ID
 export LOCAL_DEFAULT_VOICE='am_adam'                      # male on Kokoro-FastAPI
 export LOCAL_BASE_URL='http://localhost:8880/v1'
-# Local + Voicebox auto-detect at startup (v0.8.5+); only set
+export POCKET_TTS_DEFAULT_VOICE='alba'                    # 26 built-ins, or a .wav path to clone
+# Local, Voicebox and pocket-tts auto-detect at startup; only set
 # *_ENABLED=false to force-exclude a reachable server.
 EOF
 

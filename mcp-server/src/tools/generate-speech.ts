@@ -223,14 +223,28 @@ export async function generateSpeech(
   let referenceAudio: ReferenceAudio | undefined;
   let referenceAudioHash: string | undefined;
   if (args.referenceAudioPath) {
-    if (requestedProvider !== "local") {
+    if (requestedProvider !== "local" && requestedProvider !== "pocket-tts") {
       throw new StructuredError(
         "VALIDATION_ERROR",
-        `referenceAudio (voice cloning) is only supported on provider=local (Chatterbox-TTS / XTTS-style servers). Got provider=${requestedProvider}.`,
+        `referenceAudio (voice cloning) is only supported on provider=pocket-tts or provider=local. Got provider=${requestedProvider}.`,
         requestedProvider === "elevenlabs"
           ? "For ElevenLabs cloning, create the voice at elevenlabs.io/voice-lab and pass its voice ID via --voice <id>."
-          : "Switch to --provider local and run a cloning-capable backend (Chatterbox-TTS or Coqui-TTS/XTTS).",
+          : "Use --provider pocket-tts (local, $0, clones from a reference .wav — run check_pocket first), or --provider local with a cloning-capable backend (Chatterbox-TTS / Coqui-TTS-XTTS).",
       );
+    }
+
+    // PREFLIGHT. pocket-tts silently loads non-cloning weights when the gated
+    // HF download fails, and /health still reports healthy — so without this
+    // the first sign of trouble is a finished file in a stranger's voice, or
+    // an error surfacing minutes into a chunked run. ~0.5s and $0 to know now.
+    if (requestedProvider === "pocket-tts") {
+      const { PocketTtsProvider, cloningUnavailableError } = await import(
+        "../providers/pocket-tts.js"
+      );
+      const probe = await new PocketTtsProvider({
+        baseUrl: config.pocketTtsBaseUrl,
+      }).probeCloning();
+      if (!probe.ok) throw cloningUnavailableError();
     }
     const absRefPath = resolve(args.referenceAudioPath);
     let bytes: Buffer;

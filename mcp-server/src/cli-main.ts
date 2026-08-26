@@ -10,6 +10,7 @@ import { batchStatus } from "./tools/batch-status.js";
 import { batchSubmit } from "./tools/batch-submit.js";
 import { checkLocal } from "./tools/check-local.js";
 import { checkVoicebox } from "./tools/check-voicebox.js";
+import { checkPocket } from "./tools/check-pocket.js";
 import { createAssets, type CreateAssetsMode } from "./tools/create-assets.js";
 import { estimateCostDryRun } from "./tools/estimate-cost.js";
 import { exportSpend } from "./tools/export-spend.js";
@@ -66,6 +67,7 @@ Options:
       --duration <n>       Video clip length in seconds (1–15, default 5)
       --list-providers <m> List declared providers for modality m (image|tts|video)
       --check-voicebox     Probe Voicebox server: profiles, engines, capabilities (tags / cloning / instruct)
+      --check-pocket       Probe pocket-tts: reachability, built-in voices, and whether cloning ACTUALLY works ($0, ~0.5s)
       --gallery            Build an HTML gallery of all generated media (image/audio/video)
       --modality <m>       Gallery filter: all (default) | image | tts | video
       --open               Open the gallery in the browser afterwards (macOS)
@@ -136,6 +138,7 @@ function isProvider(s: string | undefined): s is ProviderId {
     s === "openai" ||
     s === "openrouter" ||
     s === "elevenlabs" ||
+    s === "pocket-tts" ||
     s === "local" ||
     s === "voicebox" ||
     s === "replicate"
@@ -193,6 +196,7 @@ async function main(): Promise<void> {
         "health-check": { type: "boolean", default: false },
         "check-local": { type: "boolean", default: false },
         "check-voicebox": { type: "boolean", default: false },
+        "check-pocket": { type: "boolean", default: false },
         gallery: { type: "boolean", default: false, description: "Build an HTML gallery of all generated media" },
         modality: { type: "string", description: "gallery filter: all (default) | image | tts | video" },
         open: { type: "boolean", default: false, description: "Open the gallery in the browser afterwards (macOS)" },
@@ -348,6 +352,12 @@ async function main(): Promise<void> {
       const result = await checkLocal(config);
       process.stdout.write(result.text + "\n");
       process.exit(result.success ? 0 : 1);
+    }
+
+    if (values["check-pocket"]) {
+      const result = await checkPocket(config);
+      process.stdout.write(result.text + "\n");
+      process.exit(result.ok ? 0 : 1);
     }
 
     if (values["check-voicebox"]) {

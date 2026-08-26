@@ -3,6 +3,7 @@ import { StructuredError } from "../util/errors.js";
 import { ELEVENLABS_DEFAULT_VOICE, ELEVENLABS_FRIENDLY_VOICES, ElevenLabsProvider, } from "./elevenlabs.js";
 import { GEMINI_DEFAULT_VOICE, GEMINI_TTS_VOICES, GoogleProvider, } from "./google.js";
 import { LocalProvider } from "./local.js";
+import { POCKET_TTS_DEFAULT_VOICE, POCKET_TTS_VOICES, PocketTtsProvider, } from "./pocket-tts.js";
 import { OpenAIProvider } from "./openai.js";
 import { OpenRouterProvider } from "./openrouter.js";
 import { ReplicateProvider } from "./replicate.js";
@@ -151,6 +152,33 @@ const MATRIX = [
                 // Override per-call with maxCharsPerChunk if your engine handles
                 // longer inputs cleanly.
                 maxCharsPerCall: 300,
+            },
+            mid: NA,
+            pro: NA,
+        },
+        video: NA_TABLE,
+    },
+    {
+        id: "pocket-tts",
+        // Kyutai pocket-tts — local, $0, and the second cloning-capable backend
+        // after `local`. One slot: the model is fixed, and the "tier" axis has
+        // nothing to vary. `voices` are the 26 built-in names; a --voice that is
+        // a path to a .wav clones from it instead.
+        image: { small: NA, mid: NA, pro: NA },
+        tts: {
+            small: {
+                model: "pocket-tts",
+                batchable: false,
+                implemented: true,
+                voices: POCKET_TTS_VOICES,
+                defaultVoice: POCKET_TTS_DEFAULT_VOICE,
+                // A reference-wav path is a legal voice here, so names are not a
+                // closed set.
+                customVoicesAllowed: true,
+                // ~4x realtime on CPU. Long inputs work but drift in prosody, and
+                // it is $0 per call, so chunk small and stitch — same reasoning as
+                // Voicebox.
+                maxCharsPerCall: 400,
             },
             mid: NA,
             pro: NA,
@@ -340,6 +368,7 @@ export function createImageProvider(id, config) {
             return new LocalProvider({ baseUrl: config.localBaseUrl });
         case "elevenlabs":
         case "voicebox":
+        case "pocket-tts":
         case "replicate":
             throw new Error(`${id} image provider is declared in the registry but not yet implemented`);
     }
@@ -356,6 +385,8 @@ export function createTtsProvider(id, config) {
             return new LocalProvider({ baseUrl: config.localBaseUrl });
         case "voicebox":
             return new VoiceboxProvider({ baseUrl: config.voiceboxBaseUrl });
+        case "pocket-tts":
+            return new PocketTtsProvider({ baseUrl: config.pocketTtsBaseUrl });
         case "openrouter":
             throw new Error("openrouter does not support TTS");
         case "replicate":
@@ -372,6 +403,7 @@ export function createVideoProvider(id, config) {
         case "elevenlabs":
         case "local":
         case "voicebox":
+        case "pocket-tts":
             throw new StructuredError("VALIDATION_ERROR", `${id} does not support video generation`, "Use --provider replicate for video (grok-imagine-video-1.5).");
     }
 }
@@ -567,6 +599,7 @@ export function createAvatarProvider(id, config) {
         case "elevenlabs":
         case "local":
         case "voicebox":
+        case "pocket-tts":
             throw new StructuredError("VALIDATION_ERROR", `${id} does not support talking-avatar generation`, "Use --provider replicate for talking avatars (veed/fabric-1.0).");
     }
 }

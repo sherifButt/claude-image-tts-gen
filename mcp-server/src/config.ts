@@ -39,6 +39,13 @@ export interface Config {
   localDefaultVoice: string | undefined;
   /** Voicebox profile_id to use when no --voice is passed. */
   voiceboxDefaultVoice: string | undefined;
+  /** pocket-tts server base URL (default http://localhost:8000 — `pocket-tts serve`). */
+  pocketTtsBaseUrl: string;
+  /** Whether pocket-tts is opted into the TTS chain. Explicit env wins; otherwise auto-detected. */
+  pocketTtsEnabled: boolean;
+  pocketTtsAutoProbe: boolean;
+  /** Built-in voice name, or a path to a reference .wav to clone. */
+  pocketTtsDefaultVoice: string | undefined;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -90,6 +97,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     elevenlabsDefaultVoice: env.ELEVENLABS_DEFAULT_VOICE?.trim() || undefined,
     localDefaultVoice: env.LOCAL_DEFAULT_VOICE?.trim() || undefined,
     voiceboxDefaultVoice: env.VOICEBOX_DEFAULT_VOICE?.trim() || undefined,
+    pocketTtsBaseUrl: env.POCKET_TTS_BASE_URL ?? env.POCKET_TTS_URL ?? "http://localhost:8000",
+    pocketTtsEnabled: ["true", "1", "yes", "on"].includes(
+      (env.POCKET_TTS_ENABLED ?? "").toLowerCase(),
+    ),
+    pocketTtsAutoProbe: env.POCKET_TTS_ENABLED === undefined,
+    pocketTtsDefaultVoice: env.POCKET_TTS_DEFAULT_VOICE?.trim() || undefined,
   };
 }
 
