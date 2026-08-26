@@ -62,7 +62,11 @@ export async function generateAvatar(args, config, opts = {}) {
     const durationSeconds = Math.round(duration * 10) / 10;
     const resolved = resolveAvatarSlot(requestedTier);
     const tier = resolved.tier;
-    const slot = args.model
+    // Same reasoning as generate-video: an explicit model equal to the tier's
+    // model must keep the tier params, or the price key loses resolution/draft
+    // and the call books at $0. regenerate always passes meta.model, so this hit
+    // every avatar re-roll.
+    const slot = args.model && args.model !== resolved.model
         ? { ...resolved, model: args.model, params: {} }
         : resolved;
     const modelId = slot.model;

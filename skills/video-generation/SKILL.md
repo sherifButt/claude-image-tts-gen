@@ -1,5 +1,5 @@
 ---
-description: Generate short videos from a still image (image-to-video) for product demos, hero loops, social clips, and animated mockups. Triggers when the user asks to "animate this image", "make a video of X", "turn this frame into a clip", "generate a video", "create a short motion loop", or wants an image brought to life with movement and sound.
+description: Generate short videos from a text prompt (text-to-video) or a still image (image-to-video) for product demos, hero loops, social clips, and animated mockups. Triggers when the user asks to "animate this image", "make a video of X", "turn this frame into a clip", "generate a video", "create a short motion loop", or wants an image brought to life with movement and sound.
 allowed-tools:
   - mcp__claude-image-tts-gen__generate_video
   - mcp__claude-image-tts-gen__generate_image
@@ -12,21 +12,22 @@ allowed-tools:
 
 # Video generation
 
-Use this skill when the user wants a short video clip. It runs xAI's
-**grok-imagine-video-1.5** on Replicate via the `generate_video` tool.
+Use this skill when the user wants a short video clip. It runs on Replicate
+via the `generate_video` tool, across two models: **Pruna p-video** on the
+cheap tiers and **xAI grok-imagine-video-1.5** on the expensive ones.
 Examples: "animate this hero image", "make a 6-second product loop from
-this render", "turn this frame into a clip with the camera panning left".
+this render", "a clip of rain on a window at night".
 
-## This is image-to-video only
+## Text-to-video or image-to-video
 
-Every generation **requires an input frame** (`imagePath`). There is no
-text-to-video path here. If the user only has a text idea:
+On `draft`/`low`/`normal` (p-video) an input frame is **optional** — omit
+`imagePath` and the clip is generated from the prompt alone. On `high`/`ultra`
+(grok) a frame is **required**; the tool refuses without one and says so.
 
-1. Generate a still first with `generate_image` (pick tier/aspect from intent).
-2. Feed that file's path into `generate_video` as `imagePath`.
-
-Tell the user you're doing this two-step so the cost is clear (they pay for
-the image *and* the video).
+Supply a frame when the opening image matters — a product shot, a brand asset,
+a face. Skip it when the clip is atmosphere or B-roll and you only care about
+the motion. Generating a still first with `generate_image` and feeding it in
+costs more (you pay for both), so say that out loud before doing it.
 
 ## Write the prompt as motion, not scene
 
@@ -75,13 +76,37 @@ take tens of seconds to a few minutes; that's normal, not a hang.
 
 ## Cost discipline
 
-- Always state the cost — video is the most expensive modality in this plugin.
+Billed **per second of output**, five tiers spanning 28x:
+
+| tier | model | output | $/sec | 5s clip | max | frame |
+| --- | --- | --- | --- | --- | --- | --- |
+| `draft` | p-video | 720p preview | **$0.005** | $0.03 | 20s | optional |
+| `low` | p-video | 720p | **$0.02** | $0.10 | 20s | optional |
+| `normal` *(default)* | p-video | 1080p | **$0.04** | $0.20 | 20s | optional |
+| `high` | grok | 480p | **$0.08** | $0.40 | 15s | required |
+| `ultra` | grok | 720p | **$0.14** | $0.70 | 15s | required |
+
+**Iterate on `draft`.** Motion prompts are hard to predict — at $0.005/sec you
+can try a dozen phrasings for the price of one `ultra` take, then move up once
+the movement is right.
+
+**Reach for grok (`high`/`ultra`) for motion quality, not resolution.** p-video
+at `normal` renders more pixels than grok at `ultra`; what grok buys you is
+richer, more coherent movement. If the user wants a bigger frame, `normal` is
+both cheaper and larger. Say which one you're optimising for.
+
+- Always state the cost before generating.
 - Cache hits (`cached: true`) cost $0 — identical prompt + image + params.
-- On `BUDGET_EXCEEDED`, offer to shorten `duration`, drop to `small` (480p),
-  or raise the cap with `set_budget`.
+- On `BUDGET_EXCEEDED`, offer to shorten `duration`, drop to `draft`, or raise
+  the cap with `set_budget`.
+- `aspectRatio` only applies to text-to-video. With a frame supplied, the frame
+  decides the shape and the ratio is ignored.
 
 ## Reproducibility
 
-Each output writes a `.regenerate.json` sidecar recording the input image,
-prompt, duration, and resolution. Use `iterate` to nudge the motion
-("add a slow zoom") or `regenerate` to reproduce the exact clip.
+Each output writes a `.regenerate.json` sidecar recording the prompt, duration,
+tier params, and the input image when there was one. A text-to-video run records
+no `imagePath`, so `regenerate` reproduces it as text-to-video. Use `iterate` to
+nudge the motion ("add a slow zoom") or `regenerate` to reproduce the exact clip.
+Sidecars written before v0.12.0 record `tier: small|mid`; those still resolve to
+grok 480p/720p, so old work regenerates at its original model and price.

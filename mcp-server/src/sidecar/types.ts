@@ -32,8 +32,8 @@ export interface SidecarSpeechInput {
 
 export interface SidecarVideoInput {
   prompt: string;
-  /** Path to the input frame animated into video (image-to-video). */
-  imagePath: string;
+  /** Path to the input frame. Absent on a text-to-video run (p-video tiers). */
+  imagePath?: string;
   /** Additional reference image paths passed alongside `imagePath`. */
   referenceImagePaths?: string[];
   /** Requested clip length in seconds. */

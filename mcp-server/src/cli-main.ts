@@ -33,7 +33,7 @@ import { sessionSpend } from "./tools/session-spend.js";
 import { setBudget } from "./tools/set-budget.js";
 import { variants } from "./tools/variants.js";
 import { asStructuredError } from "./util/errors.js";
-import type { AvatarTierInput, Modality, ProviderId, Tier } from "./providers/types.js";
+import type { AvatarTierInput, Modality, ProviderId, Tier, VideoTierInput } from "./providers/types.js";
 
 const VERSION = "0.10.0";
 
@@ -143,6 +143,12 @@ function isProvider(s: string | undefined): s is ProviderId {
 }
 function isTier(s: string | undefined): s is Tier {
   return s === "small" || s === "mid" || s === "pro";
+}
+function isVideoTier(s: string | undefined): s is VideoTierInput {
+  return (
+    s === "draft" || s === "low" || s === "normal" || s === "high" || s === "ultra" ||
+    s === "small" || s === "mid"
+  );
 }
 function isAvatarTier(s: string | undefined): s is AvatarTierInput {
   return (
@@ -529,8 +535,17 @@ async function main(): Promise<void> {
     if (values.provider !== undefined && !isProvider(values.provider)) {
       throw new Error(`Invalid --provider: ${values.provider}`);
     }
-    if (values.tier !== undefined && !isTier(values.tier)) {
-      throw new Error(`Invalid --tier: ${values.tier}`);
+    // This branch serves both --video and image generation, which no longer
+    // share a tier vocabulary: video runs the five-rung ladder, image the
+    // small/mid/pro one.
+    if (values.tier !== undefined) {
+      if (values.video ? !isVideoTier(values.tier) : !isTier(values.tier)) {
+        throw new Error(
+          values.video
+            ? `Invalid --tier for --video: ${values.tier} (use draft | low | normal | high | ultra)`
+            : `Invalid --tier: ${values.tier}`,
+        );
+      }
     }
 
     const captions = values.captions as
@@ -555,11 +570,13 @@ async function main(): Promise<void> {
       ? await generateVideo(
           {
             prompt: values.prompt,
-            imagePath: values.image ?? "",
+            // Undefined, not "" — an empty string would read as "a frame was
+            // given" and defeat the text-to-video path on the p-video tiers.
+            imagePath: values.image,
             referenceImagePaths: values.reference,
             duration: values.duration ? Number(values.duration) : undefined,
             provider: values.provider as ProviderId | undefined,
-            tier: values.tier as Tier | undefined,
+            tier: values.tier as VideoTierInput | undefined,
             model: values.model,
             aspectRatio: values["aspect-ratio"] as GenerateVideoArgs["aspectRatio"],
             outputPath: values.output,

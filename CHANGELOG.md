@@ -4,6 +4,60 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-08-26
+
+### Added
+
+- **`generate_video` gains the same five-tier ladder as `generate_avatar`**, by
+  adding `prunaai/p-video` alongside `xai/grok-imagine-video-1.5`. Same five
+  words in both tools on purpose — p-video on the cheap rungs, a specialist on
+  top (grok for motion, Fabric for lip-sync):
+
+  | tier | model | output | $/sec | max | input frame |
+  | --- | --- | --- | --- | --- | --- |
+  | `draft` | p-video | 720p, draft mode | 0.005 | 20s | optional |
+  | `low` | p-video | 720p | 0.02 | 20s | optional |
+  | `normal` **(default)** | p-video | 1080p | 0.04 | 20s | optional |
+  | `high` | grok | 480p | 0.08 | 15s | required |
+  | `ultra` | grok | 720p | 0.14 | 15s | required |
+
+- **Text-to-video.** grok is image-to-video only, so `imagePath` used to be
+  mandatory. On the p-video rungs it is now optional — omit it and the clip is
+  generated from the prompt alone. The response carries `textToVideo`, and the
+  sidecar omits `imagePath` so `regenerate` reproduces it as text-to-video.
+- `estimate_cost --modality video` ranks all five rungs with per-rung pricing.
+
+### Changed
+
+- **Default video tier is now `normal`** (p-video 1080p, $0.04/sec) — half the
+  price of the previous default (grok 480p) at a larger frame size. Note this
+  changes which *model* an un-tiered call uses.
+- Video slots moved out of the registry `TierTable` into a dedicated ladder; a
+  three-slot table cannot express two models with different length caps and
+  input requirements. `listAvailable("video")` reads the ladder, so
+  `estimate_cost` and `list_providers` still see every rung.
+- `AvailableSlot` now carries `params`, and the registry is the only place the
+  tier→params mapping lives.
+- `aspectRatio` documented as text-to-video only — both models ignore it when an
+  input frame is supplied.
+
+### Fixed
+
+- **Re-rolls booked at $0 while billing for real.** `regenerate` always passes
+  `model` from the sidecar, and the explicit-model path blanked the slot params.
+  That dropped `resolution`/`draft` from the price key, which fell through to
+  "unknown pricing" and recorded the call at $0. An explicit model naming the
+  same model the tier already resolves to now keeps the tier's params. Affected
+  `generate_avatar` since v0.10.0 and `generate_video` on this branch.
+- `estimate_cost` no longer re-derives tier→params from the tier name with its
+  own hardcoded map, which priced the wrong rung as soon as a ladder grew.
+
+### Notes
+
+- `small` / `mid` remain accepted as deprecated aliases for `high` / `ultra`, so
+  video sidecars written before this release regenerate to grok at their
+  original resolution and price.
+
 ## [0.11.0] - 2026-08-07
 
 ### Added

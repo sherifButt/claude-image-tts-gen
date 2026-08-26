@@ -18,7 +18,9 @@ export class ReplicateProvider {
     }
     async generateVideo(req) {
         const input = {
-            image: toDataUri(req.image.mimeType, req.image.data),
+            // Omitted entirely on a text-to-video run — p-video treats a missing
+            // `image` as "generate from the prompt", and sending null would 422.
+            ...(req.image ? { image: toDataUri(req.image.mimeType, req.image.data) } : {}),
             prompt: req.prompt,
             duration: req.durationSeconds,
             ...(req.aspectRatio ? { aspect_ratio: req.aspectRatio } : {}),

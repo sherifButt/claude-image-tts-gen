@@ -129,6 +129,10 @@ function isProvider(s) {
 function isTier(s) {
     return s === "small" || s === "mid" || s === "pro";
 }
+function isVideoTier(s) {
+    return (s === "draft" || s === "low" || s === "normal" || s === "high" || s === "ultra" ||
+        s === "small" || s === "mid");
+}
 function isAvatarTier(s) {
     return (s === "draft" || s === "low" || s === "normal" || s === "high" || s === "ultra" ||
         // deprecated aliases for high/ultra, kept so old scripts keep working
@@ -458,8 +462,15 @@ async function main() {
         if (values.provider !== undefined && !isProvider(values.provider)) {
             throw new Error(`Invalid --provider: ${values.provider}`);
         }
-        if (values.tier !== undefined && !isTier(values.tier)) {
-            throw new Error(`Invalid --tier: ${values.tier}`);
+        // This branch serves both --video and image generation, which no longer
+        // share a tier vocabulary: video runs the five-rung ladder, image the
+        // small/mid/pro one.
+        if (values.tier !== undefined) {
+            if (values.video ? !isVideoTier(values.tier) : !isTier(values.tier)) {
+                throw new Error(values.video
+                    ? `Invalid --tier for --video: ${values.tier} (use draft | low | normal | high | ultra)`
+                    : `Invalid --tier: ${values.tier}`);
+            }
         }
         const captions = values.captions;
         if (captions !== undefined &&
@@ -474,7 +485,9 @@ async function main() {
         const result = values.video
             ? await generateVideo({
                 prompt: values.prompt,
-                imagePath: values.image ?? "",
+                // Undefined, not "" — an empty string would read as "a frame was
+                // given" and defeat the text-to-video path on the p-video tiers.
+                imagePath: values.image,
                 referenceImagePaths: values.reference,
                 duration: values.duration ? Number(values.duration) : undefined,
                 provider: values.provider,

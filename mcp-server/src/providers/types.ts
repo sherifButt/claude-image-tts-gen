@@ -19,6 +19,17 @@ export type Tier = "small" | "mid" | "pro";
 export type AvatarTier = "draft" | "low" | "normal" | "high" | "ultra";
 export type AvatarTierInput = AvatarTier | "small" | "mid";
 
+/**
+ * Motion-video quality ladder. Same five words as `AvatarTier` on purpose —
+ * both tools share `prunaai/p-video` on draft/low/normal and switch to a
+ * specialist model on high/ultra (grok for motion, fabric for lip-sync), so
+ * the vocabulary is worth learning once. `small`/`mid` are deprecated aliases
+ * for `high`/`ultra` (grok 480p/720p), which is what pre-ladder video sidecars
+ * recorded.
+ */
+export type VideoTier = "draft" | "low" | "normal" | "high" | "ultra";
+export type VideoTierInput = VideoTier | "small" | "mid";
+
 const TIERS: readonly string[] = ["small", "mid", "pro"];
 
 /**
@@ -118,12 +129,31 @@ export interface TtsGenResult {
   alignment?: WordAlignment[];
 }
 
+const VIDEO_TIER_INPUTS: readonly string[] = [
+  "draft",
+  "low",
+  "normal",
+  "high",
+  "ultra",
+  "small",
+  "mid",
+];
+
+/** Narrow a sidecar/ledger tier to the video ladder. "pro" never appears on a
+ *  video sidecar; it falls back to grok 480p, the pre-ladder default. */
+export function asVideoTier(
+  tier: Tier | AvatarTier | VideoTier,
+  fallback: VideoTierInput = "high",
+): VideoTierInput {
+  return VIDEO_TIER_INPUTS.includes(tier) ? (tier as VideoTierInput) : fallback;
+}
+
 export interface VideoGenRequest {
   prompt: string;
   model: string;
-  /** Image-to-video input frame. grok-imagine-video-1.5 is image-to-video only:
-   *  every prediction needs an input image. */
-  image: ReferenceImage;
+  /** Input frame. Required by grok (image-to-video only); optional on
+   *  p-video, where omitting it means text-to-video from the prompt. */
+  image?: ReferenceImage;
   /** Additional reference images for composition (grok accepts up to 7 total,
    *  including `image`). Order matters. */
   referenceImages?: ReferenceImage[];

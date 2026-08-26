@@ -7,12 +7,17 @@ import { tryEstimateCost, unknownCostEstimate } from "../pricing/load.js";
 import type { CostEstimate } from "../pricing/types.js";
 import {
   createVideoProvider,
+  DEFAULT_VIDEO_TIER,
   getDefaultProvider,
-  getDefaultTier,
-  resolveSlot,
-  type ResolvedSlot,
+  resolveVideoSlot,
+  videoRate,
 } from "../providers/registry.js";
-import type { ProviderId, ReferenceImage, Tier } from "../providers/types.js";
+import type {
+  ProviderId,
+  ReferenceImage,
+  VideoTier,
+  VideoTierInput,
+} from "../providers/types.js";
 import { readLineageFromParent, writeSidecar } from "../sidecar/metadata.js";
 import { checkBudget, formatBudgetBlockError } from "../state/budget.js";
 import { appendCall } from "../state/store.js";
@@ -22,19 +27,22 @@ import { type AspectRatio } from "../util/aspect.js";
 import { mapProviderError, StructuredError } from "../util/errors.js";
 import { buildOutputPath, saveBinary } from "../util/output.js";
 
-/** grok-imagine-video-1.5 supports these ratios (no 21:9); omit for "auto". */
+/** Both models support these ratios (no 21:9); omit for "auto". Note that
+ *  p-video ignores the ratio whenever an input frame is supplied — the frame
+ *  decides — so it only bites on text-to-video. */
 const VIDEO_ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"] as const;
 const DEFAULT_DURATION_SECONDS = 5;
 const MIN_DURATION_SECONDS = 1;
-const MAX_DURATION_SECONDS = 15;
 
 export interface GenerateVideoArgs {
   prompt: string;
   provider?: ProviderId;
-  tier?: Tier;
+  tier?: VideoTierInput;
   model?: string;
-  /** Path to the input frame animated into video (image-to-video). Required. */
-  imagePath: string;
+  /** Path to the input frame animated into video. Required on high/ultra
+   *  (grok is image-to-video only); optional on draft/low/normal, where
+   *  omitting it gives text-to-video. */
+  imagePath?: string;
   /** Additional reference images passed alongside the primary frame. */
   referenceImagePaths?: string[];
   /** Clip length in seconds (1–15). Default 5. Drives per-second cost. */
@@ -53,9 +61,11 @@ export interface GenerateVideoOutput {
   files: string[];
   providerUsed: ProviderId;
   modelUsed: string;
-  tier: Tier;
+  tier: VideoTier;
   mimeType: string;
   durationSeconds: number;
+  /** True when no input frame was supplied (p-video text-to-video). */
+  textToVideo: boolean;
   cost: CostEstimate;
   sessionTotal: {
     today: PeriodTotal;
@@ -71,26 +81,6 @@ export interface GenerateVideoOpts {
   parentSidecar?: string;
 }
 
-function inlineSlot(provider: ProviderId, tier: Tier, model: string): ResolvedSlot {
-  try {
-    const registered = resolveSlot({ provider, modality: "video", tier });
-    if (registered.model === model) return registered;
-  } catch {
-    // (provider, video, tier) isn't registered — fall through to a bare slot.
-  }
-  return {
-    provider,
-    modality: "video",
-    tier,
-    model,
-    batchable: false,
-    params: {},
-    voices: [],
-    defaultVoice: undefined,
-    customVoicesAllowed: false,
-    maxCharsPerCall: undefined,
-  };
-}
 
 function mimeForImage(path: string): string {
   const ext = path.toLowerCase().split(".").pop() ?? "png";
@@ -107,20 +97,30 @@ export async function generateVideo(
   if (!args.prompt || args.prompt.trim().length === 0) {
     throw new StructuredError("VALIDATION_ERROR", "prompt is required", "Pass a non-empty motion prompt.");
   }
-  if (!args.imagePath) {
+  const requestedTier = args.tier ?? DEFAULT_VIDEO_TIER;
+  const resolved = resolveVideoSlot(requestedTier);
+  const tier = resolved.tier;
+
+  // grok cannot start from nothing; p-video can. Rather than a blanket
+  // requirement, point at the tiers that would accept the call as written.
+  if (!args.imagePath && resolved.requiresImage) {
     throw new StructuredError(
       "VALIDATION_ERROR",
-      "imagePath is required — grok-imagine-video-1.5 is image-to-video only",
-      "Pass an input frame via imagePath (CLI: --image). Generate one with generate_image first if you don't have one.",
+      `tier "${tier}" runs ${resolved.model}, which is image-to-video only — imagePath is required`,
+      "Either pass an input frame via imagePath (CLI: --image; generate one with generate_image), or use --tier draft/low/normal, which do text-to-video from the prompt alone.",
     );
   }
 
   const duration = args.duration ?? DEFAULT_DURATION_SECONDS;
-  if (!Number.isFinite(duration) || duration < MIN_DURATION_SECONDS || duration > MAX_DURATION_SECONDS) {
+  const maxDuration = resolved.maxDurationSeconds;
+  if (!Number.isFinite(duration) || duration < MIN_DURATION_SECONDS || duration > maxDuration) {
+    const longer = (["draft", "low", "normal"] as const).includes(tier as "draft")
+      ? ""
+      : ` Tiers draft/low/normal go up to 20s (and cost less per second).`;
     throw new StructuredError(
       "VALIDATION_ERROR",
-      `duration must be between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS} seconds (got ${duration})`,
-      `Pass a duration in [${MIN_DURATION_SECONDS}, ${MAX_DURATION_SECONDS}].`,
+      `duration must be between ${MIN_DURATION_SECONDS} and ${maxDuration} seconds on tier "${tier}" (got ${duration})`,
+      `Pass a duration in [${MIN_DURATION_SECONDS}, ${maxDuration}].${longer}`,
     );
   }
 
@@ -137,11 +137,11 @@ export async function generateVideo(
   const aspectRatio = args.aspectRatio;
 
   const requestedProvider = args.provider ?? getDefaultProvider("video");
-  const tier = args.tier ?? getDefaultTier();
   const explicitModel = args.model;
 
-  // Load the primary input frame + any extra references.
-  const refPaths = [args.imagePath, ...(args.referenceImagePaths ?? [])];
+  // Load the primary input frame + any extra references. On the p-video tiers
+  // there may be no frame at all — that is text-to-video, not an error.
+  const refPaths = [...(args.imagePath ? [args.imagePath] : []), ...(args.referenceImagePaths ?? [])];
   const referenceImages: ReferenceImage[] = [];
   for (const path of refPaths) {
     if (!existsSync(path)) {
@@ -155,9 +155,17 @@ export async function generateVideo(
   }
   const [primaryImage, ...extraImages] = referenceImages;
 
-  const slot: ResolvedSlot = explicitModel
-    ? inlineSlot(requestedProvider, tier, explicitModel)
-    : resolveSlot({ provider: requestedProvider, modality: "video", tier });
+  // An explicit --model that names the SAME model this tier already resolves to
+  // keeps the tier's params. Blanking them would drop resolution/draft from the
+  // price key, which resolves to "unknown pricing" and books the call at $0 —
+  // and `regenerate` always passes meta.model, so every re-roll would be free
+  // in the ledger while billing for real. A genuinely different model gets a
+  // bare slot, where unknown pricing is the honest answer.
+  const slot =
+    explicitModel && explicitModel !== resolved.model
+      ? { ...resolved, model: explicitModel, params: {} as Record<string, unknown> }
+      : resolved;
+  const textToVideo = primaryImage === undefined;
 
   const cacheKey = buildCacheKey({
     provider: requestedProvider,
@@ -168,7 +176,7 @@ export async function generateVideo(
       ...slot.params,
       duration,
       ...(aspectRatio ? { aspectRatio } : {}),
-      image: primaryImage.path ?? "buffer",
+      image: primaryImage?.path ?? "none",
       ...(extraImages.length > 0 ? { refs: extraImages.map((r) => r.path ?? "buffer") } : {}),
     },
   });
@@ -189,7 +197,7 @@ export async function generateVideo(
       throw new StructuredError(
         "BUDGET_EXCEEDED",
         formatBudgetBlockError(check.block),
-        `Raise the cap with set_budget --daily ${(check.block.cap * 2).toFixed(2)}, shorten --duration, drop to --tier small (480p), or wait for the period to reset.`,
+        `A ${duration}s clip at tier "${tier}" costs ~$${projectedCost.total.toFixed(2)}. Raise the cap with set_budget --daily ${(check.block.cap * 2).toFixed(2)}, shorten --duration, drop to --tier draft (~$${(duration * videoRate("draft")).toFixed(2)}), or wait for the period to reset.`,
       );
     }
     budgetWarning = check.warning;
@@ -277,7 +285,9 @@ export async function generateVideo(
       params: slot.params,
       input: {
         prompt: args.prompt,
-        imagePath: primaryImage.path ?? args.imagePath,
+        // Omitted on a text-to-video run so `regenerate` reproduces it as
+        // text-to-video rather than resurrecting a frame that was never used.
+        ...(primaryImage ? { imagePath: primaryImage.path ?? args.imagePath } : {}),
         ...(extraImages.length > 0
           ? { referenceImagePaths: extraImages.map((r) => r.path ?? "") }
           : {}),
@@ -299,6 +309,7 @@ export async function generateVideo(
     tier,
     mimeType,
     durationSeconds: duration,
+    textToVideo,
     cost: { ...cost, total: chargedCost },
     sessionTotal: {
       today: summary.totals.today,

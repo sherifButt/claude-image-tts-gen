@@ -7,7 +7,7 @@ import type {
   SidecarSpeechInput,
   SidecarVideoInput,
 } from "../sidecar/types.js";
-import { asTier } from "../providers/types.js";
+import { asTier, asVideoTier } from "../providers/types.js";
 import { StructuredError } from "../util/errors.js";
 import {
   generateImage,
@@ -111,7 +111,7 @@ export async function iterate(
         duration: input.durationSeconds,
         aspectRatio: input.aspectRatio,
         provider: meta.provider,
-        tier: asTier(meta.tier),
+        tier: asVideoTier(meta.tier),
         model: meta.model,
         outputPath: args.outputPath,
         outputDir: args.outputPath ? undefined : originalDir,

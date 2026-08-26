@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import type { Config } from "../config.js";
-import { asAvatarTier, asTier } from "../providers/types.js";
+import { asAvatarTier, asTier, asVideoTier } from "../providers/types.js";
 import { isSidecarPath, readSidecar, sidecarPathFor } from "../sidecar/metadata.js";
 import type {
   SidecarAvatarInput,
@@ -87,7 +87,7 @@ export async function regenerate(
         duration: input.durationSeconds,
         aspectRatio: input.aspectRatio,
         provider: meta.provider,
-        tier: asTier(meta.tier),
+        tier: asVideoTier(meta.tier),
         model: meta.model,
         outputPath: args.outputPath,
         outputDir: args.outputPath ? undefined : originalDir,

@@ -34,7 +34,7 @@ import { rewritePromptViaMcpSampling } from "./rewriter/sampling.js";
 import { formatBudgetWarning } from "./state/budget.js";
 import { readSession } from "./state/store.js";
 import { asStructuredError } from "./util/errors.js";
-const VERSION = "0.10.0";
+const VERSION = "0.12.0";
 const config = loadConfig();
 await applyAutoDetection(config);
 const server = new Server({ name: "claude-image-tts-gen", version: VERSION }, { capabilities: { tools: {}, resources: { listChanged: false } } });
@@ -207,7 +207,7 @@ const videoInputSchema = {
         prompt: { type: "string", description: "Motion / action directions for the clip (what should move and how)." },
         imagePath: {
             type: "string",
-            description: "Path to the input frame to animate. Required — grok-imagine-video-1.5 is image-to-video only. Generate one with generate_image first if you don't have a still.",
+            description: "Path to the input frame to animate. REQUIRED on tier high/ultra (grok is image-to-video only). OPTIONAL on draft/low/normal, where omitting it gives text-to-video straight from the prompt. Generate a still with generate_image if you want to control the opening frame.",
         },
         referenceImagePaths: {
             type: "array",
@@ -221,20 +221,27 @@ const videoInputSchema = {
         },
         tier: {
             type: "string",
-            enum: ["small", "mid"],
-            description: `Resolution tier: small = 480p ($0.08/s), mid = 720p ($0.14/s). Default: ${getDefaultTier()}.`,
+            enum: ["draft", "low", "normal", "high", "ultra"],
+            description: "Quality/cost ladder, cheapest first. Cost = duration x rate. " +
+                "draft = p-video 720p preview, $0.005/s. " +
+                "low = p-video 720p, $0.02/s. " +
+                "normal = p-video 1080p, $0.04/s (DEFAULT). " +
+                "high = grok 480p, $0.08/s. " +
+                "ultra = grok 720p, $0.14/s. " +
+                "draft/low/normal also do TEXT-TO-VIDEO (omit imagePath) and allow up to 20s; " +
+                "high/ultra run grok, which needs an input frame and caps at 15s but has richer motion.",
         },
         model: { type: "string", description: "Optional explicit model override." },
         duration: {
             type: "number",
             minimum: 1,
-            maximum: 15,
-            description: "Clip length in seconds (1–15). Default 5. Cost = duration × per-second rate.",
+            maximum: 20,
+            description: "Clip length in seconds. Default 5. Max 20 on draft/low/normal, 15 on high/ultra. Cost = duration x per-second rate.",
         },
         aspectRatio: {
             type: "string",
             enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
-            description: "Output aspect ratio. Omit for the model's auto. Note: 21:9 is not supported for video.",
+            description: "Output aspect ratio. Omit for the model's auto. 21:9 is not supported. Ignored whenever an input frame is supplied — the frame decides — so this only applies to text-to-video.",
         },
         outputPath: { type: "string", description: "Optional explicit output path (.mp4)." },
         outputDir: {
@@ -246,7 +253,7 @@ const videoInputSchema = {
             description: "Write a hidden .<name>.regenerate.json sidecar next to the output. Default true.",
         },
     },
-    required: ["prompt", "imagePath"],
+    required: ["prompt"],
 };
 const avatarInputSchema = {
     type: "object",
@@ -309,7 +316,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
         {
             name: "generate_video",
-            description: `Generate a video from an input image (image-to-video). Default ${getDefaultProvider("video")}/${getDefaultTier()} via grok-imagine-video-1.5. Output dir: ${config.videoOutputDir}. Requires REPLICATE_API_TOKEN. imagePath is mandatory; prompt sets the motion. Audio (sfx/ambience/speech) is synthesized in the same pass. Billed per second of output.`,
+            description: `Generate a short video. Text-to-video (prompt only) or image-to-video (pass imagePath). Default ${getDefaultProvider("video")}/normal. Output dir: ${config.videoOutputDir}. Requires REPLICATE_API_TOKEN. Five tiers spanning 28x in price, billed per second: draft $0.005 / low $0.02 / normal $0.04 (default) / high $0.08 / ultra $0.14. draft/low/normal run Pruna p-video (text-to-video capable, up to 20s); high/ultra run grok-imagine-video-1.5 (richer motion, needs an input frame, max 15s). Audio (sfx/ambience/speech) is synthesized in the same pass. Iterate on draft, deliver on normal or above.`,
             inputSchema: videoInputSchema,
         },
         {

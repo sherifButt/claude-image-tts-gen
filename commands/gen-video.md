@@ -1,6 +1,6 @@
 ---
-description: Generate a video from an input image (image-to-video via grok-imagine-video-1.5)
-argument-hint: [motion prompt] --image <frame.png> [--duration 1-15] [--tier small|mid]
+description: Generate a video from a prompt (text-to-video) or an input image (image-to-video)
+argument-hint: [motion prompt] [--image frame.png] [--duration 1-20] [--tier draft|low|normal|high|ultra]
 allowed-tools:
   - mcp__claude-image-tts-gen__generate_video
   - mcp__claude-image-tts-gen__generate_image
@@ -12,11 +12,13 @@ allowed-tools:
 
 Generate a video based on the user's request: $ARGUMENTS
 
-Use the `generate_video` MCP tool (provider `replicate`, model grok-imagine-video-1.5).
+Use the `generate_video` MCP tool (provider `replicate`; model depends on tier —
+`prunaai/p-video` on draft/low/normal, `xai/grok-imagine-video-1.5` on high/ultra).
 
-**This is image-to-video only** — every generation needs an input frame (`imagePath`).
-If the user hasn't supplied a still image, generate one first with `generate_image`,
-then feed its path into `generate_video`. The `prompt` should describe the **motion**
+**Text-to-video or image-to-video.** On draft/low/normal the input frame is optional —
+omit `imagePath` and the clip comes from the prompt alone. On high/ultra a frame is
+required. Tiers, all billed per second: `draft` $0.005 · `low` $0.02 · `normal` $0.04
+(default) · `high` $0.08 · `ultra` $0.14. Max duration 20s on p-video, 15s on grok. The `prompt` should describe the **motion**
 (how the subject and camera move, pacing, ambient sound) — the frame already sets the scene.
 
 Pick the tier from intent — it maps to resolution:

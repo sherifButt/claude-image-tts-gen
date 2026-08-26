@@ -30,6 +30,8 @@ import type {
   AvatarProvider,
   AvatarTier,
   AvatarTierInput,
+  VideoTier,
+  VideoTierInput,
   ImageProvider,
   Modality,
   ProviderId,
@@ -252,27 +254,14 @@ const MATRIX: ProviderEntry[] = [
   },
   {
     id: "replicate",
-    // Replicate is video-only in this plugin. grok-imagine-video-1.5 is a
-    // single image-to-video model; the tier axis maps to output resolution
-    // (small = 480p @ $0.08/s, mid = 720p @ $0.14/s). Duration (1–15s) is a
-    // per-call param and drives cost. No `pro` slot — 720p is the ceiling.
+    // Replicate is video-only in this plugin. Its video slots live in
+    // VIDEO_TIERS below rather than here — the ladder spans two models with
+    // different length caps and input requirements, which a three-slot
+    // TierTable can't express. `listAvailable("video")` reads that table, so
+    // estimate_cost / list_providers still see every rung.
     image: NA_TABLE,
     tts: NA_TABLE,
-    video: {
-      small: {
-        model: "xai/grok-imagine-video-1.5",
-        batchable: false,
-        implemented: true,
-        params: { resolution: "480p" },
-      },
-      mid: {
-        model: "xai/grok-imagine-video-1.5",
-        batchable: false,
-        implemented: true,
-        params: { resolution: "720p" },
-      },
-      pro: NA,
-    },
+    video: NA_TABLE,
   },
 ];
 
@@ -374,8 +363,12 @@ export function resolveSlot(opts: {
 
 export interface AvailableSlot {
   provider: ProviderId;
-  tier: Tier;
+  /** Image/tts use the shared Tier; video uses its own five-rung ladder. */
+  tier: Tier | VideoTier;
   model: string;
+  /** The slot's pricing-relevant params (quality, resolution, draft, ...).
+   *  Callers must use these rather than re-deriving them from the tier. */
+  params: Record<string, unknown>;
   batchable: boolean;
   voices: readonly string[];
   defaultVoice: string | undefined;
@@ -383,6 +376,27 @@ export interface AvailableSlot {
 }
 
 export function listAvailable(modality: Modality): AvailableSlot[] {
+  // Video lives in its own ladder, not the three-slot TierTable. Reading it
+  // here keeps estimate_cost / list_providers seeing every rung, and hands
+  // back the real params so callers never re-derive them (estimate_cost used
+  // to hardcode its own tier→resolution map, which drifted the moment the
+  // ladder grew).
+  if (modality === "video") {
+    return (["draft", "low", "normal", "high", "ultra"] as const).map((tier) => {
+      const slot = resolveVideoSlot(tier);
+      return {
+        provider: slot.provider,
+        tier,
+        model: slot.model,
+        params: slot.params,
+        batchable: false,
+        voices: [],
+        defaultVoice: undefined,
+        customVoicesAllowed: false,
+      };
+    });
+  }
+
   const out: AvailableSlot[] = [];
   for (const entry of MATRIX) {
     for (const tier of ["small", "mid", "pro"] as const) {
@@ -392,6 +406,7 @@ export function listAvailable(modality: Modality): AvailableSlot[] {
           provider: entry.id,
           tier,
           model: slot.model,
+          params: slot.params ?? {},
           batchable: slot.batchable,
           voices: slot.voices ?? [],
           defaultVoice: slot.defaultVoice,
@@ -404,6 +419,10 @@ export function listAvailable(modality: Modality): AvailableSlot[] {
 }
 
 export function listDeclared(modality: Modality): Array<AvailableSlot & { implemented: boolean }> {
+  // Video's rungs live in VIDEO_TIERS, and every one of them is implemented.
+  if (modality === "video") {
+    return listAvailable("video").map((s) => ({ ...s, implemented: true }));
+  }
   const out: Array<AvailableSlot & { implemented: boolean }> = [];
   for (const entry of MATRIX) {
     for (const tier of ["small", "mid", "pro"] as const) {
@@ -413,6 +432,7 @@ export function listDeclared(modality: Modality): Array<AvailableSlot & { implem
           provider: entry.id,
           tier,
           model: slot.model,
+          params: slot.params ?? {},
           batchable: slot.batchable,
           voices: slot.voices ?? [],
           defaultVoice: slot.defaultVoice,
@@ -484,6 +504,125 @@ export function createVideoProvider(id: ProviderId, config: Config): VideoProvid
 // video TierTable (which is prompt-driven). The generate_avatar tool selects it
 // here so the model id stays in the registry, not the tool. Tier maps to output
 // resolution; the output length equals the input audio's duration.
+interface VideoSlotDef {
+  model: string;
+  /** Literal replicate prediction input for this rung (minus image/prompt/duration). */
+  params: Record<string, unknown>;
+  /** Longest clip this model will produce. */
+  maxDurationSeconds: number;
+  /** grok is image-to-video only; p-video also does text-to-video. */
+  requiresImage: boolean;
+}
+
+/**
+ * Motion-video ladder — `generate_video`. Deliberately the same five rungs as
+ * AVATAR_TIERS: p-video on draft/low/normal, a specialist on high/ultra. Here
+ * the specialist is `xai/grok-imagine-video-1.5`, whose motion is richer than
+ * p-video's but which costs 2–7x more and cannot work without an input frame.
+ *
+ * p-video params match the avatar ladder's, for the same reasons (see
+ * AVATAR_TIERS): fps 48, no server-side prompt rewriting, safety filter on.
+ */
+const VIDEO_TIERS: Record<VideoTier, VideoSlotDef> = {
+  draft: {
+    model: "prunaai/p-video",
+    params: {
+      resolution: "720p",
+      fps: 48,
+      draft: true,
+      prompt_upsampling: false,
+      disable_safety_filter: false,
+    },
+    maxDurationSeconds: 20,
+    requiresImage: false,
+  },
+  low: {
+    model: "prunaai/p-video",
+    params: {
+      resolution: "720p",
+      fps: 48,
+      draft: false,
+      prompt_upsampling: false,
+      disable_safety_filter: false,
+    },
+    maxDurationSeconds: 20,
+    requiresImage: false,
+  },
+  normal: {
+    model: "prunaai/p-video",
+    params: {
+      resolution: "1080p",
+      fps: 48,
+      draft: false,
+      prompt_upsampling: false,
+      disable_safety_filter: false,
+    },
+    maxDurationSeconds: 20,
+    requiresImage: false,
+  },
+  high: {
+    model: "xai/grok-imagine-video-1.5",
+    params: { resolution: "480p" },
+    maxDurationSeconds: 15,
+    requiresImage: true,
+  },
+  ultra: {
+    model: "xai/grok-imagine-video-1.5",
+    params: { resolution: "720p" },
+    maxDurationSeconds: 15,
+    requiresImage: true,
+  },
+};
+
+const VIDEO_RATES: Record<VideoTier, number> = {
+  draft: 0.005,
+  low: 0.02,
+  normal: 0.04,
+  high: 0.08,
+  ultra: 0.14,
+};
+
+export const DEFAULT_VIDEO_TIER: VideoTier = "normal";
+
+const LEGACY_VIDEO_TIERS: Record<string, VideoTier> = { small: "high", mid: "ultra" };
+
+export function normalizeVideoTier(tier: VideoTierInput): VideoTier {
+  return LEGACY_VIDEO_TIERS[tier] ?? (tier as VideoTier);
+}
+
+export function videoRate(tier: VideoTier): number {
+  return VIDEO_RATES[tier];
+}
+
+export interface ResolvedVideoSlot {
+  provider: ProviderId;
+  model: string;
+  tier: VideoTier;
+  params: Record<string, unknown>;
+  maxDurationSeconds: number;
+  requiresImage: boolean;
+}
+
+export function resolveVideoSlot(tier: VideoTierInput): ResolvedVideoSlot {
+  const resolved = normalizeVideoTier(tier);
+  const slot = VIDEO_TIERS[resolved];
+  if (!slot) {
+    throw new StructuredError(
+      "VALIDATION_ERROR",
+      `unknown video tier "${tier}"`,
+      "Use draft ($0.005/s), low ($0.02/s), normal ($0.04/s), high ($0.08/s) or ultra ($0.14/s). draft/low/normal also do text-to-video; high/ultra need an input frame.",
+    );
+  }
+  return {
+    provider: "replicate",
+    model: slot.model,
+    tier: resolved,
+    params: { ...slot.params },
+    maxDurationSeconds: slot.maxDurationSeconds,
+    requiresImage: slot.requiresImage,
+  };
+}
+
 interface AvatarSlotDef {
   model: string;
   /** Literal replicate prediction input for this rung (minus image/audio/prompt). */

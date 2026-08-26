@@ -196,27 +196,14 @@ const MATRIX = [
     },
     {
         id: "replicate",
-        // Replicate is video-only in this plugin. grok-imagine-video-1.5 is a
-        // single image-to-video model; the tier axis maps to output resolution
-        // (small = 480p @ $0.08/s, mid = 720p @ $0.14/s). Duration (1–15s) is a
-        // per-call param and drives cost. No `pro` slot — 720p is the ceiling.
+        // Replicate is video-only in this plugin. Its video slots live in
+        // VIDEO_TIERS below rather than here — the ladder spans two models with
+        // different length caps and input requirements, which a three-slot
+        // TierTable can't express. `listAvailable("video")` reads that table, so
+        // estimate_cost / list_providers still see every rung.
         image: NA_TABLE,
         tts: NA_TABLE,
-        video: {
-            small: {
-                model: "xai/grok-imagine-video-1.5",
-                batchable: false,
-                implemented: true,
-                params: { resolution: "480p" },
-            },
-            mid: {
-                model: "xai/grok-imagine-video-1.5",
-                batchable: false,
-                implemented: true,
-                params: { resolution: "720p" },
-            },
-            pro: NA,
-        },
+        video: NA_TABLE,
     },
 ];
 const DEFAULT_PROVIDER = {
@@ -275,6 +262,26 @@ export function resolveSlot(opts) {
     };
 }
 export function listAvailable(modality) {
+    // Video lives in its own ladder, not the three-slot TierTable. Reading it
+    // here keeps estimate_cost / list_providers seeing every rung, and hands
+    // back the real params so callers never re-derive them (estimate_cost used
+    // to hardcode its own tier→resolution map, which drifted the moment the
+    // ladder grew).
+    if (modality === "video") {
+        return ["draft", "low", "normal", "high", "ultra"].map((tier) => {
+            const slot = resolveVideoSlot(tier);
+            return {
+                provider: slot.provider,
+                tier,
+                model: slot.model,
+                params: slot.params,
+                batchable: false,
+                voices: [],
+                defaultVoice: undefined,
+                customVoicesAllowed: false,
+            };
+        });
+    }
     const out = [];
     for (const entry of MATRIX) {
         for (const tier of ["small", "mid", "pro"]) {
@@ -284,6 +291,7 @@ export function listAvailable(modality) {
                     provider: entry.id,
                     tier,
                     model: slot.model,
+                    params: slot.params ?? {},
                     batchable: slot.batchable,
                     voices: slot.voices ?? [],
                     defaultVoice: slot.defaultVoice,
@@ -295,6 +303,10 @@ export function listAvailable(modality) {
     return out;
 }
 export function listDeclared(modality) {
+    // Video's rungs live in VIDEO_TIERS, and every one of them is implemented.
+    if (modality === "video") {
+        return listAvailable("video").map((s) => ({ ...s, implemented: true }));
+    }
     const out = [];
     for (const entry of MATRIX) {
         for (const tier of ["small", "mid", "pro"]) {
@@ -304,6 +316,7 @@ export function listDeclared(modality) {
                     provider: entry.id,
                     tier,
                     model: slot.model,
+                    params: slot.params ?? {},
                     batchable: slot.batchable,
                     voices: slot.voices ?? [],
                     defaultVoice: slot.defaultVoice,
@@ -361,6 +374,95 @@ export function createVideoProvider(id, config) {
         case "voicebox":
             throw new StructuredError("VALIDATION_ERROR", `${id} does not support video generation`, "Use --provider replicate for video (grok-imagine-video-1.5).");
     }
+}
+/**
+ * Motion-video ladder — `generate_video`. Deliberately the same five rungs as
+ * AVATAR_TIERS: p-video on draft/low/normal, a specialist on high/ultra. Here
+ * the specialist is `xai/grok-imagine-video-1.5`, whose motion is richer than
+ * p-video's but which costs 2–7x more and cannot work without an input frame.
+ *
+ * p-video params match the avatar ladder's, for the same reasons (see
+ * AVATAR_TIERS): fps 48, no server-side prompt rewriting, safety filter on.
+ */
+const VIDEO_TIERS = {
+    draft: {
+        model: "prunaai/p-video",
+        params: {
+            resolution: "720p",
+            fps: 48,
+            draft: true,
+            prompt_upsampling: false,
+            disable_safety_filter: false,
+        },
+        maxDurationSeconds: 20,
+        requiresImage: false,
+    },
+    low: {
+        model: "prunaai/p-video",
+        params: {
+            resolution: "720p",
+            fps: 48,
+            draft: false,
+            prompt_upsampling: false,
+            disable_safety_filter: false,
+        },
+        maxDurationSeconds: 20,
+        requiresImage: false,
+    },
+    normal: {
+        model: "prunaai/p-video",
+        params: {
+            resolution: "1080p",
+            fps: 48,
+            draft: false,
+            prompt_upsampling: false,
+            disable_safety_filter: false,
+        },
+        maxDurationSeconds: 20,
+        requiresImage: false,
+    },
+    high: {
+        model: "xai/grok-imagine-video-1.5",
+        params: { resolution: "480p" },
+        maxDurationSeconds: 15,
+        requiresImage: true,
+    },
+    ultra: {
+        model: "xai/grok-imagine-video-1.5",
+        params: { resolution: "720p" },
+        maxDurationSeconds: 15,
+        requiresImage: true,
+    },
+};
+const VIDEO_RATES = {
+    draft: 0.005,
+    low: 0.02,
+    normal: 0.04,
+    high: 0.08,
+    ultra: 0.14,
+};
+export const DEFAULT_VIDEO_TIER = "normal";
+const LEGACY_VIDEO_TIERS = { small: "high", mid: "ultra" };
+export function normalizeVideoTier(tier) {
+    return LEGACY_VIDEO_TIERS[tier] ?? tier;
+}
+export function videoRate(tier) {
+    return VIDEO_RATES[tier];
+}
+export function resolveVideoSlot(tier) {
+    const resolved = normalizeVideoTier(tier);
+    const slot = VIDEO_TIERS[resolved];
+    if (!slot) {
+        throw new StructuredError("VALIDATION_ERROR", `unknown video tier "${tier}"`, "Use draft ($0.005/s), low ($0.02/s), normal ($0.04/s), high ($0.08/s) or ultra ($0.14/s). draft/low/normal also do text-to-video; high/ultra need an input frame.");
+    }
+    return {
+        provider: "replicate",
+        model: slot.model,
+        tier: resolved,
+        params: { ...slot.params },
+        maxDurationSeconds: slot.maxDurationSeconds,
+        requiresImage: slot.requiresImage,
+    };
 }
 /**
  * Talking-avatar (lip-sync) ladder — image + audio → video. Two models:

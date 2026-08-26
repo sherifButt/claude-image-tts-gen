@@ -22,18 +22,10 @@ export function estimateCostDryRun(args) {
     const rows = [];
     let currency = "USD";
     for (const slot of slots) {
-        const params = {};
-        // For OpenAI image quality, the slot model is the same but quality varies by tier — re-derive from registry params.
-        // listAvailable doesn't return params; use estimateCost with proper params via tier mapping done in registry.
-        // Workaround: query pricing using the model key directly — for tier:'mid' on openai, modelKey = openai/gpt-image-1:medium.
-        // We pass empty params here; the tier discrimination is encoded in slot.model + the param-by-tier mapping below.
-        if (slot.provider === "openai" && args.modality === "image") {
-            params.quality = slot.tier === "small" ? "low" : slot.tier === "mid" ? "medium" : "high";
-        }
-        // Replicate video price varies by resolution, which the registry maps to tier.
-        if (slot.provider === "replicate" && args.modality === "video") {
-            params.resolution = slot.tier === "small" ? "480p" : "720p";
-        }
+        // The registry owns the tier→params mapping and hands it back on the slot.
+        // This used to be re-derived here from the tier name, which silently priced
+        // the wrong rung the moment a ladder gained a model or a resolution.
+        const params = slot.params;
         const standard = estimateCost({ provider: slot.provider, model: slot.model, modality: args.modality, params }, units);
         currency = standard.currency;
         let batchTotal = null;
