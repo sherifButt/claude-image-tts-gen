@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>genkettle — the ledger for image, TTS &amp; video in Claude Code.</title>
-<meta name="description" content="A cost-aware MCP plugin. Seven providers, one tier knob, one ledger, hard pre-call budget caps, $0/call local escape hatch. Image, TTS, and image-to-video. MIT licensed." />
-<meta property="og:title" content="genkettle — the ledger for image, TTS &amp; video in Claude Code." />
-<meta property="og:description" content="Seven providers behind one tier knob. One ledger. Zero lock-in." />
+<title>genkettle — the ledger for image, TTS, video &amp; avatars in Claude Code.</title>
+<meta name="description" content="A cost-aware MCP plugin. Eight providers, one tier knob, one ledger, hard pre-call budget caps, two $0/call local engines. Images, speech, video, text-to-video, and talking avatars from $0.005/sec. MIT licensed." />
+<meta property="og:title" content="genkettle — the ledger for image, TTS, video &amp; avatars in Claude Code." />
+<meta property="og:description" content="Eight providers behind one tier knob. One ledger. Zero lock-in." />
 <link rel="icon" href="assets/genkettle-mark.svg" type="image/svg+xml" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -362,7 +362,7 @@
   }
 
   /* ============== TIER MATRIX (section 01) ==============
-     The defining signature for v3. Seven providers × three tiers, rendered
+     The defining signature for v3. Eight providers × three tiers, rendered
      as a dense grid. Each cell shows the model that fulfills that slot,
      with mono labels. Empty cells are honest dashes — never a fake "yes."
   */
@@ -920,11 +920,12 @@
       <a href="#top" aria-label="genkettle home" style="display: inline-flex; align-items: center;">
         <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
       </a>
-      <a href="changelog.html#v0-8-7" class="vchip" aria-label="view v0.8.7 changelog entry">v0.8.7</a>
+      <a href="changelog.html#v0-13-0" class="vchip" aria-label="view v0.13.0 changelog entry">v0.13.0</a>
     </span>
     <span class="nav-status"><span class="pip"></span>budget · $5/day · 0% used</span>
     <div class="nav-links">
       <a href="#tiers">tiers</a>
+      <a href="#ladder">ladder</a>
       <a href="#ledger">ledger</a>
       <a href="#spec">spec</a>
       <a href="#install">install</a>
@@ -946,7 +947,7 @@
   <div class="wrap">
     <div class="hero-id">
       <span class="bar"></span>
-      <span>MCP plugin · Claude Code · v0.8.7</span>
+      <span>MCP plugin · Claude Code · v0.13.0</span>
       <span class="bar"></span>
     </div>
 
@@ -958,10 +959,12 @@
     </h1>
 
     <p class="lede">
-      Seven providers behind one tier knob. <strong>One ledger.</strong>
-      <strong>One budget cap.</strong> Hard-enforced before the call,
-      sidecar-tracked after, with a <strong>$0/call local escape hatch</strong>
-      that just works. Generate without the bill being a surprise.
+      Eight providers behind one tier knob — images, speech, video, and
+      talking avatars. <strong>One ledger.</strong> <strong>One budget
+      cap.</strong> Hard-enforced before the call, sidecar-tracked after,
+      with <strong>two independent $0/call local engines</strong> so the
+      free tier isn't a single point of failure. Generate without the bill
+      being a surprise.
     </p>
 
     <div class="cta-row">
@@ -977,11 +980,15 @@
     <div class="hero-foot">
       <div>
         <span class="k">providers</span>
-        <span class="v">6</span>
+        <span class="v">8</span>
       </div>
       <div>
         <span class="k">default cap</span>
         <span class="v amber">$5 / day</span>
+      </div>
+      <div>
+        <span class="k">video floor</span>
+        <span class="v">$0.005 / sec</span>
       </div>
       <div>
         <span class="k">local cost</span>
@@ -1037,11 +1044,11 @@
             <td class="cell">all · 50%</td>
           </tr>
           <tr>
-            <td class="prov">OpenAI<span class="sub">gpt-image-1 ×3</span></td>
+            <td class="prov">OpenAI<span class="sub">gpt-image-2 · to 4K</span></td>
             <td class="modality">image</td>
-            <td class="cell">low<span class="price">$0.011</span></td>
-            <td class="cell">medium<span class="price">$0.042</span></td>
-            <td class="cell">high<span class="price">$0.167</span></td>
+            <td class="cell">low<span class="price">$0.006</span></td>
+            <td class="cell">medium<span class="price">$0.053</span></td>
+            <td class="cell">high<span class="price">$0.211</span></td>
             <td class="cell">yes · 50%</td>
           </tr>
           <tr>
@@ -1079,13 +1086,11 @@
             <td class="cell empty">—</td>
           </tr>
 
-          <tr class="section-row"><td colspan="6">cloud · video</td></tr>
+          <tr class="section-row"><td colspan="6">cloud · video &amp; avatars — own ladder, see § 02</td></tr>
           <tr>
-            <td class="prov">Replicate<span class="sub">grok-imagine-video · per sec</span></td>
+            <td class="prov">Replicate<span class="sub">3 models · per sec</span></td>
             <td class="modality">video</td>
-            <td class="cell">480p<span class="price">$0.08/s</span></td>
-            <td class="cell">720p<span class="price">$0.14/s</span></td>
-            <td class="cell empty">—</td>
+            <td class="cell" colspan="3">draft · low · normal · high · ultra<span class="price">$0.005 — $0.15 / sec</span></td>
             <td class="cell empty">—</td>
           </tr>
 
@@ -1106,8 +1111,126 @@
             <td class="cell">chatterbox · xtts<span class="price zero">$0.0000</span></td>
             <td class="cell empty">—</td>
           </tr>
+          <tr>
+            <td class="prov">pocket-tts<span class="sub">kyutai · 26 voices · cloning</span></td>
+            <td class="modality">tts</td>
+            <td class="cell">pocket-tts<span class="price zero">$0.0000</span></td>
+            <td class="cell empty">—</td>
+            <td class="cell empty">—</td>
+            <td class="cell empty">—</td>
+          </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</section>
+
+<hr class="rule" />
+
+<!-- ============== LADDER ============== -->
+<section id="ladder">
+  <div class="wrap">
+    <div class="manifest">
+      <span class="id">§ 02</span>
+      <span class="name">the ladder · video &amp; avatars · per second</span>
+      <span class="meta">same five rungs · both tools</span>
+    </div>
+
+    <div class="section-head">
+      <h2 class="section-title">Five rungs, <em>28&times; apart.</em> <span class="accent">Iterate on the cheap one.</span></h2>
+      <p class="section-lede">
+        Motion prompts and lip-sync are hard to predict, so the bottom rung
+        exists to be thrown away. At <strong>half a cent a second</strong> you
+        can try twenty framings for the price of one finished take, then move
+        up once the movement is right. Video and talking avatars use the
+        <em>same five words</em> — one vocabulary, learned once.
+      </p>
+    </div>
+
+    <div class="matrix-wrap">
+      <table class="matrix" aria-label="video and avatar tier ladder">
+        <thead>
+          <tr>
+            <th>tier</th>
+            <th>generate_video</th>
+            <th>$/sec</th>
+            <th>generate_avatar</th>
+            <th>$/sec</th>
+            <th>ceiling</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="section-row"><td colspan="6">cheap rungs · prunaai/p-video · one engine, both tools</td></tr>
+          <tr>
+            <td class="prov">draft<span class="sub">preview · throwaway</span></td>
+            <td class="cell">720p<span class="price">draft mode</span></td>
+            <td class="cell"><span class="price">$0.005</span></td>
+            <td class="cell">720p<span class="price">draft mode</span></td>
+            <td class="cell"><span class="price">$0.005</span></td>
+            <td class="cell">20s</td>
+          </tr>
+          <tr>
+            <td class="prov">low</td>
+            <td class="cell">720p</td>
+            <td class="cell"><span class="price">$0.02</span></td>
+            <td class="cell">720p</td>
+            <td class="cell"><span class="price">$0.02</span></td>
+            <td class="cell">20s</td>
+          </tr>
+          <tr>
+            <td class="prov">normal<span class="sub">default</span></td>
+            <td class="cell">1080p</td>
+            <td class="cell"><span class="price">$0.04</span></td>
+            <td class="cell">1080p</td>
+            <td class="cell"><span class="price">$0.04</span></td>
+            <td class="cell">20s</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="6">specialist rungs · purpose-built, no length cap</td></tr>
+          <tr>
+            <td class="prov">high</td>
+            <td class="cell">grok 480p<span class="sub">richer motion</span></td>
+            <td class="cell"><span class="price">$0.08</span></td>
+            <td class="cell">fabric 480p<span class="sub">better sync</span></td>
+            <td class="cell"><span class="price">$0.08</span></td>
+            <td class="cell">15s / audio</td>
+          </tr>
+          <tr>
+            <td class="prov">ultra</td>
+            <td class="cell">grok 720p</td>
+            <td class="cell"><span class="price">$0.14</span></td>
+            <td class="cell">fabric 720p</td>
+            <td class="cell"><span class="price">$0.15</span></td>
+            <td class="cell">15s / audio</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="spec" style="margin-top: 2.5rem;">
+      <article class="spec-row">
+        <span class="num">01</span>
+        <div>
+          <h3>The ladder is quality, <em>not pixels.</em></h3>
+          <p>Measured on a square input, <code>normal</code> renders 1408&times;1408 while <code>ultra</code> renders 960&times;960. The specialist rungs cost more for <strong>motion coherence and lip-sync fidelity</strong>, not frame size. If you want a bigger picture, <code>normal</code> is both cheaper and larger — the docs say so out loud, because the names imply the opposite.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">02</span>
+        <div>
+          <h3>Text-to-video, <em>no input frame.</em></h3>
+          <p>The cheap rungs generate straight from the prompt — no still to prepare, nothing to pay for twice. The specialist rungs are image-to-video only, so asking for one without a frame gets a refusal that <strong>names the tiers that would have worked</strong> rather than a stack trace.</p>
+        </div>
+      </article>
+
+      <article class="spec-row">
+        <span class="num">03</span>
+        <div>
+          <h3>A 20-second wall that <em>refuses instead of truncating.</em></h3>
+          <p>Hand p-video 35 seconds of audio and it returns a successful-looking 20-second clip — no error, nothing in the response to catch it by. Verified: 35.44s in, 20.02s out, <code>status: succeeded</code>. So the tool <strong>refuses before spending</strong>, and prices the uncapped alternatives from your actual audio length. It will not silently double your bill by escalating on your behalf.</p>
+        </div>
+      </article>
     </div>
   </div>
 </section>
@@ -1118,7 +1241,7 @@
 <section id="ledger">
   <div class="wrap">
     <div class="manifest">
-      <span class="id">§ 02</span>
+      <span class="id">§ 03</span>
       <span class="name">live ledger · pre-call enforcement</span>
       <span class="meta">5-beat replay · auto-loops</span>
     </div>
@@ -1175,7 +1298,7 @@
 <section id="spec">
   <div class="wrap">
     <div class="manifest">
-      <span class="id">§ 03</span>
+      <span class="id">§ 04</span>
       <span class="name">spec sheet · the cross-cutting work</span>
       <span class="meta">8 entries</span>
     </div>
@@ -1183,7 +1306,7 @@
     <div class="section-head">
       <h2 class="section-title">Eight things <em>most provider wrappers leave to you.</em></h2>
       <p class="section-lede">
-        Plenty of MCP servers wrap a vendor. genkettle wraps six and adds
+        Plenty of MCP servers wrap a vendor. genkettle wraps eight and adds
         the cross-cutting work that, without it, lands on the caller:
         budgets, ledger, sidecars, failover, chunking, batch, captions,
         cloning.
@@ -1226,8 +1349,8 @@
       <article class="spec-row">
         <span class="num">05</span>
         <div>
-          <h3>Free local <em>escape hatch.</em></h3>
-          <p>Same plugin, same skills, same sidecars, no API key, no network, no bill. Route to Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, or Voicebox. <strong>Auto-detected</strong> at startup since v0.8.5.</p>
+          <h3>Free local <em>escape hatch</em> — now with a spare.</h3>
+          <p>Same plugin, same skills, same sidecars, no API key, no network, no bill. Route to Kokoro-FastAPI, Speaches, Orpheus-FastAPI, Chatterbox, Voicebox, or <strong>pocket-tts</strong>. Two <em>independent</em> $0 engines matters: a single free provider is a single point of failure, and when one stops answering the other still ships. <strong>Auto-detected</strong> at startup.</p>
         </div>
       </article>
 
@@ -1242,8 +1365,8 @@
       <article class="spec-row">
         <span class="num">07</span>
         <div>
-          <h3>Captions, <em>without a stitcher.</em></h3>
-          <p>SRT / VTT exported from ElevenLabs word-level timestamps. Image post-processing presets ship the share-target sizes (<code>og</code>, <code>twitter</code>, <code>favicon</code>, <code>linkedin</code>, <code>instagram-square</code>) plus a local ONNX background remover.</p>
+          <h3>Captions and a <em>gallery of everything you made.</em></h3>
+          <p>SRT / VTT from ElevenLabs word-level timestamps. Share-target presets (<code>og</code>, <code>twitter</code>, <code>favicon</code>, <code>linkedin</code>, <code>instagram-square</code>) plus a local ONNX background remover. And <code>gallery</code> reads every sidecar on disk into one self-contained page — thumbnail grid, prompt, model, params, <strong>and what each one cost</strong>.</p>
         </div>
       </article>
 
@@ -1264,9 +1387,9 @@
 <section id="local">
   <div class="wrap">
     <div class="manifest">
-      <span class="id">§ 04</span>
+      <span class="id">§ 05</span>
       <span class="name">local · openai-compatible · $0/call</span>
-      <span class="meta">auto-detected · v0.8.5+</span>
+      <span class="meta">auto-detected · two engines</span>
     </div>
 
     <div class="local-grid">
@@ -1279,12 +1402,12 @@
           post-processing — everything keeps working.
         </p>
         <p>
-          <strong>Auto-detected at startup</strong> since v0.8.5. If
+          <strong>Auto-detected at startup.</strong> If
           <code>LOCAL_BASE_URL/models</code> responds, the local provider
           joins the failover chain automatically. Set
           <code>LOCAL_ENABLED=false</code> only to force-exclude a
-          reachable server. Same logic applies to Voicebox via
-          <code>/health</code>.
+          reachable server. Voicebox and pocket-tts resolve the same way
+          via <code>/health</code>.
         </p>
 
         <div class="receipt-line">
@@ -1299,6 +1422,7 @@
           <a class="local-tag" href="https://github.com/Lex-au/Orpheus-FastAPI" target="_blank" rel="noopener">Orpheus-FastAPI</a>
           <a class="local-tag" href="https://github.com/travisvn/chatterbox-tts-api" target="_blank" rel="noopener">Chatterbox</a>
           <a class="local-tag" href="https://voicebox.sh" target="_blank" rel="noopener">Voicebox</a>
+          <a class="local-tag" href="https://huggingface.co/kyutai/pocket-tts" target="_blank" rel="noopener">pocket-tts</a>
         </div>
       </div>
 
@@ -1337,7 +1461,7 @@ node mcp-server/dist/cli.js <span class="k">--speech</span> \
 <section id="compare">
   <div class="wrap">
     <div class="manifest">
-      <span class="id">§ 05</span>
+      <span class="id">§ 06</span>
       <span class="name">balance sheet · what's in the box</span>
       <span class="meta">no editorializing</span>
     </div>
@@ -1361,7 +1485,7 @@ node mcp-server/dist/cli.js <span class="k">--speech</span> \
         <tbody>
           <tr>
             <td>multi-provider · one interface</td>
-            <td class="us"><span class="yes">7 providers</span></td>
+            <td class="us"><span class="yes">8 providers</span></td>
             <td class="no">—</td>
             <td class="no">—</td>
             <td class="partial">OpenAI only</td>
@@ -1396,16 +1520,23 @@ node mcp-server/dist/cli.js <span class="k">--speech</span> \
           </tr>
           <tr>
             <td>local $0/call escape hatch</td>
-            <td class="us"><span class="yes">Voicebox + Kokoro + 4 more</span></td>
+            <td class="us"><span class="yes">pocket-tts + Voicebox + 4 more</span></td>
             <td class="no">—</td>
             <td class="no">—</td>
             <td class="no">—</td>
           </tr>
           <tr>
             <td>voice cloning</td>
-            <td class="us"><span class="yes">local + ElevenLabs IDs</span></td>
+            <td class="us"><span class="yes">2 local engines + ElevenLabs IDs</span></td>
             <td class="no">n/a</td>
             <td class="partial">subscription</td>
+            <td class="no">—</td>
+          </tr>
+          <tr>
+            <td>video · text-to-video · talking avatars</td>
+            <td class="us"><span class="yes">$0.005–$0.15 / sec</span></td>
+            <td class="no">—</td>
+            <td class="no">—</td>
             <td class="no">—</td>
           </tr>
           <tr>
@@ -1441,7 +1572,7 @@ node mcp-server/dist/cli.js <span class="k">--speech</span> \
 <section id="install">
   <div class="wrap">
     <div class="manifest">
-      <span class="id">§ 06</span>
+      <span class="id">§ 07</span>
       <span class="name">install · two commands · no clone</span>
       <span class="meta">claude code session</span>
     </div>
@@ -1486,8 +1617,12 @@ node mcp-server/dist/cli.js <span class="k">--speech</span> \
 <span class="k">export</span> OPENAI_DEFAULT_VOICE=<span class="s">onyx</span>
 <span class="k">export</span> ELEVENLABS_DEFAULT_VOICE=<span class="s">'&lt;voice-id&gt;'</span>
 
-<span class="c"># optional: local server (auto-detected since v0.8.5)</span>
-<span class="k">export</span> LOCAL_BASE_URL=<span class="s">http://localhost:8880/v1</span></pre>
+<span class="c"># optional: video + talking avatars</span>
+<span class="k">export</span> REPLICATE_API_TOKEN=<span class="s">'your-token'</span>
+
+<span class="c"># optional: local $0 engines (auto-detected at startup)</span>
+<span class="k">export</span> LOCAL_BASE_URL=<span class="s">http://localhost:8880/v1</span>
+<span class="k">export</span> POCKET_TTS_BASE_URL=<span class="s">http://localhost:8000</span></pre>
         </div>
       </div>
     </div>
@@ -1498,9 +1633,9 @@ node mcp-server/dist/cli.js <span class="k">--speech</span> \
 <section class="final">
   <div class="wrap">
     <div class="manifest">
-      <span class="id">§ 07</span>
+      <span class="id">§ 08</span>
       <span class="name">end of manifest · ship something</span>
-      <span class="meta">MIT · semver · v0.8.7</span>
+      <span class="meta">MIT · semver · v0.13.0</span>
     </div>
 
     <div class="final-grid">
@@ -1535,7 +1670,7 @@ node mcp-server/dist/cli.js <span class="k">--speech</span> \
     <div class="left">
       <img src="assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
       <span style="color: var(--ink-faint);">·</span>
-      <span>MIT · v0.8.7 · 2026</span>
+      <span>MIT · v0.13.0 · 2026</span>
     </div>
     <div class="links">
       <a href="blog/index.html">blog</a>

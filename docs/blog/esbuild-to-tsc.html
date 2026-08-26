@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The 3,700 bytes that broke our CI for two weeks — genkettle blog</title>
+<meta name="description" content="Why we ripped esbuild out of the build pipeline and replaced it with plain tsc. A story about platform-specific output and dist diffs you can't see with your eyes." />
+<meta property="og:title" content="The 3,700 bytes that broke our CI for two weeks" />
+<meta property="og:description" content="Why we ripped esbuild out of the build pipeline and replaced it with plain tsc." />
+<link rel="icon" href="../assets/genkettle-mark.svg" type="image/svg+xml" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<script>
+  (function () {
+    var stored = localStorage.getItem('gk-theme-v3');
+    document.documentElement.setAttribute('data-theme', stored || 'dark');
+  })();
+</script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  :root,
+  [data-theme="dark"] {
+    --bg: #0a0a0a; --bg-elev: #111111; --bg-hi: #161616; --bg-low: #0d0d0d;
+    --line: #1d1d1c; --line-hi: #2c2c2a; --line-faint: #161615;
+    --ink: #e8e6e1; --ink-dim: #a09e96; --ink-mute: #6c6a64; --ink-faint: #3e3d39;
+    --accent: #f0a06a; --accent-dim: #a26944; --accent-ink: #15110d;
+    --invert: 1;
+  }
+  [data-theme="light"] {
+    --bg: #efece4; --bg-elev: #f7f5ef; --bg-hi: #e6e3da; --bg-low: #e8e5dc;
+    --line: #cfccc1; --line-hi: #b3b0a5; --line-faint: #dbd8cd;
+    --ink: #14110e; --ink-dim: #4a4842; --ink-mute: #807e76; --ink-faint: #b1afa6;
+    --accent: #b85a26; --accent-dim: #7a3e1c; --accent-ink: #f7f5ef;
+    --invert: 0;
+  }
+  :root {
+    --serif: 'Newsreader', 'Times New Roman', Georgia, serif;
+    --mono:  'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    --max:   1180px;
+    --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--mono); font-weight: 400;
+    font-size: 14px; line-height: 1.6;
+    overflow-x: hidden;
+    transition: background-color .25s ease, color .25s ease;
+  }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding-inline: var(--gutter); }
+  hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* scope the sticky nav rule to the SITE nav only (direct child of body)
+     so the .crumbs <nav> doesn't inherit position:sticky and stack on top
+     of it at the viewport edge when scrolling. */
+  body > nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  body > nav .row {
+    display: grid; grid-template-columns: auto 1fr auto;
+    align-items: center; height: 56px; gap: 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .word { height: 12px; color: var(--ink); filter: invert(var(--invert)); }
+  .brand .vchip {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+    color: var(--ink-mute);
+    border: 1px solid var(--line);
+    padding: 2px 6px; border-radius: 3px;
+    margin-left: 4px;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  a.vchip:hover { color: var(--accent); border-color: var(--accent); }
+  .nav-status {
+    justify-self: center; display: none;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  .nav-status .pip {
+    display: inline-block; width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%;
+    margin-right: 8px; vertical-align: 1px;
+  }
+  @media (min-width: 920px) { .nav-status { display: block; } }
+  .nav-links {
+    justify-self: end;
+    display: flex; align-items: center; gap: 22px;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-links a.active { color: var(--ink); }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 11px;
+    background: var(--ink); color: var(--bg);
+    border-radius: 4px;
+    font-family: var(--mono); font-size: 12px; font-weight: 500;
+    transition: transform .15s ease;
+  }
+  .nav-cta:hover { color: var(--bg); transform: translateY(-1px); }
+  .theme-toggle {
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--line); border-radius: 4px;
+    color: var(--ink-dim); cursor: pointer; transition: all .15s;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--line-hi); }
+  @media (max-width: 760px) {
+    .nav-links a:not(.nav-cta):not(.theme-toggle-wrap a) { display: none; }
+  }
+
+  /* ============== POST HEAD ============== */
+  .crumbs {
+    padding: 28px 0 0;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .crumbs a {
+    color: var(--ink-dim);
+    border-bottom: 1px solid transparent;
+    transition: color .15s, border-color .15s;
+  }
+  .crumbs a:hover { color: var(--ink); border-color: var(--accent); }
+  .crumbs .sep { color: var(--ink-faint); margin: 0 8px; }
+
+  .post-head {
+    padding: clamp(36px, 6vh, 60px) 0 clamp(20px, 3vh, 32px);
+  }
+  .post-head .meta-top {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+  .post-head .meta-top .sep { color: var(--ink-faint); }
+  .post-head .meta-top .cat { color: var(--accent); font-weight: 600; }
+  .post-head .meta-top .author { color: var(--ink); }
+  .post-head h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(2rem, 5.4vw, 3.6rem);
+    line-height: 1.04;
+    letter-spacing: -0.024em;
+    color: var(--ink);
+    font-variation-settings: "opsz" 60;
+    margin-bottom: 22px;
+    max-width: 26ch;
+  }
+  .post-head h1 em { font-style: italic; color: var(--ink-dim); font-weight: 500; }
+  .post-head .dek {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: clamp(1.15rem, 2vw, 1.4rem);
+    line-height: 1.4;
+    color: var(--ink-dim);
+    max-width: 60ch;
+    font-variation-settings: "opsz" 28;
+  }
+
+  /* ============== HERO ART ============== */
+  .post-hero {
+    margin: clamp(28px, 4vh, 44px) 0 clamp(40px, 6vh, 60px);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg-elev);
+    overflow: hidden;
+  }
+  .post-hero svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .post-hero .caption {
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-low);
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  .post-hero .caption .id { color: var(--accent); font-weight: 600; }
+
+  .gk-mono { font-family: var(--mono), monospace; }
+
+  /* ============== POST LAYOUT ============== */
+  .post-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: clamp(28px, 5vw, 64px);
+    align-items: start;
+    padding-bottom: clamp(64px, 10vh, 120px);
+  }
+  @media (max-width: 920px) {
+    .post-layout { grid-template-columns: 1fr; }
+  }
+
+  .toc {
+    position: sticky;
+    top: 86px;
+    align-self: start;
+    border-left: 1px solid var(--line);
+    padding-left: 14px;
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-hi) transparent;
+  }
+  .toc::-webkit-scrollbar { width: 5px; }
+  .toc::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 3px; }
+  @media (max-width: 920px) {
+    .toc {
+      position: static; max-height: none;
+      border-left: 0; padding-left: 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 0; margin-bottom: 32px;
+    }
+  }
+  .toc-label {
+    display: block;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .toc ol {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column;
+    counter-reset: toc;
+  }
+  .toc li { counter-increment: toc; margin-bottom: 2px; }
+  .toc li a {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 6px;
+    padding: 6px 0;
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink-dim);
+    line-height: 1.4;
+    transition: color .15s ease;
+  }
+  .toc li a::before {
+    content: counter(toc, decimal-leading-zero);
+    color: var(--ink-mute);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+  .toc li a:hover { color: var(--ink); }
+  .toc li a.active { color: var(--accent); }
+  .toc li a.active::before { color: var(--accent); }
+
+  /* ============== POST BODY ============== */
+  .post-main { min-width: 0; }
+
+  .post {
+    max-width: 680px;
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    color: var(--ink-dim);
+    font-variation-settings: "opsz" 18;
+  }
+  .post > p, .post > ul, .post > ol,
+  .post > blockquote, .post > pre,
+  .post > h2, .post > h3,
+  .post > .stat-strip,
+  .post > hr.in-post { margin-bottom: 22px; }
+  .post p { font-size: 1.0625rem; }
+  .post p strong { color: var(--ink); font-weight: 600; }
+  .post p em { font-style: italic; }
+  .post p a, .post li a {
+    color: var(--ink);
+    border-bottom: 1px solid var(--accent-dim);
+    transition: border-color .15s ease;
+  }
+  .post p a:hover, .post li a:hover { border-color: var(--accent); }
+  .post h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: clamp(1.4rem, 2.8vw, 1.7rem);
+    line-height: 1.2; letter-spacing: -0.012em;
+    color: var(--ink);
+    margin-top: 48px;
+    font-variation-settings: "opsz" 28;
+    scroll-margin-top: 100px;
+  }
+  .post h2 em { font-style: italic; color: var(--ink-dim); }
+  .post h3 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: 36px;
+    scroll-margin-top: 100px;
+  }
+  .post code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--bg-hi);
+    border: 1px solid var(--line-faint);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+  .post pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    background: #050505;
+    color: #e0ddd6;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  [data-theme="light"] .post pre { background: #14110e; border-color: #14110e; }
+  .post pre .c { color: #6a6862; font-style: italic; }
+  .post pre .k { color: #f0a06a; }
+  .post pre .s { color: #c8c5be; }
+  .post pre .p { color: #e0ddd6; font-weight: 600; }
+  .post ul, .post ol {
+    padding-left: 22px;
+    color: var(--ink-dim);
+  }
+  .post li { margin-bottom: 8px; }
+  .post blockquote {
+    border-left: 2px solid var(--accent);
+    padding: 6px 0 6px 20px;
+    font-style: italic;
+    color: var(--ink);
+    font-size: 1.2rem;
+    line-height: 1.5;
+    font-variation-settings: "opsz" 24;
+  }
+  .post blockquote .cite {
+    display: block;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .post hr.in-post {
+    border: 0; height: 1px;
+    background: var(--line);
+    margin: 40px 0;
+    width: 60px;
+    margin-left: 0;
+  }
+
+  .post .stat-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border: 1px solid var(--line);
+    background: var(--bg-elev);
+    border-radius: 4px;
+    overflow: hidden;
+    font-family: var(--mono);
+  }
+  .post .stat-strip > div {
+    padding: 14px 16px;
+    border-right: 1px solid var(--line);
+  }
+  .post .stat-strip > div:last-child { border-right: 0; }
+  .post .stat-strip .k {
+    font-size: 10px; letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .post .stat-strip .v {
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 600;
+    font-style: normal;
+    letter-spacing: -0.01em;
+  }
+  .post .stat-strip .v.was { color: var(--ink-mute); text-decoration: line-through; text-decoration-color: var(--ink-faint); }
+  .post .stat-strip .v.now { color: var(--accent); }
+  @media (max-width: 540px) {
+    .post .stat-strip { grid-template-columns: 1fr; }
+    .post .stat-strip > div { border-right: 0; border-bottom: 1px solid var(--line); }
+    .post .stat-strip > div:last-child { border-bottom: 0; }
+  }
+
+  /* ============== VERTICAL SHARE RAIL ==============
+     Fixed to the right edge of the viewport, vertically centered.
+     Fades in only when the post body is in view — invisible on the
+     hero/title and again on the nav/footer below. Hidden on viewports
+     narrow enough that it'd overlap the content (≤1280px). */
+  .share-rail {
+    position: fixed;
+    top: 50%;
+    right: clamp(14px, 2vw, 28px);
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 30;
+    padding: 8px 5px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    font-family: var(--mono);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .share-rail.in-view {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .share-rail .label {
+    font-size: 8.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    text-align: center;
+    padding: 4px 0 6px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+  }
+  .share-rail a, .share-rail button {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    color: var(--ink-mute);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color .15s ease, background .15s ease;
+    position: relative;
+  }
+  .share-rail a:hover, .share-rail button:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .share-rail svg { width: 13px; height: 13px; }
+  .share-rail .copied-flash {
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity .15s ease;
+    pointer-events: none;
+  }
+  .share-rail button.copied .copied-flash { opacity: 1; }
+  @media (max-width: 1280px) { .share-rail { display: none; } }
+
+  /* ============== SHARE ROW ============== */
+  .share {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    margin-bottom: 32px;
+  }
+  .share .label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-right: 8px;
+  }
+  .share-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--line-hi);
+    border-radius: 3px;
+    color: var(--ink-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    background: transparent;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .share-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  .share-btn svg { width: 11px; height: 11px; flex-shrink: 0; }
+  .share-btn.copied { color: var(--accent); border-color: var(--accent); }
+  .share .spacer { flex: 1; }
+  .share .pageviews {
+    font-size: 10px;
+    color: var(--ink-mute);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .share.bottom { margin-top: 48px; margin-bottom: 28px; }
+
+  /* ============== AUTHOR CARD ============== */
+  .author-card {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 18px;
+    padding: 24px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 32px;
+  }
+  .author-card .avatar {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    border: 1px solid var(--line-hi);
+    background: var(--bg-elev);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 26px;
+    color: var(--ink);
+    font-variation-settings: "opsz" 28;
+  }
+  .author-card .meta { min-width: 0; }
+  .author-card .label {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-mute);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .author-card .name {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 1.2rem;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-variation-settings: "opsz" 22;
+  }
+  .author-card .name em { font-style: italic; color: var(--ink-dim); }
+  .author-card .bio {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-dim);
+    line-height: 1.6;
+  }
+  .author-card .links {
+    display: inline-flex; gap: 12px;
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-mute);
+  }
+  .author-card .links a {
+    border-bottom: 1px solid var(--line-hi);
+    padding-bottom: 1px;
+    transition: color .15s, border-color .15s;
+  }
+  .author-card .links a:hover { color: var(--ink); border-color: var(--accent); }
+
+  /* ============== NEWSLETTER ============== */
+  .newsletter {
+    margin-top: 32px;
+    padding: clamp(28px, 4vh, 40px);
+    border: 1px solid var(--line);
+    background: var(--bg-elev);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .newsletter::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 30%, transparent 70%);
+  }
+  .newsletter .label {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .newsletter h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(1.4rem, 2.8vw, 1.8rem);
+    line-height: 1.15;
+    letter-spacing: -0.014em;
+    color: var(--ink);
+    margin-bottom: 10px;
+    max-width: 22ch;
+    font-variation-settings: "opsz" 28;
+  }
+  .newsletter h3 em { font-style: italic; color: var(--ink-dim); }
+  .newsletter p {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-dim);
+    max-width: 52ch;
+    margin-bottom: 22px;
+  }
+  .newsletter form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    max-width: 480px;
+  }
+  @media (max-width: 540px) {
+    .newsletter form { grid-template-columns: 1fr; }
+  }
+  .newsletter input[type="email"] {
+    appearance: none;
+    border: 1px solid var(--line-hi);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 11px 14px;
+    border-radius: 4px;
+    transition: border-color .15s ease;
+  }
+  .newsletter input[type="email"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .newsletter input[type="email"]::placeholder { color: var(--ink-mute); }
+  .newsletter button {
+    appearance: none; cursor: pointer;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 11px 18px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: transform .15s ease;
+  }
+  .newsletter button:hover { transform: translateY(-1px); }
+  .newsletter .fineprint {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.04em;
+  }
+  .newsletter .ok {
+    color: var(--accent);
+    font-weight: 600;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    margin-top: 10px;
+    display: none;
+  }
+  .newsletter.submitted .ok { display: block; }
+  .newsletter.submitted form { display: none; }
+
+  /* ============== POST NAV ============== */
+  .post-nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    padding: clamp(40px, 6vh, 60px) 0 clamp(48px, 8vh, 96px);
+    border-top: 1px solid var(--line);
+  }
+  @media (max-width: 640px) { .post-nav { grid-template-columns: 1fr; } }
+  .post-nav a {
+    display: block; padding: 18px 0;
+    font-family: var(--mono); font-size: 12px;
+    color: var(--ink-dim);
+    transition: color .15s ease;
+  }
+  .post-nav a .label {
+    display: block; font-size: 10px;
+    color: var(--ink-mute);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .post-nav a .title {
+    display: block;
+    font-family: var(--serif); font-style: italic;
+    font-size: 1.1rem; color: var(--ink);
+    line-height: 1.3;
+    font-variation-settings: "opsz" 22;
+  }
+  .post-nav a:hover { color: var(--ink); }
+  .post-nav a:hover .title { color: var(--accent); }
+  .post-nav a.right { text-align: right; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 22px 0;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  footer .row {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 14px;
+  }
+  footer .links { display: flex; gap: 22px; }
+  footer .links a:hover { color: var(--ink); }
+  footer .word {
+    height: 10px; color: var(--ink-mute);
+    opacity: 0.75; filter: invert(var(--invert));
+  }
+  footer .left { display: flex; align-items: center; gap: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<nav>
+  <div class="wrap row">
+    <span class="brand">
+      <a href="../index_v3.html" aria-label="genkettle home" style="display: inline-flex; align-items: center;">
+        <img src="../assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      </a>
+      <a href="../changelog.html#v0-8-7" class="vchip" aria-label="related changelog entry">v0.8.7</a>
+    </span>
+    <span class="nav-status"><span class="pip"></span>engineering · 9 min read</span>
+    <div class="nav-links">
+      <a href="../index_v3.html#tiers">tiers</a>
+      <a href="../index_v3.html#install">install</a>
+      <a href="../changelog.html">changelog</a>
+      <a href="index.html" class="active">blog</a>
+      <button class="theme-toggle" aria-label="toggle theme" id="theme-toggle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <a class="nav-cta" href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">
+        github
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <nav class="crumbs" aria-label="breadcrumb">
+    <a href="index.html">blog</a><span class="sep">/</span><span>the 3,700 bytes that broke our CI</span>
+  </nav>
+
+  <header class="post-head">
+    <div class="meta-top">
+      <span class="cat">engineering</span>
+      <span class="sep">·</span>
+      <span class="author">by Sherif Butt</span>
+      <span class="sep">·</span>
+      <span>2026-04-30</span>
+      <span class="sep">·</span>
+      <span>9 min read</span>
+      <span class="sep">·</span>
+      <span>v0.8.7</span>
+    </div>
+    <h1>The 3,700 bytes that <em>broke our CI for two weeks.</em></h1>
+    <p class="dek">
+      Why we ripped esbuild out of the build pipeline and replaced it
+      with plain <code style="font-family:var(--mono);font-size:0.84em;color:var(--ink);background:var(--bg-hi);padding:1px 5px;border-radius:3px;border:1px solid var(--line-faint);">tsc</code>.
+      A story about platform-specific output, deterministic builds, and
+      dist diffs you can't see with your eyes.
+    </p>
+  </header>
+
+  <!-- ============== HERO ART ==============
+       Build comparison diagram. Two parallel byte streams (darwin-arm64
+       vs linux-x64), mostly identical bone-colored cells; a few cells
+       flag in amber where they diverge. The "Δ 3,700 B" label sits on
+       the diff axis between them. -->
+  <figure class="post-hero">
+    <svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" aria-label="build determinism — byte stream comparison">
+      <defs>
+        <pattern id="dotgrid-h2" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill="var(--ink-faint)" opacity="0.4" />
+        </pattern>
+      </defs>
+      <rect width="1600" height="900" fill="url(#dotgrid-h2)" />
+
+      <!-- eyebrow -->
+      <text x="800" y="86" text-anchor="middle" class="gk-mono"
+            font-size="15" letter-spacing="5" fill="var(--ink-mute)">BUILD COMPARISON — SAME INPUT, DIFFERENT BYTES</text>
+
+      <!-- column headers -->
+      <text x="430" y="160" text-anchor="middle" class="gk-mono"
+            font-size="14" font-weight="700" fill="var(--ink)">darwin-arm64</text>
+      <text x="430" y="186" text-anchor="middle" class="gk-mono"
+            font-size="11" fill="var(--ink-mute)" letter-spacing="2">DEV LAPTOP</text>
+
+      <text x="1170" y="160" text-anchor="middle" class="gk-mono"
+            font-size="14" font-weight="700" fill="var(--ink)">linux-x64</text>
+      <text x="1170" y="186" text-anchor="middle" class="gk-mono"
+            font-size="11" fill="var(--ink-mute)" letter-spacing="2">CI RUNNER</text>
+
+      <!-- byte stream columns: 24 rows x 2 columns of horizontal cells.
+           y rows: 230, 250, 270, ... step 20, 24 rows → 230..690.
+           Each "cell" is a horizontal bar 320×10 with rx=2.
+           Most cells are bone-outlined (matching). Diff cells in amber. -->
+
+      <!-- LEFT COLUMN cells: x=270, w=320 -->
+      <!-- diff rows (in amber): 5, 11, 12, 18, 22 (out of 24) -->
+
+      <!-- row 0 -->
+      <rect x="270" y="226" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="226" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 1 -->
+      <rect x="270" y="246" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="246" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 2 -->
+      <rect x="270" y="266" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="266" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 3 -->
+      <rect x="270" y="286" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="286" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 4 -->
+      <rect x="270" y="306" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="306" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- row 5 — DIFF -->
+      <rect x="270" y="326" width="240" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <rect x="1010" y="326" width="280" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <!-- diff connector -->
+      <line x1="590" y1="331" x2="1010" y2="331" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 4" />
+
+      <!-- row 6 -->
+      <rect x="270" y="346" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="346" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 7 -->
+      <rect x="270" y="366" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="366" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 8 -->
+      <rect x="270" y="386" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="386" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 9 -->
+      <rect x="270" y="406" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="406" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 10 -->
+      <rect x="270" y="426" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="426" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- row 11 — DIFF (slightly different width to suggest byte shift) -->
+      <rect x="270" y="446" width="300" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <rect x="1010" y="446" width="260" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <line x1="590" y1="451" x2="1010" y2="451" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 4" />
+
+      <!-- row 12 — DIFF -->
+      <rect x="270" y="466" width="320" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <rect x="1010" y="466" width="240" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <line x1="590" y1="471" x2="1010" y2="471" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 4" />
+
+      <!-- row 13 -->
+      <rect x="270" y="486" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="486" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 14 -->
+      <rect x="270" y="506" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="506" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 15 -->
+      <rect x="270" y="526" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="526" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 16 -->
+      <rect x="270" y="546" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="546" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 17 -->
+      <rect x="270" y="566" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="566" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- row 18 — DIFF -->
+      <rect x="270" y="586" width="280" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <rect x="1010" y="586" width="320" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <line x1="590" y1="591" x2="1010" y2="591" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 4" />
+
+      <!-- row 19 -->
+      <rect x="270" y="606" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="606" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 20 -->
+      <rect x="270" y="626" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="626" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <!-- row 21 -->
+      <rect x="270" y="646" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="646" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- row 22 — DIFF -->
+      <rect x="270" y="666" width="320" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <rect x="1010" y="666" width="290" height="10" rx="2" fill="var(--accent)" stroke="var(--accent)" stroke-width="1" />
+      <line x1="590" y1="671" x2="1010" y2="671" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 4" />
+
+      <!-- row 23 -->
+      <rect x="270" y="686" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+      <rect x="1010" y="686" width="320" height="10" rx="2" fill="none" stroke="var(--line-hi)" stroke-width="1" />
+
+      <!-- center diff axis with label box -->
+      <line x1="800" y1="220" x2="800" y2="710" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 6" />
+
+      <rect x="730" y="440" width="140" height="60" rx="4" fill="var(--bg-elev)" stroke="var(--accent)" stroke-width="1" />
+      <text x="800" y="468" text-anchor="middle" class="gk-mono"
+            font-size="11" fill="var(--ink-mute)" letter-spacing="2">Δ DELTA</text>
+      <text x="800" y="490" text-anchor="middle" class="gk-mono"
+            font-size="20" font-weight="700" fill="var(--accent)">~3,700 B</text>
+
+      <!-- column footer labels -->
+      <text x="430" y="780" text-anchor="middle" class="gk-mono" font-size="12" fill="var(--ink-dim)">esbuild output</text>
+      <text x="430" y="800" text-anchor="middle" class="gk-mono" font-size="11" fill="var(--ink-mute)">2.5 MB · server-main.js</text>
+
+      <text x="1170" y="780" text-anchor="middle" class="gk-mono" font-size="12" fill="var(--ink-dim)">esbuild output</text>
+      <text x="1170" y="800" text-anchor="middle" class="gk-mono" font-size="11" fill="var(--ink-mute)">2.5 MB · server-main.js</text>
+
+      <!-- summary -->
+      <text x="800" y="850" text-anchor="middle" class="gk-mono"
+            font-size="13" fill="var(--ink-mute)">same source · same lockfile · same esbuild version</text>
+    </svg>
+    <figcaption class="caption">
+      <span><span class="id">FIG. 01</span> · esbuild build comparison — bone outlines = matching bytes; amber = divergence.</span>
+      <span>2026-04-30</span>
+    </figcaption>
+  </figure>
+
+  <!-- ============== TWO-COLUMN LAYOUT ============== -->
+  <div class="post-layout">
+
+    <aside class="toc" aria-label="table of contents">
+      <span class="toc-label">contents</span>
+      <ol>
+        <li><a href="#what-esbuild" data-href="#what-esbuild">What esbuild was doing</a></li>
+        <li><a href="#first-instinct" data-href="#first-instinct">The first instinct was wrong</a></li>
+        <li><a href="#what-we-lost" data-href="#what-we-lost">What we lost, what we gained</a></li>
+        <li><a href="#postbuild" data-href="#postbuild">The postbuild step</a></li>
+        <li><a href="#json-imports" data-href="#json-imports">One more thing: JSON imports</a></li>
+        <li><a href="#lessons" data-href="#lessons">Lessons</a></li>
+      </ol>
+    </aside>
+
+    <div class="post-main">
+
+      <div class="share top">
+        <span class="label">share</span>
+        <a class="share-btn" href="https://twitter.com/intent/tweet?text=The%203%2C700%20bytes%20that%20broke%20our%20CI%20for%20two%20weeks&url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html" target="_blank" rel="noopener" aria-label="share on x/twitter">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21.5L14.36 10.42L22.75 22h-6.94l-5.43-7.34L4.18 22H.92l7.62-9.0L0 2h7.07l4.91 6.69L18.244 2zm-2.43 18.18h1.86L7.32 3.72H5.32l10.494 16.46z"/></svg>
+          x / twitter
+        </a>
+        <a class="share-btn" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html" target="_blank" rel="noopener" aria-label="share on linkedin">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18V10H5.67v8h2.67zM7 8.94c.86 0 1.55-.7 1.55-1.55a1.55 1.55 0 1 0-3.1 0c0 .85.69 1.55 1.55 1.55zM18.34 18v-4.4c0-2.36-1.27-3.45-2.96-3.45-1.36 0-1.97.75-2.31 1.27V10h-2.67v8h2.67v-4.46c0-.24.02-.47.09-.64.18-.47.61-.96 1.34-.96.94 0 1.32.72 1.32 1.78V18h2.67z"/></svg>
+          linkedin
+        </a>
+        <a class="share-btn" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html&t=The%203%2C700%20bytes%20that%20broke%20our%20CI%20for%20two%20weeks" target="_blank" rel="noopener" aria-label="share on hacker news">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h18v18H3V3zm9 11.21L7.79 7H6.5l5.5 9.5V21h2v-4.5L19.5 7h-1.29L13 14.21z"/></svg>
+          hacker news
+        </a>
+        <button class="share-btn" id="copy-link-btn" type="button" aria-label="copy link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="copy-text">copy link</span>
+        </button>
+        <span class="spacer"></span>
+        <span class="pageviews">9 min · v0.8.7</span>
+      </div>
+
+      <article class="post">
+        <p>
+          Two weeks before v0.8.7 shipped, we added a <code>dist-check</code>
+          workflow to the repo. The job was simple: rebuild the MCP server
+          from source on Linux, diff the result against the committed
+          <code>mcp-server/dist/</code> directory, and fail the build if they
+          didn't match. The intent was to catch the case where someone updated
+          the source but forgot to run <code>npm run build</code> before
+          committing.
+        </p>
+
+        <p>
+          The check went red on the very first push. We rebuilt, recommitted,
+          pushed again. Still red. We diffed locally on the developer
+          machine — a darwin-arm64 MacBook — against what CI had built on
+          <code>ubuntu-latest</code>. The diffs were tiny. A few hundred bytes
+          here. A whitespace shift there. About 3,700 bytes total across a
+          few files, on inputs that were byte-identical: same source, same
+          <code>package-lock.json</code>, same <code>esbuild</code> version
+          pinned in <code>devDependencies</code>.
+        </p>
+
+        <p>
+          For two weeks every PR went red. We ignored the check, then
+          considered deleting it. Eventually we did the thing we should have
+          done on day one: read what the diff actually was.
+        </p>
+
+        <h2 id="what-esbuild">What esbuild was doing.</h2>
+
+        <p>
+          <code>esbuild</code> is a fantastic bundler. It's fast, it has good
+          defaults, it handles TypeScript natively, it tree-shakes
+          aggressively. We had been using it to compile
+          <code>mcp-server/src/**/*.ts</code> into a small set of bundled
+          <code>.js</code> files in <code>dist/</code>. Around 4 megafiles
+          total, with the runtime native deps
+          (<code>@imgly/background-removal-node</code>, <code>sharp</code>,
+          <code>onnxruntime-node</code>) marked <code>--external</code> so
+          they'd resolve from <code>node_modules</code> at runtime.
+        </p>
+
+        <p>
+          The bundled output was efficient and self-contained. It was also,
+          we discovered, <em>not byte-identical across operating systems</em>.
+          esbuild does a small amount of platform-specific work during code
+          generation. Tree-shaking decisions can depend on dependency-graph
+          traversal order, which depends on filesystem enumeration order,
+          which is OS-specific. Source-map encoding has minor variants. None
+          of this affects runtime behavior — the output is functionally
+          identical — but the bytes differ.
+        </p>
+
+        <p>
+          For a project with a "the dist in git matches what CI builds" check,
+          "functionally identical" is not the same as "byte-identical." The
+          check failed for a real reason: we had no guarantee that the dist
+          committed by a Mac developer would match what an Ubuntu CI runner
+          produced.
+        </p>
+
+        <h2 id="first-instinct">The first instinct was wrong.</h2>
+
+        <p>
+          The obvious fix is to move the build into CI. Don't commit the
+          dist; let CI build it on every release. We considered this and
+          rejected it. The plugin gets fetched by Claude Code's marketplace
+          mechanism from the GitHub raw URL, and the dist <em>has</em> to be
+          in the repo at install time. We could publish a separate release
+          artifact, but that adds complexity for a small project.
+        </p>
+
+        <blockquote>
+          The right fix isn't a smarter check. It's a builder whose output
+          doesn't depend on which laptop ran it.
+          <span class="cite">— commit message, v0.8.7</span>
+        </blockquote>
+
+        <p>
+          What we wanted was a build tool whose output is <em>deterministic
+          across operating systems</em> on identical inputs. That ruled out
+          bundlers in general, since most of them make platform-influenced
+          decisions during code generation. It pointed at the most basic
+          thing on the shelf: <code>tsc</code>.
+        </p>
+
+        <h2 id="what-we-lost">What we lost, what we gained.</h2>
+
+        <p>
+          Switching from esbuild to <code>tsc</code> meant giving up bundling
+          entirely. <code>tsc</code> compiles each <code>.ts</code> file to
+          one <code>.js</code> file. No tree-shaking, no inlining, no minification.
+          Our dist went from 4 bundled megafiles to ~50 small files mirroring
+          the source tree.
+        </p>
+
+        <p>
+          Counterintuitively, <em>the total dist size went down</em>. Way
+          down.
+        </p>
+
+        <div class="stat-strip">
+          <div>
+            <div class="k">server-main.js</div>
+            <div><span class="v was">2.5 MB</span> <span class="v now">39 KB</span></div>
+          </div>
+          <div>
+            <div class="k">cli-main.js</div>
+            <div><span class="v was">1.9 MB</span> <span class="v now">22 KB</span></div>
+          </div>
+          <div>
+            <div class="k">os-cross diff</div>
+            <div><span class="v was">~3,700 B</span> <span class="v now">0 B</span></div>
+          </div>
+        </div>
+
+        <p>
+          The reason: esbuild was inlining the dependency tree into the
+          bundle, even though most of those deps were already being shipped
+          via <code>node_modules</code> at install time (the bootstrap shim
+          runs <code>npm ci --omit=dev</code> on first launch since v0.8.3).
+          The bundle was duplicating code that the runtime already had on
+          disk.
+        </p>
+
+        <p>
+          <code>tsc</code> just emits <code>import {...} from '@imgly/...'</code>
+          verbatim. Node's runtime resolution finds the dep in
+          <code>node_modules</code> at first call, exactly as it did before.
+          No behavior change. No size penalty. The bundle was solving a
+          problem that didn't exist for our deployment shape.
+        </p>
+
+        <h2 id="postbuild">The postbuild step.</h2>
+
+        <p>
+          <code>tsc</code> doesn't do everything esbuild did. We needed three
+          small things that the bundler had handled automatically:
+        </p>
+
+        <ul>
+          <li>
+            Copy <code>pricing.json</code> to <code>dist/pricing/</code> so
+            the compiled <code>load.js</code> can find it via
+            <code>readFileSync</code>.
+          </li>
+          <li>
+            Prepend <code>#!/usr/bin/env node</code> shebangs to the entry
+            files so they're directly executable.
+          </li>
+          <li>
+            <code>chmod +x</code> the entry files.
+          </li>
+        </ul>
+
+        <p>
+          All three got shoved into a tiny <code>scripts/postbuild.mjs</code>:
+        </p>
+
+<pre><span class="c">// scripts/postbuild.mjs — runs after `tsc`</span>
+<span class="k">import</span> { readFileSync, writeFileSync, copyFileSync, chmodSync, mkdirSync } <span class="k">from</span> <span class="s">'node:fs'</span>;
+
+<span class="c">// 1. copy pricing.json next to its loader</span>
+mkdirSync(<span class="s">'dist/pricing'</span>, { recursive: <span class="p">true</span> });
+copyFileSync(<span class="s">'src/pricing/pricing.json'</span>, <span class="s">'dist/pricing/pricing.json'</span>);
+
+<span class="c">// 2. + 3. prepend shebangs to entry points and chmod</span>
+<span class="k">for</span> (<span class="k">const</span> entry <span class="k">of</span> [<span class="s">'dist/server.js'</span>, <span class="s">'dist/cli.js'</span>]) {
+  <span class="k">const</span> body = readFileSync(entry, <span class="s">'utf8'</span>);
+  <span class="k">if</span> (!body.startsWith(<span class="s">'#!'</span>)) {
+    writeFileSync(entry, <span class="s">'#!/usr/bin/env node\n'</span> + body);
+  }
+  chmodSync(entry, 0o755);
+}</pre>
+
+        <p>
+          Cross-platform. Node fs API only. No npm dep. The whole thing is
+          shorter than this paragraph.
+        </p>
+
+        <h2 id="json-imports">One more thing: <em>JSON imports.</em></h2>
+
+        <p>
+          The pricing module had been importing its JSON via the modern syntax:
+        </p>
+
+<pre><span class="k">import</span> pricing <span class="k">from</span> <span class="s">'./pricing.json'</span> <span class="k">with</span> { type: <span class="s">'json'</span> };</pre>
+
+        <p>
+          Import attributes (the <code>with</code> clause) became stable in
+          Node 22. esbuild handled this fine because it inlined the JSON
+          directly into the bundle. <code>tsc</code> compiles the import
+          statement through to the output, and the result needs to actually
+          run on whatever Node version users have. Our minimum supported
+          version is Node 18, where import attributes are still flagged.
+        </p>
+
+        <p>
+          We swapped to <code>readFileSync</code> + <code>JSON.parse</code> —
+          universal across every Node version we'd ever target — and called
+          it done. The cost is a few microseconds at startup. The benefit is
+          that nothing breaks for users on the LTS line.
+        </p>
+
+        <h2 id="lessons">Lessons.</h2>
+
+        <h3>Read the diff before changing tools</h3>
+
+        <p>
+          We lost two weeks because we kept retrying the build instead of
+          asking <em>what specifically is different</em>. The diff was small,
+          readable, and would have pointed at the answer in fifteen minutes.
+          "It's flaky" is almost never true. There's a cause, and the diff
+          is usually showing you part of it.
+        </p>
+
+        <h3>Bundling is a deployment choice, not a default</h3>
+
+        <p>
+          We had reached for esbuild because that's what modern TypeScript
+          projects do. But our deployment shape — node modules already on
+          disk via a bootstrap install — meant the bundle was duplicating
+          work the runtime was already doing. The smaller, simpler tool
+          produced a smaller, simpler artifact. Defaults are defaults
+          because they fit a common case, not <em>your</em> case.
+        </p>
+
+        <h3>Determinism is a property of the build pipeline, not a flag</h3>
+
+        <p>
+          You don't get reproducible builds by adding
+          <code>--reproducible</code>. You get them by choosing tools that
+          don't make platform-influenced decisions, and by treating the
+          output bytes as a contract. The whole pipeline has to cooperate.
+          <code>tsc</code> isn't reproducible because it tries hard; it's
+          reproducible because the work it does is straightforward enough
+          that the same inputs reliably produce the same outputs.
+        </p>
+
+        <h3>Postbuild scripts are fine</h3>
+
+        <p>
+          A 12-line <code>scripts/postbuild.mjs</code> using only Node
+          built-ins is worth more than a plugin ecosystem. There was a
+          moment, mid-migration, where we considered adding a build-tool
+          plugin to handle the shebang and the asset copy. We didn't. The
+          script is shorter than the plugin's README would have been.
+        </p>
+
+        <hr class="in-post" />
+
+        <p>
+          The dist-check has been green on every push since v0.8.7 landed.
+          The <a href="../changelog.html#v0-8-7">changelog entry</a> has the
+          one-line summary. The full migration was a single commit. The
+          total time spent on it — once we read the diff — was an
+          afternoon.
+        </p>
+
+        <p>
+          Read the diff.
+        </p>
+      </article>
+
+      <div class="share bottom">
+        <span class="label">if this helped</span>
+        <a class="share-btn" href="https://twitter.com/intent/tweet?text=The%203%2C700%20bytes%20that%20broke%20our%20CI%20for%20two%20weeks&url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html" target="_blank" rel="noopener" aria-label="share on x/twitter">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21.5L14.36 10.42L22.75 22h-6.94l-5.43-7.34L4.18 22H.92l7.62-9.0L0 2h7.07l4.91 6.69L18.244 2zm-2.43 18.18h1.86L7.32 3.72H5.32l10.494 16.46z"/></svg>
+          post on x
+        </a>
+        <a class="share-btn" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html" target="_blank" rel="noopener" aria-label="share on linkedin">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18V10H5.67v8h2.67zM7 8.94c.86 0 1.55-.7 1.55-1.55a1.55 1.55 0 1 0-3.1 0c0 .85.69 1.55 1.55 1.55zM18.34 18v-4.4c0-2.36-1.27-3.45-2.96-3.45-1.36 0-1.97.75-2.31 1.27V10h-2.67v8h2.67v-4.46c0-.24.02-.47.09-.64.18-.47.61-.96 1.34-.96.94 0 1.32.72 1.32 1.78V18h2.67z"/></svg>
+          share on linkedin
+        </a>
+        <a class="share-btn" href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html&t=The%203%2C700%20bytes%20that%20broke%20our%20CI%20for%20two%20weeks" target="_blank" rel="noopener" aria-label="submit to hacker news">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h18v18H3V3zm9 11.21L7.79 7H6.5l5.5 9.5V21h2v-4.5L19.5 7h-1.29L13 14.21z"/></svg>
+          submit to HN
+        </a>
+      </div>
+
+      <aside class="author-card" aria-label="author">
+        <div class="avatar" aria-hidden="true">SB</div>
+        <div class="meta">
+          <div class="label">written by</div>
+          <div class="name">Sherif Butt <em>— maintainer of genkettle.</em></div>
+          <p class="bio">Building cost-aware tooling for Claude Code. Writes post-mortems on the failures worth remembering. Probably has too many tabs open.</p>
+          <span class="links">
+            <a href="https://github.com/sherifButt" target="_blank" rel="noopener">github.com/sherifButt</a>
+            <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">repo</a>
+          </span>
+        </div>
+      </aside>
+
+      <section class="newsletter" id="newsletter">
+        <div class="label">join the list</div>
+        <h3>Get a note when something <em>interesting ships.</em></h3>
+        <p>
+          One short email per release. Post-mortems, design notes, and the
+          occasional "we ripped this out and shipped half the dist size."
+          No marketing. No drip campaigns. Unsubscribe in one click.
+        </p>
+        <form id="newsletter-form" novalidate>
+          <input type="email" name="email" placeholder="you@domain.com" autocomplete="email" required aria-label="email address" />
+          <button type="submit">
+            subscribe
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+          </button>
+        </form>
+        <p class="ok">✓ Got it — you're on the list.</p>
+        <p class="fineprint">Plain-text emails. No tracking pixels. ~1 message a month, if that.</p>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="post-nav">
+    <a href="index.html" class="left">
+      <span class="label">all posts</span>
+      <span class="title">← back to the blog index</span>
+    </a>
+    <a href="seven-hotfixes.html" class="right">
+      <span class="label">older post →</span>
+      <span class="title">Seven hotfixes to ship a Claude Code plugin.</span>
+    </a>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap row">
+    <div class="left">
+      <img src="../assets/genkettle-wordmark.svg" alt="genkettle" class="word" />
+      <span style="color: var(--ink-faint);">·</span>
+      <span>MIT · v0.8.7 · 2026</span>
+    </div>
+    <div class="links">
+      <a href="../index_v3.html">home</a>
+      <a href="index.html">blog</a>
+      <a href="../changelog.html">changelog</a>
+      <a href="https://github.com/sherifButt/claude-image-tts-gen" target="_blank" rel="noopener">github</a>
+    </div>
+  </div>
+</footer>
+
+<aside class="share-rail" id="share-rail" aria-label="share this post">
+  <span class="label">share</span>
+  <a href="https://twitter.com/intent/tweet?text=The%203%2C700%20bytes%20that%20broke%20our%20CI%20for%20two%20weeks&url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html" target="_blank" rel="noopener" aria-label="share on x/twitter" title="x / twitter">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2H21.5L14.36 10.42L22.75 22h-6.94l-5.43-7.34L4.18 22H.92l7.62-9.0L0 2h7.07l4.91 6.69L18.244 2zm-2.43 18.18h1.86L7.32 3.72H5.32l10.494 16.46z"/></svg>
+  </a>
+  <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html" target="_blank" rel="noopener" aria-label="share on linkedin" title="linkedin">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14zM8.34 18V10H5.67v8h2.67zM7 8.94c.86 0 1.55-.7 1.55-1.55a1.55 1.55 0 1 0-3.1 0c0 .85.69 1.55 1.55 1.55zM18.34 18v-4.4c0-2.36-1.27-3.45-2.96-3.45-1.36 0-1.97.75-2.31 1.27V10h-2.67v8h2.67v-4.46c0-.24.02-.47.09-.64.18-.47.61-.96 1.34-.96.94 0 1.32.72 1.32 1.78V18h2.67z"/></svg>
+  </a>
+  <a href="https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fsherifbutt.github.io%2Fclaude-image-tts-gen%2Fblog%2Fesbuild-to-tsc.html&t=The%203%2C700%20bytes%20that%20broke%20our%20CI%20for%20two%20weeks" target="_blank" rel="noopener" aria-label="share on hacker news" title="hacker news">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h18v18H3V3zm9 11.21L7.79 7H6.5l5.5 9.5V21h2v-4.5L19.5 7h-1.29L13 14.21z"/></svg>
+  </a>
+  <button id="rail-copy-btn" type="button" aria-label="copy link" title="copy link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+    <span class="copied-flash">copied</span>
+  </button>
+</aside>
+
+<script>
+  // theme toggle
+  document.getElementById('theme-toggle').addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('gk-theme-v3', next);
+  });
+
+  // copy link
+  (function () {
+    var btn = document.getElementById('copy-link-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(location.href).then(function () {
+        btn.classList.add('copied');
+        var span = btn.querySelector('.copy-text');
+        var prev = span.textContent;
+        span.textContent = 'copied';
+        setTimeout(function () {
+          btn.classList.remove('copied');
+          span.textContent = prev;
+        }, 1600);
+      });
+    });
+  })();
+
+  // newsletter — stub: no backend wired, captures + acks. Replace the
+  // POST in the submit handler when you have a list provider.
+  (function () {
+    var form = document.getElementById('newsletter-form');
+    var box = document.getElementById('newsletter');
+    if (!form || !box) return;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = form.elements.email.value.trim();
+      if (!email || email.indexOf('@') === -1) {
+        form.elements.email.focus();
+        return;
+      }
+      box.classList.add('submitted');
+    });
+  })();
+
+  // share rail — fade in only while the post body is in view, fade out
+  // on hero/title and on nav/footer below
+  (function () {
+    var rail = document.getElementById('share-rail');
+    var anchor = document.querySelector('.post');
+    if (!rail || !anchor) return;
+    if (!('IntersectionObserver' in window)) {
+      rail.classList.add('in-view');
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        rail.classList.toggle('in-view', e.isIntersecting);
+      });
+    }, { threshold: 0 });
+    io.observe(anchor);
+  })();
+
+  // rail copy button — flashes "copied" tooltip on the left of the icon
+  (function () {
+    var btn = document.getElementById('rail-copy-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(location.href).then(function () {
+        btn.classList.add('copied');
+        setTimeout(function () { btn.classList.remove('copied'); }, 1600);
+      });
+    });
+  })();
+
+  // TOC active-section observer
+  (function () {
+    var toc = document.querySelectorAll('.toc a[data-href]');
+    if (!toc.length || !('IntersectionObserver' in window)) return;
+    var byId = {};
+    toc.forEach(function (a) {
+      var id = a.getAttribute('data-href').slice(1);
+      byId[id] = a;
+    });
+    var headings = document.querySelectorAll('.post h2[id]');
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          toc.forEach(function (a) { a.classList.remove('active'); });
+          var a = byId[e.target.id];
+          if (a) a.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-100px 0px -65% 0px', threshold: 0 });
+    headings.forEach(function (h) { io.observe(h); });
+  })();
+</script>
+</body>
+</html>
